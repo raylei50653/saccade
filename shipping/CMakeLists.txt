@@ -40,10 +40,20 @@ if(NOT TARGET saccade_tracker_params)
     set_target_properties(saccade_tracker_params PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
 
+# MOT ids, lines and sequence-tail interpolation (PR-6). No config, no CUDA.
+# fp-contract off: interpolation rounds after the multiply and after the add,
+# as numpy does (mot_output.cpp).
+add_library(saccade_shipping_mot STATIC src/mot_output.cpp)
+target_include_directories(saccade_shipping_mot PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_options(saccade_shipping_mot PRIVATE -Wall -Wextra -Wpedantic -ffp-contract=off)
+set_target_properties(saccade_shipping_mot PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # JSON -> native parameter state and readback. Includes only the CUDA-free
 # tracking headers (tracker_params.hpp, perception_params.hpp).
-add_library(saccade_shipping_native_config STATIC src/native_config.cpp src/post_detector_plan.cpp)
-target_link_libraries(saccade_shipping_native_config PUBLIC saccade_shipping_config saccade_tracker_params)
+add_library(saccade_shipping_native_config STATIC
+    src/native_config.cpp src/post_detector_plan.cpp src/sequence_output.cpp)
+target_link_libraries(saccade_shipping_native_config PUBLIC
+    saccade_shipping_config saccade_tracker_params saccade_shipping_mot)
 target_compile_options(saccade_shipping_native_config PRIVATE -Wall -Wextra -Wpedantic)
 set_target_properties(saccade_shipping_native_config PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -69,6 +79,16 @@ target_compile_options(saccade_shipping_detection_filters_test PRIVATE -Wall -We
 add_test(NAME saccade_shipping_detection_filters_test
     COMMAND saccade_shipping_detection_filters_test ${SACCADE_RESOLVED_CONFIG}
             ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_detection_filters.json)
+
+# MOT ids / lines / interpolation and the sequence-output plan vs the Python
+# oracle (PR-6).
+add_executable(saccade_shipping_mot_output_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_mot_output.cpp)
+target_link_libraries(saccade_shipping_mot_output_test PRIVATE saccade_shipping_native_config)
+target_compile_options(saccade_shipping_mot_output_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_mot_output_test
+    COMMAND saccade_shipping_mot_output_test ${SACCADE_RESOLVED_CONFIG}
+            ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_mot_output.json)
 
 if(TARGET saccade_tracking)
     add_library(saccade_shipping_native STATIC src/native_build.cpp src/post_detector_host.cpp)

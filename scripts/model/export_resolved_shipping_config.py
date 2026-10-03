@@ -1221,6 +1221,24 @@ STEPS: tuple[Step, ...] = (
         "cfg.kwargs.get('use_tracker_graph', False) and (not cfg.relink_enabled)",
     ),
     Step("emit.pipeline_relink", STAGES, "cfg.pipeline_relink"),
+    # _run_emit takes the fast emit (lines straight from the tracker rows) only
+    # when none of these per-sequence objects exists (``_needs_emit_pipeline``)
+    # and both ``_use_fast_emit`` conjuncts hold; the workbench path bypasses
+    # _run_emit with its own tracker. The objects' construction gates:
+    Step("emit.id_stability_filter", PIPELINE, "cfg.post_lifecycle_appearance_gate"),
+    Step("emit.appearance_bank", PIPELINE, "cfg.appearance_bank_enabled"),
+    Step("emit.dynamic_reid", PIPELINE, "cfg.need_reid_enabled"),
+    Step(
+        "emit.fast_emit_reid_mode",
+        STAGES,
+        "cfg.reid_mode in ('off', 'tracker', 'extract')",
+    ),
+    Step(
+        "emit.id_stability_kwarg",
+        STAGES,
+        "bool(cfg.kwargs.get('id_stability_filter', False))",
+    ),
+    Step("track.workbench", PIPELINE, "getattr(cfg, 'workbench', False)"),
     Step(
         "tail.cheb_gr_or_occ_audit",
         EVALUATOR,
@@ -1246,20 +1264,27 @@ STEPS: tuple[Step, ...] = (
 def _oracle_expressions(rel: str) -> frozenset[str]:
     """Decision expressions in ``rel``: whole branch tests and their ``and``
     conjuncts (a false conjunct means the branch is not taken), plus assigned
-    and keyword-argument values (gates that are computed, then passed on)."""
+    and keyword-argument values (gates that are computed, then passed on).
+    Assigned ``and`` chains contribute their conjuncts too (a gate computed
+    into a flag, e.g. ``_use_fast_emit``), and a ``not X`` conjunct contributes
+    ``X`` (the step then records X; X true means the conjunct is false)."""
     exprs: set[str] = set()
 
     def add(node: ast.expr, conjuncts: bool) -> None:
         exprs.add(ast.unparse(node))
-        if conjuncts and isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
+        if not conjuncts:
+            return
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
             for operand in node.values:
                 add(operand, True)
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            exprs.add(ast.unparse(node.operand))
 
     for n in ast.walk(_tree(rel)):
         if isinstance(n, (ast.If, ast.IfExp, ast.While)):
             add(n.test, True)
         elif isinstance(n, (ast.Assign, ast.AnnAssign)) and n.value is not None:
-            add(n.value, False)
+            add(n.value, True)
         elif isinstance(n, ast.keyword):
             add(n.value, False)
     return frozenset(exprs)
