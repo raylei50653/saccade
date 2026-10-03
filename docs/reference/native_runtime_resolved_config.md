@@ -1,6 +1,6 @@
 # Native runtime resolved config（#465 Phase B PR-3／U2a）
 
-> 狀態：PR-3 完成 exporter、schema 與 Python 端等價 contract test。PR-4a 加上 native strict loader（§7）。PR-4b 讓 native 物件只從單一參數狀態讀值、native 端不再讀 `SACCADE_*`、shipping 以這份 JSON 建立 GPU 物件並做 set 後回讀（§8）；**U2b 至此完成**。PR-3／PR-4a 不改 native code；PR-4b 改 native code 但 headline 輸出逐位元組不變（§8.6）。PR-5 加上 native post-detector replay 宿主（U3a，§9），並補齊 exporter `steps` 漏列的 3 個 post-detector 分支（§9.2）。PR-6 加上 native MOT 輸出（U4：per-sequence ID、行格式、sequence-tail interpolation，§10），接進 replay 宿主後 7-seq MOT txt 對 Python serial 組態逐位元組相同（多 sequence 以 ID 位移重標），並補上 emit 路徑的 6 個 gate（§10.2）。
+> 狀態：PR-3 完成 exporter、schema 與 Python 端等價 contract test。PR-4a 加上 native strict loader（§7）。PR-4b 讓 native 物件只從單一參數狀態讀值、native 端不再讀 `SACCADE_*`、shipping 以這份 JSON 建立 GPU 物件並做 set 後回讀（§8）；**U2b 至此完成**。PR-3／PR-4a 不改 native code；PR-4b 改 native code 但 headline 輸出逐位元組不變（§8.6）。PR-5 加上 native post-detector replay 宿主（U3a，§9），並補齊 exporter `steps` 漏列的 3 個 post-detector 分支（§9.2）。PR-6 加上 native MOT 輸出（U4：per-sequence ID、行格式、sequence-tail interpolation，§10），接進 replay 宿主後 7-seq MOT txt 對 Python serial 組態逐位元組相同（多 sequence 以 ID 位移重標），並補上 emit 路徑的 6 個 gate（§10.2）。PR-7 加上 native ingest（U3b-1：nvJPEG 解碼＋normalize，§11），以與 oracle 同一份 nvJPEG binary、只由 resolved config 驅動；parity harness 把解碼、normalize、端到端 ingest 分開對 torchvision ingest 報告。
 > 邊界依據：[native_runtime_shipping_boundary.md](native_runtime_shipping_boundary.md) §5 B2、§6 PR-3。本文沿用該文的編號，不重述它的論證。
 > 工具：`scripts/model/export_resolved_shipping_config.py`（`developer_build_debug`，位於 `decision_relevant` partition 之外）。產物：`configs/shipping/mamba_whole_graph.resolved.json`（commit 進 repo）。
 
@@ -330,4 +330,87 @@ serial 參考的 headline 指標仍為 IDF1 78.3／MOTA 77.9／IDs 429（只記�
 .venv/bin/python scripts/eval/diagnostics/dump_post_detector_replay.py --verify <dir>/dump --against <dir>/repeat_hash --report <dir>/verify.json
 cmake --build build --target saccade_replay
 build/shipping/saccade_replay --config configs/shipping/mamba_whole_graph.resolved.json --dump <dir>/dump --report <dir>/replay_report.json --mot-out <dir>/mot_native
+```
+
+---
+
+## 11. Native ingest（PR-7／U3b-1）
+
+PR-7 在 shipping 端加上 ingest：nvJPEG 解碼＋normalize，產出 oracle 的 `pool.frame_buffer`（float32 `[3, imHeight, imWidth]`），也就是 PR-5 宿主 `PostDetectorHost::process` 吃的 `frame_chw`（同一個 layout；本 PR 不把兩者接起來，端到端接線在 PR-9）。行為只由 resolved config 驅動：config 決定 ingest 走哪條路，路徑上 oracle 寫死的常數（glob、RGB、255.0）由 oracle source pin 釘住。驗收依 boundary §6 PR-7：解碼像素對 torchvision **單獨**量，差異分開報告、不併入後段。backbone、head、S2 不在本 PR（PR-8）。
+
+| 項目 | 位置 |
+|:--|:--|
+| 計畫＋fail-closed gate、normalize 的 host twin、sequence input（`seqinfo.ini`＋`img1/` 列檔）（CUDA-free） | `shipping/include/saccade_shipping/ingest_plan.hpp`、`shipping/src/ingest_plan.cpp`（併入 `saccade_shipping_native_config`） |
+| GPU：nvJPEG 解碼器（torchvision 解碼器的 twin）、normalize kernel、per-sequence `IngestHost` | `shipping/include/saccade_shipping/ingest_host.hpp`、`shipping/src/ingest_host.cpp`、`shipping/src/ingest_normalize.cu`（target `saccade_shipping_ingest`，只在 root build） |
+| probe 工具（`developer_build_debug`） | `shipping/tools/saccade_ingest_probe.cpp`（target `saccade_ingest_probe`）：獨立 process（不連 Python／torch），把一個 sequence 的解碼 bytes 與 frame buffer 串流到 stdout（`saccade.native_ingest_stream/v1`） |
+| parity harness（`developer_build_debug`） | `scripts/eval/diagnostics/native_ingest_parity.py`（`saccade.native_ingest_parity/v1`） |
+| 測試 | `tests/native/test_shipping_ingest_plan.cpp`（CPU，CI `shipping-config-loader`）、`tests/native/test_shipping_ingest_host.cpp`（GPU）；fixture `tests/native/fixtures/shipping_ingest.json`＋`shipping_ingest/*.jpg` 由 `scripts/model/render_shipping_ingest_fixture.py` 以 oracle 自己的程式產生；`tests/unit/test_native_ingest_oracle_pins.py`（oracle source pin＋fixture freshness） |
+
+### 11.1 照抄的 oracle 事實
+
+- **列檔**：`TorchvisionGpuStreamer` 列出 `sorted(str(p.absolute()) for p in (seq / "img1").glob("*.jpg"))`。pathlib 的 glob 會列出點開頭的檔名、名稱就是 `.jpg` 的項目、目錄與 symlink（含斷掉的），大小寫敏感；排序是 Python 字串序（ASCII 名稱等於位元組序）。第 `k` 幀是第 `k` 個列出的項目，不看檔名裡的數字。
+- **幀數**：`frame_end = min(max_frames or int(1e9), seqLength)`。列出的項目比 `frame_end` 少時，oracle **不會失敗**：兩個 frame loop 遇到 `StopIteration` 就停（serial 的 `_run_frame` 回傳 `False`，double-buffer 的 `_schedule` 回傳 `None`），寫出一份被截短的 sequence。多出的項目不被讀取。
+- **解碼**：`decode_jpeg(read_file(f), device="cuda", mode=ImageReadMode.RGB)`，torchvision 0.26.0 的 `CUDAJpegDecoder`：先以 `NVJPEG_BACKEND_HARDWARE` 建 handle（`ARCH_MISMATCH` 時改 `DEFAULT`、不做硬體解碼）；`nvjpegGetImageInfo` 取第 0 個 component 的尺寸，輸出 planar RGB uint8 `[3, H, W]`、pitch `W`；硬體可用且 `nvjpegDecodeBatchedSupported` 說可以（status 不檢查）就走 `nvjpegDecodeBatched`（batch 1、1 個 CPU thread），其他走 decoupled 的 host／transfer／device 三段；解碼器自己的 non-blocking stream，前後各 synchronize 一次。native 解碼器逐呼叫照做。
+- **ingest op**：`_run_detect` 的非 NV12 分支是 `torch.div(frame_gpu.permute(2, 0, 1), 255.0, out=pool.frame_buffer)`，buffer 由 `AdaptiveFramePool(h_orig, w_orig)` 以 `seqinfo.ini` 的尺寸、`torch.zeros` 配置；接著的 `apply_frame_preprocess` 在 mode 清單為空時直接 return。torch 的 CUDA kernel 把「除以 Python scalar」算成乘以 float32 倒數，所以值是 `float(x) * (1.0f / 255.0f)`。**這與 `x / 255.0f` 在 256 個輸入裡有 126 個不同（各差 1 ulp）**；CPU 上的 torch 用的是真正的除法，所以 fixture 的 normalize 表只能在 CUDA 上產生。
+- **`seqinfo.ini`**：`configparser` 讀 `[Sequence]` 的 `imWidth`／`imHeight`／`seqLength`：key 大小寫不敏感、`=` 或 `:`、`#`／`;` 開頭的行是註解、值前後空白（含 CR）去掉、`getint` 即 `int()`。
+
+### 11.2 由 resolved config 驅動的 gate
+
+`plan_ingest` 只讀 config，下列任一不成立就 fail-closed（`ConfigError`）。沒有新增 exporter step：前三條本來就在 `steps`，`preprocess_modes` 是 `cfg` 的值。
+
+| 條件 | 不成立時 oracle 會做什麼 |
+|:--|:--|
+| `steps.ingest.gpu_decode == true` | 改用 `DALIStreamerStream`（CPU 解碼，另一個解碼器） |
+| `steps.ingest.nv12_buffer == false` | 轉成 NV12；沒有 preprocess mode 時直接跳過 float32 frame buffer |
+| `cfg.preprocess_modes == []` | gamma／contrast 改寫 frame buffer，letterbox 改變 detector 的輸入 |
+| `steps.track.workbench == false` | workbench 有自己的 ingest（`evaluator.py`，`.float() / 255.0`） |
+
+### 11.3 nvJPEG：與 oracle 同一份 binary
+
+oracle 用的是 torchvision wheel 內附的 `libnvjpeg`（13.0.1）；它與 PyPI `nvidia-nvjpeg==13.0.1.86` wheel 裡的 `libnvjpeg.so.13` 逐位元組相同（sha256 `1a359ba7…`），該 wheel 也附有對應的 `nvjpeg.h`。`shipping/CMakeLists.txt` 以 `FetchContent` 釘住這個 wheel（URL＋sha256，與 TensorRT header 的做法相同）並連結它；configure 時比對它與 `torchvision.libs/libnvjpeg*.so*` 的 sha256，不同就 `FATAL_ERROR`——換一份 nvJPEG 就是換一個解碼器，parity 要重量。沒有放進 `native-build` extra：那個 extra 依 contract 只放 build toolchain（`tests/contract/test_package_native_delivery.py`），而 nvJPEG 是 shipping 的 runtime 函式庫；shipping 是否 bundle 它屬 Phase C／owner 決定，本 PR 不決定。系統 `/opt/cuda` 的 nvJPEG（13.2.3）不使用（#214）。
+
+### 11.4 驗收
+
+同一台機器（RTX 5070 Ti Laptop，nvJPEG 硬體解碼可用）、`build/` 組態、branch commit `2160f957`（工作樹乾淨），MOT17 train 7 個 SDP sequence（5316 幀；6 個 1920×1080、MOT17-05 640×480）：
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 解碼（native uint8 `[3, H, W]` 對 oracle 解碼結果） | **EXACT**：5316/5316 幀逐位元組相同；每一幀都走 hardware batched 路徑 |
+| normalize（native frame buffer 對「oracle op 套在 native 解碼 bytes 上」，與解碼分開） | **EXACT**：5316/5316 幀逐位元相同；kernel 對 0..255 的輸出與 oracle op（連續與 permute 輸入兩種）256/256 相同 |
+| 端到端 ingest（native frame buffer 對 oracle frame buffer） | **EXACT**：5316/5316 幀逐位元相同（上兩項的結果，不另作歸因） |
+| 列檔與尺寸 | 7/7 sequence 的列檔、consumed frames、`imWidth`／`imHeight` 與 oracle 相同 |
+| 重現性 | 第二次執行（`--against`）兩邊每幀解碼 bytes 與 frame buffer 的 sha256 全部相同 |
+| 對真實 eval run 的 ingest（`--replay-dump`，commit `62db1356`） | PR-6 的 dump（`results/465_pr6_mot/full7_5578c9ee/dump`）存的是 `mot17.py` serial run 交給 PR-5 宿主的 GMC 輸入幀，也就是該 run 的 `pool.frame_buffer`（以 uint8 無損存放）。native 解碼 bytes 與它、native frame buffer 與「oracle op 套在它上面」：5316/5316 幀**EXACT**。所以 harness 重建的 oracle ingest 與 eval run 實際的 ingest 相同 |
+| 解碼器是同一份 | probe 載入的 `libnvjpeg.so.13` 與 torchvision 內附的 sha256 相同；probe 的 NEEDED 沒有 libpython／libtorch |
+| 負控制：強制 decoupled 路徑 | decoder **DIFFERS**（5316/5316 幀；28.6 G 個值中 339 M 個不同＝1.18%，|Δ| 最大 3，|Δ|=1／2／3 各 298 M／40.5 M／0.24 M）；normalize 仍 EXACT——差異只出現在 decoder 一節 |
+| 負控制：kernel 改成 `x / 255.0f`（MOT17-09） | decoder 仍 EXACT；normalize **DIFFERS**（525/525 幀，最大 1 ulp），normalize 表 126/256 不同——差異只出現在 normalize 一節 |
+| 實作變異（fixture 測試） | CPU 測試抓到 21/21（gate、列檔規則、排序、截短、`seqinfo.ini` 讀法、檔案檢查、normalize 用除法）；GPU 測試抓到 8/8（除法、grid-stride、永不走／永遠走硬體路徑、BGR、pitch、尺寸檢查）。過程中有 3 個變異沒被抓到，查出是死規則（CR、`[DEFAULT]`、`%`），已刪除並改寫說明 |
+| fixture（oracle 自己產生） | 6 張 JPEG（4:2:0／4:2:2／4:4:4、奇數尺寸、progressive、灰階）：native 解碼與 torchvision 逐位元組相同，兩條路徑都有涵蓋（progressive 走 decoupled）；18 個列檔／`seqinfo.ini` 案例 |
+
+結果目錄：`results/465_pr7_ingest/full7_2160f957/`（`MANIFEST.md`、`run.sh`、四次執行的 `report.json`／`frames.jsonl`／log）與 `results/465_pr7_ingest/replay_dump_62db1356/`；不納入版本控制。
+
+### 11.5 量到的事
+
+- **nvJPEG 的兩條路徑給出不同的像素。** 把同一批 MOT17 幀全部改走 decoupled 路徑（probe 的 `--force-decoupled`，只供量測），每一幀都與 torchvision 不同（1.18% 的值、|Δ| ≤ 3，§11.4）。所以「硬體可用時先走 batched」這條選擇規則本身決定像素，native 必須照抄；也代表 ingest 的輸出依 GPU 是否有硬體 JPEG 解碼器而不同——parity 是同機器的對照，換一類 GPU 時兩邊會一起換路徑，但像素不會與這台機器相同。
+- **CPU 與 CUDA 的 torch 對同一個 ingest op 給出不同的 float32**（§11.1）。任何以 CPU 重算 frame buffer 的工具都不等於 oracle。
+- **oracle 會把列檔不足的 sequence 截短而不報錯**（§11.1）。shipping 拒絕這種輸入（`InputError`），不重現截短；這是比 oracle 嚴格的地方，fixture 以 `"native": "refuse"` 標出。
+
+### 11.6 限制
+
+- 只驗 ingest：解碼 bytes、frame buffer。backbone、head、S2、detection tensor 在 PR-8；ingest→detect→post→tail 的端到端在 PR-9。
+- serial、eager、每幀同步；graph、double-buffer 與 decode prefetch 在 U5。harness 的速度不是效能主張。
+- 結果是這台機器（RTX 5070 Ti Laptop、硬體解碼可用）、torchvision 0.26.0、nvJPEG 13.0.1 下的觀察，不是一般性的等價主張；沒有硬體解碼器的 GPU 上沒有量過（兩邊都會走 decoupled）。
+- native 對 `seqinfo.ini` 與列檔比 oracle 嚴格：縮排行、`1_920` 這類整數、只在 `[DEFAULT]` 的 key、非 ASCII 檔名、非正的尺寸、列檔不足都拒絕（fixture 的 refuse 案例）。在這些輸入上 native 不重現 oracle，而是拒絕。
+- 解碼尺寸與 `seqinfo.ini` 不同時 native 拒絕；oracle 在這種情況下會以 `out=` 重新配置 frame buffer，headline 資料沒有這種幀。
+
+### 11.7 重現
+
+```bash
+.venv/bin/python scripts/model/render_shipping_ingest_fixture.py --check
+cmake --build build --target saccade_ingest_probe saccade_shipping_ingest_host_test
+build/shipping/saccade_shipping_ingest_host_test configs/shipping/mamba_whole_graph.resolved.json tests/native/fixtures/shipping_ingest.json tests/native/fixtures/shipping_ingest
+.venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python scripts/eval/diagnostics/native_ingest_parity.py --out <dir>/parity
+.venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python scripts/eval/diagnostics/native_ingest_parity.py --out <dir>/repeat --against <dir>/parity/report.json
+.venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python scripts/eval/diagnostics/native_ingest_parity.py --out <dir>/negctl_decoupled --force-decoupled
+.venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python scripts/eval/diagnostics/native_ingest_parity.py --out <dir>/replay_dump --replay-dump <PR-6 dump>
 ```

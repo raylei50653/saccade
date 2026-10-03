@@ -388,6 +388,10 @@
       "classification": "run_producer_wired",
       "reason": "#465 PR-2R head parity gate (TF32-off head); claims its packet directory before writing, each mot17.py arm claims its own sub-directory"
     },
+    "scripts/eval/diagnostics/native_ingest_parity.py": {
+      "classification": "run_producer_wired",
+      "reason": "#465 PR-7 native ingest parity harness; claims its --out directory with open_run before the first byte"
+    },
     "scripts/eval/diagnostics/probe_forwarded_embedding_assoc_cost.py": {
       "classification": "run_producer_out_of_scope",
       "reason": "association-cost probe; writes control/fifo directories under results/",

@@ -9,7 +9,8 @@
 #   * from the root CMakeLists.txt (add_subdirectory), where saccade_tracking
 #     exists: additionally builds `saccade_shipping_native`, which constructs
 #     the GPU tracker/GMC/pipeline from the resolved config and fails closed on
-#     readback, and its GPU test (ENABLE_NATIVE_TESTS).
+#     readback, `saccade_shipping_ingest` (nvJPEG decode + normalize, PR-7),
+#     the developer tools, and their GPU tests (ENABLE_NATIVE_TESTS).
 #
 # Nothing here reads the process environment (tests/unit/
 # test_shipping_config_loader_sources.py) or includes tracking/legacy_env.hpp.
@@ -51,7 +52,7 @@ set_target_properties(saccade_shipping_mot PROPERTIES POSITION_INDEPENDENT_CODE 
 # JSON -> native parameter state and readback. Includes only the CUDA-free
 # tracking headers (tracker_params.hpp, perception_params.hpp).
 add_library(saccade_shipping_native_config STATIC
-    src/native_config.cpp src/post_detector_plan.cpp src/sequence_output.cpp)
+    src/native_config.cpp src/post_detector_plan.cpp src/sequence_output.cpp src/ingest_plan.cpp)
 target_link_libraries(saccade_shipping_native_config PUBLIC
     saccade_shipping_config saccade_tracker_params saccade_shipping_mot)
 target_compile_options(saccade_shipping_native_config PRIVATE -Wall -Wextra -Wpedantic)
@@ -90,6 +91,15 @@ add_test(NAME saccade_shipping_mot_output_test
     COMMAND saccade_shipping_mot_output_test ${SACCADE_RESOLVED_CONFIG}
             ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_mot_output.json)
 
+# Ingest plan, normalize host twin and sequence input vs the Python oracle (PR-7).
+add_executable(saccade_shipping_ingest_plan_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_ingest_plan.cpp)
+target_link_libraries(saccade_shipping_ingest_plan_test PRIVATE saccade_shipping_native_config)
+target_compile_options(saccade_shipping_ingest_plan_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_ingest_plan_test
+    COMMAND saccade_shipping_ingest_plan_test ${SACCADE_RESOLVED_CONFIG}
+            ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_ingest.json)
+
 if(TARGET saccade_tracking)
     add_library(saccade_shipping_native STATIC src/native_build.cpp src/post_detector_host.cpp)
     target_link_libraries(saccade_shipping_native PUBLIC saccade_shipping_native_config saccade_tracking)
@@ -99,6 +109,51 @@ if(TARGET saccade_tracking)
     # Developer tool (#465 PR-5): replay a post-detector dump through the host.
     add_executable(saccade_replay tools/saccade_replay.cpp)
     target_link_libraries(saccade_replay PRIVATE saccade_shipping_native CUDA::cudart)
+
+    # nvJPEG for the native ingest (PR-7): the oracle's own decoder build. The
+    # oracle decodes with torchvision's bundled libnvjpeg, which is the
+    # nvidia-nvjpeg 13.0.1.86 wheel's library byte for byte; the wheel also
+    # carries the matching header. It is fetched pinned (like the TensorRT
+    # headers above) rather than added to the `native-build` extra, which is
+    # the build toolchain only (tests/contract/test_package_native_delivery.py);
+    # whether shipping bundles nvJPEG is a Phase C decision. Fail closed unless
+    # the library is still torchvision's: a different nvJPEG build is a
+    # different decoder, and the ingest parity would have to be re-measured.
+    FetchContent_Declare(
+        saccade_nvjpeg_wheel
+        URL https://files.pythonhosted.org/packages/b6/e6/9b96fcead7f78a5e2d5d9e726f0d0b1517faf2895146d571e006793180d7/nvidia_nvjpeg-13.0.1.86-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+        URL_HASH SHA256=f658a05c48702219b3db52e194c2ea1ff0ccd3fbf2b75127b4a573074cc22fd5
+        DOWNLOAD_NAME nvidia_nvjpeg-13.0.1.86.zip
+        DOWNLOAD_EXTRACT_TIMESTAMP NEW
+    )
+    FetchContent_Populate(saccade_nvjpeg_wheel)
+    set(SACCADE_NVJPEG_LIBRARY "${saccade_nvjpeg_wheel_SOURCE_DIR}/nvidia/cu13/lib/libnvjpeg.so.13")
+    file(GLOB _saccade_oracle_nvjpeg "${_saccade_purelib}/torchvision.libs/libnvjpeg*.so*")
+    list(LENGTH _saccade_oracle_nvjpeg _saccade_oracle_nvjpeg_n)
+    if(NOT _saccade_oracle_nvjpeg_n EQUAL 1)
+        message(FATAL_ERROR "Expected exactly one bundled libnvjpeg under ${_saccade_purelib}/torchvision.libs (the oracle's decoder), found: ${_saccade_oracle_nvjpeg}")
+    endif()
+    file(SHA256 "${SACCADE_NVJPEG_LIBRARY}" _saccade_nvjpeg_sha)
+    file(SHA256 "${_saccade_oracle_nvjpeg}" _saccade_oracle_nvjpeg_sha)
+    if(NOT _saccade_nvjpeg_sha STREQUAL _saccade_oracle_nvjpeg_sha)
+        message(FATAL_ERROR "The pinned nvJPEG (${_saccade_nvjpeg_sha}) is not the oracle's decoder ${_saccade_oracle_nvjpeg} (${_saccade_oracle_nvjpeg_sha}); re-pin it and re-run the ingest parity (#465 PR-7)")
+    endif()
+    add_library(saccade_nvjpeg SHARED IMPORTED)
+    set_target_properties(saccade_nvjpeg PROPERTIES
+        IMPORTED_LOCATION "${SACCADE_NVJPEG_LIBRARY}"
+        IMPORTED_SONAME "libnvjpeg.so.13"
+        INTERFACE_INCLUDE_DIRECTORIES "${saccade_nvjpeg_wheel_SOURCE_DIR}/nvidia/cu13/include")
+
+    add_library(saccade_shipping_ingest STATIC src/ingest_host.cpp src/ingest_normalize.cu)
+    target_link_libraries(saccade_shipping_ingest PUBLIC
+        saccade_shipping_native_config CUDA::cudart saccade_nvjpeg)
+    target_include_directories(saccade_shipping_ingest PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    set_target_properties(saccade_shipping_ingest PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+    # Developer tool (#465 PR-7): stream the native ingest of one sequence to
+    # scripts/eval/diagnostics/native_ingest_parity.py.
+    add_executable(saccade_ingest_probe tools/saccade_ingest_probe.cpp)
+    target_link_libraries(saccade_ingest_probe PRIVATE saccade_shipping_ingest)
 
     if(ENABLE_NATIVE_TESTS)
         # Needs a CUDA device: builds the real objects.
@@ -115,5 +170,13 @@ if(TARGET saccade_tracking)
             saccade_shipping_native CUDA::cudart)
         add_test(NAME saccade_shipping_post_detector_host_test
             COMMAND saccade_shipping_post_detector_host_test ${SACCADE_RESOLVED_CONFIG})
+
+        add_executable(saccade_shipping_ingest_host_test
+            ${SACCADE_REPO_ROOT}/tests/native/test_shipping_ingest_host.cpp)
+        target_link_libraries(saccade_shipping_ingest_host_test PRIVATE saccade_shipping_ingest)
+        add_test(NAME saccade_shipping_ingest_host_test
+            COMMAND saccade_shipping_ingest_host_test ${SACCADE_RESOLVED_CONFIG}
+                    ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_ingest.json
+                    ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_ingest)
     endif()
 endif()
