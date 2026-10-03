@@ -75,10 +75,12 @@ struct SequenceInput {
 // means no bound (the oracle's `max_frames or int(1e9)`).
 //
 // seqinfo.ini is read as configparser reads it for these keys (keys are
-// case-insensitive, `=` or `:`, `#`/`;` comment lines), restricted to the
-// plain form: indented continuation lines, duplicate sections or keys, a
-// DEFAULT section, `%` in a value, or an integer that is not [+-]digits are
-// refused rather than interpreted. The listing matches every directory entry
+// case-insensitive, `=` or `:`, `#`/`;` comment lines, surrounding whitespace
+// and CR stripped), restricted to the plain form: indented lines (configparser
+// continuation syntax), duplicate sections or keys, `%` in a value, or an
+// integer that is not [+-]digits are refused rather than interpreted. Keys are
+// read from [Sequence] only; configparser's fallback to [DEFAULT] is not
+// implemented, so a key found only there is refused as missing. The listing matches every directory entry
 // whose name ends in ".jpg" (pathlib's glob: dot files, directories and
 // symlinks included, case-sensitive) and sorts by path bytes, which is
 // Python's string order for ASCII names; a non-ASCII name is refused. Fewer

@@ -854,7 +854,7 @@
    ],
    "max_frames": 0,
    "native": "refuse",
-   "reason": "a DEFAULT section is refused",
+   "reason": "keys are read from [Sequence] only (no DEFAULT fallback)",
    "oracle": {
     "ok": true,
     "im_width": 1920,

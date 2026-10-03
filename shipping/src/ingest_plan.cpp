@@ -84,7 +84,6 @@ SeqInfo parse_seqinfo(const std::string& text) {
     int line_no = 0;
     while (std::getline(in, raw)) {
         ++line_no;
-        if (!raw.empty() && raw.back() == '\r') raw.pop_back();
         const std::string where = "seqinfo.ini line " + std::to_string(line_no);
         const std::string line = strip(raw);
         if (line.empty() || line[0] == '#' || line[0] == ';') continue;
@@ -94,7 +93,6 @@ SeqInfo parse_seqinfo(const std::string& text) {
         if (line.front() == '[') {
             if (line.back() != ']' || line.size() < 3) bad_input(where + ": malformed section header");
             const std::string name = line.substr(1, line.size() - 2);
-            if (name == "DEFAULT") bad_input(where + ": a DEFAULT section is not supported");
             if (sections.count(name) != 0) bad_input(where + ": duplicate section [" + name + "]");
             current = &sections[name];
             continue;

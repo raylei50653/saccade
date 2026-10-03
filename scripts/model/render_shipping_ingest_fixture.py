@@ -322,7 +322,7 @@ def sequence_cases() -> list[dict[str, Any]]:
             "img1": four,
             "max_frames": 0,
             "native": "refuse",
-            "reason": "a DEFAULT section is refused",
+            "reason": "keys are read from [Sequence] only (no DEFAULT fallback)",
         },
         {
             "name": "non_ascii_name",
