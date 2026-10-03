@@ -121,5 +121,7 @@ manually or if their outputs support a retained report.
 | `export_yoloe_embedding.py` | stable | cli | Export YOLOE model with top-k embeddings. |
 | `inspect_engine.py` | diagnostic | cli | Inspect TensorRT engine bindings/shapes. |
 | `make_onnx_dynamic.py` | stable | cli | Rewrite ONNX inputs to dynamic axes for TRT. |
+| `render_shipping_detection_filters_fixture.py` | stable | cli | Render the golden fixture for the native host's CPU detection filters. |
+| `render_shipping_host_cfg_schema.py` | stable | cli | Render the native typed field list for ``host_params.cfg`` of the resolved config. |
 
 <!-- END generated script index -->

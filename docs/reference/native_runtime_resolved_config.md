@@ -1,6 +1,6 @@
 # Native runtime resolved config（#465 Phase B PR-3／U2a）
 
-> 狀態：PR-3 完成 exporter、schema 與 Python 端等價 contract test。PR-4a 加上 native strict loader（§7）。PR-4b 讓 native 物件只從單一參數狀態讀值、native 端不再讀 `SACCADE_*`、shipping 以這份 JSON 建立 GPU 物件並做 set 後回讀（§8）；**U2b 至此完成**。PR-3／PR-4a 不改 native code；PR-4b 改 native code 但 headline 輸出逐位元組不變（§8.6）。
+> 狀態：PR-3 完成 exporter、schema 與 Python 端等價 contract test。PR-4a 加上 native strict loader（§7）。PR-4b 讓 native 物件只從單一參數狀態讀值、native 端不再讀 `SACCADE_*`、shipping 以這份 JSON 建立 GPU 物件並做 set 後回讀（§8）；**U2b 至此完成**。PR-3／PR-4a 不改 native code；PR-4b 改 native code 但 headline 輸出逐位元組不變（§8.6）。PR-5 加上 native post-detector replay 宿主（U3a，§9），並補齊 exporter `steps` 漏列的 3 個 post-detector 分支（§9.2）。
 > 邊界依據：[native_runtime_shipping_boundary.md](native_runtime_shipping_boundary.md) §5 B2、§6 PR-3。本文沿用該文的編號，不重述它的論證。
 > 工具：`scripts/model/export_resolved_shipping_config.py`（`developer_build_debug`，位於 `decision_relevant` partition 之外）。產物：`configs/shipping/mamba_whole_graph.resolved.json`（commit 進 repo）。
 
@@ -185,4 +185,77 @@ PR-4a 的範圍 guard 沒有改。會被 setter canonicalize 的值（例如 `co
 - `reid_min_candidates` 是唯一沒有 JSON 來源、但 kernel 會讀的參數；它只在 embeddings 分支被讀，而 shipping tracker 以 `forbid_embeddings()` 讓該分支不可達（§8.4）。owner 決定不為這個 dormant knob 擴張 ABI。
 - Python wrapper 的 `set_reid_min_candidates(1)`（`pipeline.py` 在某些 ReID 組態下呼叫）因為沒有 binding 而是 no-op，這是 PR-4b 之前就存在的獨立 bug，另開 issue 追蹤，PR-4b 不改它。
 - readback 證明 native 狀態等於 JSON；kernel 是否用到每個欄位，由逐欄映射測試與 §8.6 的 headline 輸出不變共同支撐，不是由 readback 本身證明。
-- U3–U5（native 宿主、ingest、graph／double-buffer）尚未開始；PR-4b land 之後 PR-5 才能開始。
+- U3–U5（native 宿主、ingest、graph／double-buffer）在 PR-4b 時尚未開始；U3a（PR-5）見 §9。
+
+## 9. Native post-detector replay 宿主（PR-5／U3a）
+
+PR-5 建立第一個 native 宿主：吃 detector 輸出，依 oracle 的 serial 順序跑 **main NMS＋private continuation append → external FP rule filter → FP hard filter → GMC → tracker update**（boundary §6 PR-5），eager、不用 graph。驗收是同一份 detection 輸入下，tracker 的結構化輸出（box、score、local id、class）對 Python serial 組態逐位元相同；**不**含 MOT txt（ID 映射、interpolation、formatter 在 PR-6）。
+
+| 項目 | 位置 |
+|:--|:--|
+| 計畫＋fail-closed gate、CPU detection filter twin（CUDA-free） | `shipping/include/saccade_shipping/post_detector_plan.hpp`、`shipping/src/post_detector_plan.cpp`（併入 `saccade_shipping_native_config`） |
+| GPU 宿主 | `shipping/include/saccade_shipping/post_detector_host.hpp`、`shipping/src/post_detector_host.cpp`（併入 `saccade_shipping_native`） |
+| dump 工具（`developer_build_debug`） | `scripts/eval/diagnostics/dump_post_detector_replay.py`（格式 `saccade.post_detector_replay/v1`；`--verify`／`--against` 檢查完整性與兩份 dump 是否逐位元相同） |
+| replay 工具（`developer_build_debug`） | `shipping/tools/saccade_replay.cpp`（target `saccade_replay`，只在 root build） |
+| 測試 | `tests/native/test_shipping_detection_filters.cpp`（CPU，CI `shipping-config-loader`，fixture `tests/native/fixtures/shipping_detection_filters.json` 由 `scripts/model/render_shipping_detection_filters_fixture.py` 產生）、`tests/native/test_shipping_post_detector_host.cpp`（GPU）、`tests/unit/test_post_detector_host_oracle_pins.py`（oracle source pin＋fixture freshness） |
+
+### 9.1 宿主照抄的 oracle 事實
+
+- 空的 detector 輸出：不跑 NMS、GMC、tracker（`_run_frame` 提早 return），也不觸發 pre-roll。
+- main NMS 走 graphed 路徑：`copy_pad` 到 `nms_fixed_n`（＝`max_assoc`＝1024）→ `process_detections_main_nms_graph_nocopyback` → `process_detections_split_pipeline_graphed`（private prior＝age ≤ `private_prior_max_age` 的 active track）。
+- 兩個 filter 在 host 端以 float32 計算，門檻轉成 float32（torch 對 float32 tensor 與 Python scalar 比較的方式）；external FP 只實作 `rule` 模式、penalty 關閉的分支，其他組態由計畫拒絕。`min_score`（當幀 score floor）只在 penalty 分支被讀，因此不進宿主。
+- tracker：`update_into` 一律傳 `num_dets=max_assoc`（尾端補零）、無 embeddings、`light_factor=0`、`mid_thresh_scale=1`、`out_capacity=max_objects`；warp 的初值是 `torch.eye(2, 3)`。
+- **pre-roll**：`GraphedTrackerUpdate` 在一個 sequence 第一次真正 update 之前，以全零輸入跑 `update_into` 共 4 次（`_warmup` 1 次＋`make_graphed_callables` 的 `num_warmup_iters=3`；capture 本身只錄 kernel 不執行，host 端只動到沒有輸出讀取的 `processed_frame_count_`）。宿主照做（`kGraphedTrackerUpdatePreRoll=4`），由 `test_post_detector_host_oracle_pins.py` 對 oracle 原始碼釘住。
+- GMC／tracker 每個 sequence 一份，`PerceptionPipeline` 每個 run 一份。
+
+### 9.2 Exporter `steps` 的更正
+
+PR-3 的 `steps` 宣稱列出每個條件步驟的 gate，但漏了 post-detector 路徑上的 3 個分支；PR-5 先以直接讀 `cfg`／`env` 的方式 fail-closed，再把它們補進 exporter（新增 4 條，headline 全為 `false`，JSON 只多這 4 個鍵）：
+
+| step | oracle 的 gate（位置） |
+|:--|:--|
+| `post.scene_adapt` | `cfg.detection.scene_adapt_enabled`（`pipeline.py`，IfExp 條件） |
+| `post.narrow_person_bonus` | `0.0 if cfg.detection.scene_adapt_enabled else cfg.detection.narrow_person_score_bonus`（`pipeline.py`，每個 sequence 的 bonus 初值；只有 scene-adapt 會在之後提高它。兩條都是 `false` ⇒ bonus 恆為 0，`apply_narrow_person_score_bonus` 不做事） |
+| `filter.stage2_quality_gate` | `cfg.stage2_quality_gate`（`evaluator.py` `_run_frame` 的 `and` 子句） |
+| `track.score_jitter` | `os.environ.get("SACCADE_SCORE_JITTER", "")`（`stages.py`） |
+
+`HostSteps` 解析這 4 個欄位，計畫改為只讀 `steps`。
+
+### 9.3 驗收
+
+同一台機器、`build/` 組態，branch commit `22556f7c`（工作樹乾淨），以 `mot17.py --preset mamba_whole_graph --detector SDP`（serial，無 `--double-buffer`）跑 MOT17 train 7 個 SDP sequence 並 dump，再以 `saccade_replay` 重放：
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 4 個 stage（post-NMS、tracker 輸入、tracker 收到的 warp、tracker 輸出）逐幀比對 | 7/7 sequence、5316/5316 幀全部逐位元相同，數量不符 0、最大絕對差 0；改用 §9.2 重新產生的 JSON 重放，結果相同 |
+| oracle 自身的重現性 | 第二次執行（`--frames hash`）的每個 stream 與 frame hash 都和第一次相同；dump 完整性（sha256 對 `meta.json`）通過 |
+| 比對器不是空轉的 | 負控制：參考輸出改 1 ulp ⇒ 只有 `tracker_output` 在該幀發散；detector 框 +40 px ⇒ post-NMS／tracker 輸入／輸出從該幀起發散，warp 不受影響 |
+| CPU filter twin | Python 函式產生的 golden fixture（2 組門檻 × 337 列，含每個門檻與其 float32 鄰值）逐位元相同；7 個 twin 的變異（`<=`／`<`、double 比較、clamp 下限等）全部被抓到 |
+| GPU 宿主生命週期 | 空幀不觸發任何步驟、pre-roll 只在第一次 update 跑一次、首次 update 後拒絕改 pre-roll、計畫拒絕的 config 讓建構子失敗、兩個宿主逐位元相同（50 checks） |
+
+serial 參考的 headline 指標為 IDF1 78.3／MOTA 77.9／IDs 429（與 §8.6 的 double-buffer 數字相同；這裡只記錄觀察值）。
+
+**pre-roll 的證據只來自 source pin**：以 `--pre-roll 0` 與 `--pre-roll 1` 重放同一份 dump，7 個 sequence 也都逐位元相同。所以 replay parity 無法區分 pre-roll 次數；`4` 這個值由 oracle source pin 維持，不是由 replay 證明。
+
+結果目錄：`results/465_pr5_replay/full7_22556f7c/`（`replay_report.json`、`replay_report_steps.json`、`replay_preroll{0,1}.json`、`verify.json`、兩份 dump 的 manifest 與 log；frames 27 GB 不納入版本控制）。
+
+### 9.4 已知的 oracle 缺陷（不修）
+
+external FP rule filter 會刪列，但沒有同步裁切 `geometry_suspect_mask`，之後 mask 與偵測框不再對齊。headline 下游不讀它（`geometry_suspect_support=false`；bank 更新的讀取在 ReID 關閉時不會發生），所以不可觀察。PR-5 不改 Python oracle 的語義，native 宿主也不產生 mask。
+
+### 9.5 限制
+
+- 只驗 serial、eager；graph 與 double-buffer 在 U5。
+- 輸入是同一台機器 dump 的 detector 輸出與 GMC 輸入幀；ingest（解碼）與 detector 不在範圍內（PR-7 等）。
+- filter 在 host CPU 上執行並來回拷貝；這是 parity 宿主，不是效能主張。
+- 驗收是 headline 組態下的觀察，不是一般性的等價主張；計畫拒絕的組態（ONMS、crowd／duplicate／cap filter、birth gate、ReID、stage-2 gate、bonus、jitter 等）沒有 native 實作。
+
+### 9.6 重現
+
+```bash
+.venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python scripts/eval/diagnostics/dump_post_detector_replay.py --out <dir>/dump
+.venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python scripts/eval/diagnostics/dump_post_detector_replay.py --out <dir>/repeat_hash --frames hash
+.venv/bin/python scripts/eval/diagnostics/dump_post_detector_replay.py --verify <dir>/dump --against <dir>/repeat_hash
+cmake --build build --target saccade_replay
+build/shipping/saccade_replay --config configs/shipping/mamba_whole_graph.resolved.json --dump <dir>/dump --report <dir>/replay_report.json
+```
