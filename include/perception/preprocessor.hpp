@@ -1,7 +1,6 @@
 #pragma once
 
 #include "saccade/common.hpp"
-#include <opencv2/opencv.hpp>
 #include <vector>
 #include <cuda_runtime.h>
 
@@ -18,6 +17,7 @@ public:
 
     /**
      * @brief [Legacy] CPU 預處理 (用於備援，HWC BGR -> CHW RGB Float)
+     * Defined in preprocessor_cpu.cpp (needs OpenCV; not in saccade_perception).
      */
     void process(void* input_ptr, int width, int height, void* output_cuda_ptr, cudaStream_t stream);
 

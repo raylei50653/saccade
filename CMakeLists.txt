@@ -104,6 +104,10 @@ set(CMAKE_CUDA_ARCHITECTURES "native")
 option(ENABLE_NATIVE_TESTS "Build native C++ tests" ON)
 option(ENABLE_NATIVE_COVERAGE "Enable coverage instrumentation for native C++ test targets" OFF)
 option(SACCADE_ENABLE_NVTX "Enable NVTX instrumentation for Nsight Systems profiling" ON)
+# OpenCV is only needed by developer / eval surfaces (the tracking and eval
+# extensions, saccade_node). OFF builds everything else, including the shipping
+# runtime, without looking for OpenCV at all (#465 PR-11).
+option(SACCADE_WITH_OPENCV "Build the targets that need OpenCV" ON)
 
 if(SACCADE_ENABLE_NVTX)
     add_compile_definitions(SACCADE_ENABLE_NVTX)
@@ -199,7 +203,11 @@ string(FIND "${_saccade_cudart_real}" "${_saccade_venv_cuda_real}/" _saccade_cud
 if(NOT _saccade_cudart_in_venv EQUAL 0)
     message(FATAL_ERROR "CUDA::cudart escaped the frozen venv: ${_saccade_cudart_real} (issue #214)")
 endif()
-find_package(OpenCV REQUIRED)
+if(SACCADE_WITH_OPENCV)
+    find_package(OpenCV REQUIRED)
+else()
+    set(CMAKE_DISABLE_FIND_PACKAGE_OpenCV TRUE)
+endif()
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
@@ -284,11 +292,11 @@ find_library(TENSORRT_NVINFER_PLUGIN_LIBRARY
 )
 
 # 5. 全局包含路徑
+# OpenCV headers are not global: only the targets that link OpenCV see them.
 include_directories(
     ${PROJECT_SOURCE_DIR}/include
     ${CUDAToolkit_INCLUDE_DIRS}
     ${GSTREAMER_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS}
 )
 # TensorRT headers as SYSTEM to suppress third-party deprecation warnings
 include_directories(SYSTEM ${TENSORRT_INCLUDE_DIR})
@@ -296,6 +304,8 @@ include_directories(SYSTEM ${TENSORRT_INCLUDE_DIR})
 include_directories(SYSTEM ${EIGEN_INCLUDE_DIR})
 
 # 6. 定義 Perception 模組 (Dynamic Library)
+#    No OpenCV: Preprocessor's legacy CPU path is preprocessor_cpu.cpp in
+#    saccade_opencv_host (#465 PR-11).
 add_library(saccade_perception STATIC
     src/perception/trt_engine.cpp
     src/perception/preprocessor.cpp
@@ -315,6 +325,10 @@ target_include_directories(saccade_tracker_params PUBLIC ${PROJECT_SOURCE_DIR}/i
 set_target_properties(saccade_tracker_params PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # 7. 定義 Tracking 模組 (Dynamic Library)
+#    Links neither saccade_perception nor OpenCV (#465 PR-11; checked below):
+#    PerceptionPipeline takes its ReID backend through tracking/reid_backend.hpp,
+#    GMC's CPU mode is gmc_cpu.cpp in saccade_opencv_host, and the C++ eval
+#    runner (seq_runner / eval_pool) is saccade_eval_runner.
 add_library(saccade_tracking STATIC
     src/tracking/tracker_gpu.cu
     src/tracking/legacy_env.cpp
@@ -333,8 +347,6 @@ add_library(saccade_tracking STATIC
     src/tracking/mamba_scan.cu
     src/tracking/temporal_birth_pool.cu
     src/tracking/multi_signal_birth_pool.cu
-    src/tracking/seq_runner.cpp
-    src/tracking/eval_pool.cpp
     src/tracking/cheb_gr_online.cpp
     src/tracking/cheb_gr_kreciprocal.cpp
     src/tracking/dynamic_reid_controller.cpp
@@ -343,11 +355,47 @@ set_target_properties(saccade_tracking PROPERTIES CUDA_SEPARABLE_COMPILATION OFF
 target_link_libraries(saccade_tracking
     CUDA::cudart
     CUDA::cufft
-    ${OpenCV_LIBS}
-    saccade_perception
     saccade_tracker_params
 )
 target_compile_definitions(saccade_tracking PRIVATE SACCADE_EXPORT_TRACKING)
+
+# The shipping runtime links saccade_tracking; it must not drag perception or
+# OpenCV in through it (#465 PR-11, boundary §6 PR-11). Fail closed.
+get_target_property(_saccade_tracking_links saccade_tracking LINK_LIBRARIES)
+foreach(_saccade_dep IN LISTS _saccade_tracking_links)
+    if(_saccade_dep MATCHES "saccade_perception|opencv")
+        message(FATAL_ERROR "saccade_tracking links ${_saccade_dep}; it must link neither saccade_perception nor OpenCV (#465 PR-11)")
+    endif()
+endforeach()
+
+if(SACCADE_WITH_OPENCV)
+    # 7d. The OpenCV host paths: Preprocessor's legacy CPU letterbox
+    #     (saccade_node) and GMC's CPU LK + RANSAC mode (the Python
+    #     GMC.estimate_mat), split out of perception / tracking (#465 PR-11).
+    add_library(saccade_opencv_host STATIC
+        src/perception/preprocessor_cpu.cpp
+        src/tracking/gmc_cpu.cpp
+    )
+    target_include_directories(saccade_opencv_host PUBLIC ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(saccade_opencv_host PUBLIC
+        saccade_perception
+        saccade_tracking
+        ${OpenCV_LIBS}
+    )
+
+    # 7e. The C++ eval runner behind `--cpp-threads` (saccade_eval_ext):
+    #     TRT detectors (perception) and cv::imread frame loading.
+    add_library(saccade_eval_runner STATIC
+        src/tracking/seq_runner.cpp
+        src/tracking/eval_pool.cpp
+    )
+    target_include_directories(saccade_eval_runner PUBLIC ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(saccade_eval_runner PUBLIC
+        saccade_tracking
+        saccade_perception
+        ${OpenCV_LIBS}
+    )
+endif()
 
 # 8. 定義 Media 模組 (Dynamic Library)
 add_library(saccade_media STATIC
@@ -402,7 +450,6 @@ target_link_libraries(saccade_perception
     ${TORCH_LIBRARIES}
     CUDA::cudart
     CUDA::cufft
-    ${OpenCV_LIBS}
 )
 set_target_properties(
     saccade_perception
@@ -475,33 +522,42 @@ target_link_libraries(saccade_media_ext PRIVATE
 )
 target_compile_options(saccade_media_ext PRIVATE -fno-lto)
 
+set(SACCADE_PYTHON_EXTENSIONS saccade_media_ext saccade_perception_ext saccade_cheb_gr_online_ext)
 
-pybind11_add_module(saccade_tracking_ext NO_EXTRAS src/tracking/tracker_gpu_python.cpp)
-target_link_libraries(saccade_tracking_ext PRIVATE
-    saccade_tracking
-    CUDA::cudart
-)
-# Pin the cublas/cublasLt pairing to the frozen venv tree (issue #214): the
-# extension does not call cublas itself, but system OpenCV's CUDA libraries
-# pull libcublas via their own /opt/cuda RUNPATH while torch pulls libcublasLt
-# from the venv — a mixed pair that breaks at load. Making both a direct
-# NEEDED of the extension resolves them through this target's RUNPATH first,
-# so every later requester reuses the frozen pair.
-target_link_libraries(saccade_tracking_ext PRIVATE
-    -Wl,--no-as-needed
-    CUDA::cublas
-    CUDA::cublasLt
-    -Wl,--as-needed
-)
-target_compile_options(saccade_tracking_ext PRIVATE -fno-lto)
+if(SACCADE_WITH_OPENCV)
+    # The tracking extension binds GMC.estimate_mat (saccade_opencv_host) and wires
+    # perception ReID models into PerceptionPipeline (perception_reid_adapter.hpp).
+    pybind11_add_module(saccade_tracking_ext NO_EXTRAS src/tracking/tracker_gpu_python.cpp)
+    target_link_libraries(saccade_tracking_ext PRIVATE
+        saccade_tracking
+        saccade_opencv_host
+        saccade_perception
+        CUDA::cudart
+    )
+    # Pin the cublas/cublasLt pairing to the frozen venv tree (issue #214): the
+    # extension does not call cublas itself, but system OpenCV's CUDA libraries
+    # pull libcublas via their own /opt/cuda RUNPATH while torch pulls libcublasLt
+    # from the venv — a mixed pair that breaks at load. Making both a direct
+    # NEEDED of the extension resolves them through this target's RUNPATH first,
+    # so every later requester reuses the frozen pair.
+    target_link_libraries(saccade_tracking_ext PRIVATE
+        -Wl,--no-as-needed
+        CUDA::cublas
+        CUDA::cublasLt
+        -Wl,--as-needed
+    )
+    target_compile_options(saccade_tracking_ext PRIVATE -fno-lto)
 
-pybind11_add_module(saccade_eval_ext NO_EXTRAS src/tracking/eval_python.cpp)
-target_link_libraries(saccade_eval_ext PRIVATE
-    saccade_tracking
-    saccade_perception
-    CUDA::cudart
-)
-target_compile_options(saccade_eval_ext PRIVATE -fno-lto)
+    pybind11_add_module(saccade_eval_ext NO_EXTRAS src/tracking/eval_python.cpp)
+    target_link_libraries(saccade_eval_ext PRIVATE
+        saccade_eval_runner
+        saccade_tracking
+        saccade_perception
+        CUDA::cudart
+    )
+    target_compile_options(saccade_eval_ext PRIVATE -fno-lto)
+    list(APPEND SACCADE_PYTHON_EXTENSIONS saccade_tracking_ext saccade_eval_ext)
+endif()
 
 pybind11_add_module(saccade_cheb_gr_online_ext NO_EXTRAS src/tracking/cheb_gr_online_python.cpp)
 target_link_libraries(saccade_cheb_gr_online_ext PRIVATE
@@ -518,11 +574,7 @@ target_link_libraries(saccade_perception_ext PRIVATE
 )
 target_compile_options(saccade_perception_ext PRIVATE -fno-lto)
 set_target_properties(
-    saccade_media_ext
-    saccade_tracking_ext
-    saccade_eval_ext
-    saccade_perception_ext
-    saccade_cheb_gr_online_ext
+    ${SACCADE_PYTHON_EXTENSIONS}
     PROPERTIES
         BUILD_RPATH "${SACCADE_BUILD_RPATH}"
         INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
@@ -530,20 +582,23 @@ set_target_properties(
         VISIBILITY_INLINES_HIDDEN OFF
 )
 
-# 7. 主程式
-add_executable(saccade_node src/main.cpp)
-target_link_libraries(saccade_node 
-    saccade_perception 
-    saccade_tracking
-    saccade_media
-    ${GSTREAMER_LIBRARIES}
-)
-set_target_properties(
-    saccade_node
-    PROPERTIES
-        BUILD_RPATH "${SACCADE_BUILD_RPATH}"
-        INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
-)
+# 7. 主程式 (calls Preprocessor's OpenCV CPU path)
+if(SACCADE_WITH_OPENCV)
+    add_executable(saccade_node src/main.cpp)
+    target_link_libraries(saccade_node
+        saccade_perception
+        saccade_opencv_host
+        saccade_tracking
+        saccade_media
+        ${GSTREAMER_LIBRARIES}
+    )
+    set_target_properties(
+        saccade_node
+        PROPERTIES
+            BUILD_RPATH "${SACCADE_BUILD_RPATH}"
+            INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
+    )
+endif()
 
 if(ENABLE_NATIVE_TESTS)
     enable_testing()

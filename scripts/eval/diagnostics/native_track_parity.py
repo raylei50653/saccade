@@ -44,7 +44,8 @@ could hide a race) and reports ``detector`` as ``NOT_RUN``.
 ``--mutation`` runs a ``saccade_track`` negative control of the schedule's
 runtime; ``--ref-edit`` changes one character of the first sequence's oracle
 txt in memory (comparator check); ``--against`` compares the native txt and
-trace hashes with an earlier report.
+trace hashes with an earlier report. ``--track-binary`` runs another build of
+the entrypoint (#465 PR-11: the ``-DSACCADE_WITH_OPENCV=OFF`` build).
 
 Usage (GPU, gpu0 lease; R=results/465_pr10_track/<label>)::
 
@@ -367,7 +368,7 @@ def report_problems(
 def run_track(args: argparse.Namespace, out: Path) -> tuple[int, Path]:
     report = out / "track_report.json"
     cmd = [
-        str(project_root / TRACK),
+        str(project_root / args.track_binary),
         "--config", det.RESOLVED_CONFIG,
         "--lineage", det.LINEAGE,
         "--attestation", det.ATTESTATION,
@@ -614,7 +615,8 @@ def run_parity(args: argparse.Namespace) -> int:
         "git": det._git_state(),
         "attestation_sha256": det._sha256_file(project_root / det.ATTESTATION),
         "lineage_sha256": det._sha256_file(project_root / det.LINEAGE),
-        "track_binary_sha256": det._sha256_file(project_root / TRACK),
+        "track_binary": str(args.track_binary),
+        "track_binary_sha256": det._sha256_file(project_root / args.track_binary),
         "schedule": args.schedule,
         "oracle_rows": str(rows_dir),
         "oracle_rows_report": rows_report,
@@ -697,6 +699,12 @@ def main(argv: list[str] | None = None) -> int:
     neg.add_argument("--ref-edit", action="store_true")
     q.add_argument("--against", type=Path, default=None)
     q.add_argument("--no-trace", action="store_true")
+    q.add_argument(
+        "--track-binary",
+        type=Path,
+        default=Path(TRACK),
+        help="the saccade_track to run (relative to the repository root)",
+    )
     args = ap.parse_args(sys.argv[1:] if argv is None else argv)
 
     args.out = args.out.resolve()
@@ -719,8 +727,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.against is not None:
         args.against = args.against.resolve()
-    if not (project_root / TRACK).exists():
-        ap.error(f"{TRACK} not built (cmake --build build --target saccade_track)")
+    if not (project_root / args.track_binary).exists():
+        ap.error(
+            f"{args.track_binary} not built (cmake --build build --target saccade_track)"
+        )
     from scripts.provenance.run_manifest import open_run
 
     # ADR 021 AP-2: claim the run directory before the first byte.
