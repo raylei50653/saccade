@@ -669,3 +669,146 @@ build/shipping/saccade_track --config configs/shipping/mamba_whole_graph.resolve
     --attestation configs/shipping/mamba_head_realization.attestation.json \
     --out <dir> datasets/MOT17/train/MOT17-02-SDP datasets/MOT17/train/MOT17-04-SDP ...
 ```
+
+## 14. Native double buffer＋CUDA graph（PR-10／U5）
+
+PR-10 把 PR-9 的端到端 runtime 換成 oracle 本身的排程：boundary §2 的 oracle 是 `mot17.py --double-buffer`（detect(N+1) ∥ tracker(N)、event barrier），而且 oracle 在這條路徑上 capture 四個 CUDA graph。`saccade_track` 依 resolved config 的排程執行（headline＝double buffer＋四個 graph）；PR-9 的 serial、eager runtime 保留為 developer 選項（`--schedule serial`），是 PR-9 量過的參考。stage 本身不變（PR-5～PR-8），新的東西只有：排程、stream／event、graph 的 capture 時機與 recapture key、以及每個 buffer 何時可以被覆寫。parity oracle 是 owner 接受的 `A_L` 的 double-buffer 組態（#465 決策 1；PR-2L 的 `A_L_1`）。
+
+| 項目 | 位置 |
+|:--|:--|
+| 排程計畫（CUDA-free） | `shipping/include/saccade_shipping/schedule_plan.hpp`、`shipping/src/schedule_plan.cpp`（併入 `saccade_shipping_native_config`；CPU 測試在 `test_shipping_native_config.cpp`） |
+| double-buffer runtime | `shipping/include/saccade_shipping/double_buffer_runtime.hpp`、`shipping/src/double_buffer_runtime.cpp`（併入 `saccade_shipping_runtime`） |
+| graph 模式 | `DetectorHost::detect_graphed`（whole-detect graph）、`PostDetectorHost` 的 `GraphMode::Captured`（main NMS、GMC、tracker graph）、`IngestHost` 的兩個 pool（decode 與 normalize 分開） |
+| shipping entrypoint | `shipping/tools/saccade_track.cpp`：排程由 config 決定；`--schedule serial` 與新的 `--measurement-mutation` 值屬 `developer_build_debug` |
+| parity harness（`developer_build_debug`） | `scripts/eval/diagnostics/native_track_parity.py`（`--schedule double_buffer`，`--oracle-txt` 是 `native_detector_parity.py anchor` 的輸出；`--no-trace`） |
+| 測試 | `tests/native/test_shipping_double_buffer_runtime.cpp`（GPU；需要 model 與 MOT17，缺少時 SKIP）、`tests/unit/test_native_double_buffer_oracle_pins.py`（oracle 的排程與 graph 生命週期）、`tests/unit/test_native_track_parity.py`（新增 graph section、oracle log 解析、double-buffer oracle 的有效性）、`tests/unit/test_saccade_track_schedule_cli.py`（torn config 在 entrypoint 上 fail closed，含 `--schedule serial`；§14.7） |
+
+### 14.1 照抄的 oracle 事實（排程與 graph）
+
+由 `test_native_double_buffer_oracle_pins.py` 對 oracle 原始碼釘住：
+
+- **排程的條件**：`_double_buffer_eligible` 要求 `SACCADE_DOUBLE_BUFFER`、`SACCADE_DETECT_BARRIER=event` 與 frame-independent 的 detector（whole graph）。exporter 把結果記成 `steps.schedule.double_buffer`；`plan_schedule` 要求這些輸入與記錄一致，不一致時 fail closed，不自行重新解讀。四個 graph 的開關也由 config 推出（whole graph＋TRT backbone、`SACCADE_MAIN_NMS_GRAPHED` 且無 ONMS、`gmc_mode=gpu` 且無 fg mask、`steps.track.graphed_update`）；native 只實作四個都 capture 的路徑。
+- **frame loop**：`_schedule(1)` 先啟動第 1 幀；每次迭代先 `_schedule(k+1)`（`k < frame_end` 時），再 `_run_frame(k, prepared_detection)`。同時只有一個 detection 在飛。
+- **parity**：第 k 幀用 `double_buffer_pools[(k-1) % 2]` 與 `double_buffer_events[(k-1) % 2]`；`EvalPipeline` 在 eligible 時建立兩個 pool、一條 side stream、兩組 event。native：每個 sequence 一個 `IngestHost(pools=2)`，每個 run 兩組 device detection buffer。
+- **launch**：`input_ready` 記在 main stream，side stream 等它，然後在 side stream 上 normalize（`_run_detect` 的 ingest_preprocess）、whole-detect graph、把輸出 clone 出 graph 的 static buffer，最後記 `ready_event`。`_run_frame` 讓 main stream 等 `ready_event`，並改用該 parity 的 pool（GMC 讀它的 frame buffer）。native 的 clone 是把 static output 拷進該 parity 的 detection buffer，class 的 float→int32 轉換（`_run_native_tensor_prep`）在同一步完成。
+- **為什麼覆寫是安全的（event barrier）**：launch(k+1) 重用第 k−1 幀的 frame buffer 與 detection buffer；它們最後的讀者（GMC 的 frame 拷貝、copy_pad）在 main stream 上排在 `input_ready(k+1)` 之前，side stream 等這個 event。oracle 靠 caching allocator 與 `record_stream` 保護 decode 輸出；native 改成每個 parity 一個 `normalized` event，host 在 decode 進該 buffer 前等它。
+- **whole-detect graph**：key＝frame 形狀＋image dims＋NMS pad。`set_whole_graph_img_dims` 遇到相同 dims 時保留 graph 與 warm 旗標，不同時清掉兩者。cache miss 時：未 warm 先跑一次 warm-up（`_whole_graph_warmup`），再由 `make_graphed_callables` 在 `frame.clone()` 上 warm-up 3 次後 capture；cache 已有 10 個時先清空。native 用 LibTorch 的 `at::cuda::CUDAGraph`（private memory pool、`thread_local` capture mode），每次 replay 前把 frame 拷進 static input。7-seq 的順序下，oracle 與 native 都只在 MOT17-02、05、09 capture（04、10、11、13 沿用）。
+- **main NMS graph**（每個 sequence 一個）：每幀先 copy_pad；第一幀以 eager 的 nocopyback 呼叫 warm-up、同步、capture，然後 replay；之後每幀 replay。private-continuation append 仍是 eager。
+- **GMC graph**（每個 sequence 一個）：第一幀把 frame 拷進 `_gmc_frame_buf`、在它上面 eager 估計、同步、capture，**不 replay**；之後每幀拷貝再 replay。
+- **tracker graph**（每個 sequence 一個）：4 次 pre-roll（§9.1）之後 capture `update_into`（全零 scratch 輸入、identity warp；`copy_inputs` 在寫入之前 capture），之後每次 update 先拷輸入再 replay。oracle 的 `[TrackerGraph] Captured` 是在建構 `GraphedTrackerUpdate` 時印的，實際的 capture 是 lazy 的，所以這一行只標出 sequence 的開始。
+- **沒有照抄的部分（只影響時間，不影響值）**：oracle 的 decode 在 worker thread 上預取（decode 在進 queue 前已完成）；native 在 host thread 上依序 decode。oracle 把 tracker 輸出的 D2H 延後到下一幀（pinned parity buffer），emit 順序不變；native 在每幀結束時同步讀回。torch 在自己的 side stream 上 capture；native 在 runtime 的 stream 上 capture（capture 本身不執行）。
+
+### 14.2 operator library 的重新 attestation
+
+2026-10-04 開發期間，`cmake` 重新 configure 後的完整 build 重新編出 `build/libsaccade_scan_torchop.so`：sha256 從 attestation 綁定的 `098dd233…` 變成 `aa84cccd…`（同一份 source；nvcc 輸出不是逐位元組可重現的）。`098dd233` 的 build 已不存在，所有讀 attestation 的 detector 工具都會 fail closed。這是 §12.3 的機制預期要處理的情況：在乾淨的 commit 上跑 `native_detector_parity.py anchor`（`A_L` double-buffer、7 sequence），**只有**當 7 個 txt 全部與 PR-2L `A_L_1` 逐位元組相同時，才以 `attest` 重寫 `configs/shipping/mamba_head_realization.attestation.json`（PR-1L freeze、lineage 都不動），並以獨立的 commit 提交。不相同 ⇒ 不 attest，PR-10 停在這裡，交 owner。正式 run 在 attestation commit 之上執行。
+
+### 14.3 測量契約（正式 7-seq run 之前寫定）
+
+在本節 commit 之前，PR-10 只在 MOT17 上跑過 native 對 native 的檢查（GPU 測試；`saccade_track` 的 double buffer 與 `--schedule serial` 在 3 個 sequence 的前 40 幀逐位元組相同，三個負控制都改變輸出），沒有跑過任何對 oracle 的 parity。
+
+**oracle**（在 PR-10 的正式 commit 上重跑，同一個 gpu0 lease）：
+- `native_detector_parity.py anchor`：`A_L` double-buffer、MOT17 train 7 個 SDP sequence（02／04／05／09／10／11／13，5316 幀），一個 `mot17.py` process 依此順序。它留下 MOT txt、`_global_id_map.txt` 與 log（graph capture 的訊息）；它同時是 §14.2 的檢查（與 `A_L_1` 7/7 相同）。
+- `native_detector_parity.py oracle-rows`：`A_L` serial，同樣 7 個 sequence，留下 `_run_detect` 每幀的輸出（§13.3）。oracle 的 detector 是 frame-independent 的：double buffer 只是在 side stream 上跑同一個 `_run_detect`，所以 detector rows 以 serial run 為 oracle。
+
+**native**：一個 `saccade_track` process，依 oracle 的順序跑 7 個 sequence，排程取自 config（double buffer），加 `--trace` 與 `--report`。
+
+**section**：
+
+| section | native | oracle | 比較 |
+|:--|:--|:--|:--|
+| `detector` | double buffer 下每幀的 detector rows（從該 parity 的 detection buffer 讀回） | `oracle-rows` 的 `_run_detect` rows | 每幀整筆 record 逐位元組 |
+| `mot_txt` | `<seq>.txt` | `anchor` 的 `<seq>.txt`，ID 依它的 `_global_id_map.txt` 重標 | 逐位元組；track ID 數相同 |
+| `graph_captures` | 每個 sequence 的 whole-detect／main NMS／GMC capture 數，以及 replay 數 | `anchor` log 中該 sequence 區段的 capture 訊息數 | capture 數相等；tracker capture＝1；replay：detector＝幀數，NMS／tracker＝tracker update 數，GMC＝update 數 − 1 |
+
+**有效性**（任一不成立 ⇒ `UNRESOLVED`）：正式 run 在乾淨的 commit 上、gpu0 lease 下執行；attestation 對上 lineage 與 operator library；`anchor` 報告無 problem、與 `A_L_1` 7/7 相同、在同一個 commit 上、是 double buffer、sequence 順序與 native 相同；`oracle-rows` 的條件同 §13.3；`saccade_track` exit 0，report 顯示：schedule `double_buffer`、無 mutation、process 內沒有 Python 函式庫、op library／artifact／engine 經 attestation／lineage 綁定、runtime readback 與 scan 呼叫次數相同、參數 cuda:0／constant CPU、每個 sequence 的寬、高、幀數與 `seqinfo.ini` 相同。
+
+**EXACT 驗收規則**：PR-10 的 verdict 是 `EXACT` 若且唯若下列全部成立，否則是 `NOT_EXACT`：
+
+1. 有效性成立；
+2. `detector`（5316/5316 幀）、`mot_txt`（7/7）、`graph_captures`（7/7）全部相同；
+3. 重現性：第二次 `parity --against` 再次 `EXACT`，每個 sequence 的 native txt 與 trace sha256 與第一次相同；
+4. 不帶 trace（shipping 組態；trace 每幀多一次同步，可能遮住 race）：`parity --no-trace --against` 的 `mot_txt` 與 `graph_captures` `EXACT`，txt sha256 與第一次相同；
+5. PR-9 回歸：同一份 `oracle-rows`，`parity --schedule serial` 的 `detector` 與 `mot_txt` 7/7 `EXACT`（`IngestHost`／`DetectorHost` 的重構不改變 serial）；
+6. PR-8 回歸：PR-10 commit 的 `saccade_detector_probe` 對同一份 `oracle-rows`，`native_detector_parity.py parity` 的 9 個 section 全部 `EXACT`。
+
+沒有容差，看到結果之後也不新增容差。任一項不成立：照 section 分開報告（第一個不同的幀／行、capture 數），停在 PR-10。
+
+**負控制**（7 sequence，對同一份 oracle）：`saccade_track --measurement-mutation` 每次只破壞一條 graph／parity 規則，對應的 section 必須是 `DIFFERS`（其他 section 照實記錄）：
+
+| 負控制 | 破壞的規則 | 必須 `DIFFERS` 的 section |
+|:--|:--|:--|
+| `stale_detector_input` | whole-detect graph replay 前不把 frame 拷進 static input | `detector` |
+| `stale_gmc_input` | GMC graph replay 前不把 frame 拷進 captured buffer | `mot_txt`（`detector` 應為 `EXACT`） |
+| `swapped_detection_parity` | tracker(k) 讀另一個 parity 的 detection buffer（等第 k+1 幀的 ready 後讀它；最後一幀讀到第 k−1 幀的） | `detector` |
+| `--ref-edit`（harness） | 第一個 sequence 的 oracle txt 在記憶體中改 1 個字元 | `mot_txt`（只有 MOT17-02） |
+
+拿掉 event wait 這類 race 型的變異不當負控制：結果取決於時序，沒抓到不能證明什麼，抓到也不可重現。
+
+**觀察（不是 gate）**：`anchor`（double buffer）與 `oracle-rows`（serial）的 txt 是否 7/7 相同；native double buffer 與 native serial（第 5 條）的 txt 是否相同；同一個 session 內的 FPS：native double buffer（第 4 條，無 trace）、native serial（第 5 條，有 trace）與 oracle `anchor` 的 `_fps_summary.txt`。三者的定義不同（native 是整個 frame loop 的 wall time、含第 1 幀的 graph capture；oracle 從第 51 幀起算），只並列記錄，不做效能主張（boundary §6 PR-10：FPS 只做同 session 對照）。
+
+### 14.4 驗收
+
+**§14.2 的重新 attestation**：在 `306607e3`（工作樹乾淨）跑 `anchor`，7 個 txt 與 PR-2L `A_L_1` 逐位元組相同、無 problem ⇒ `attest` 把 attestation 改綁新 build（`aa84cccd…`；只有 op library 的 sha256／bytes 與 reproduction 紀錄改變，`A_L` 的 txt hash 不變），以 `44cc91a4` 單獨提交。
+
+同一台機器（RTX 5070 Ti Laptop）、`build/` 組態，全部步驟在 gpu0 lease 下依序執行（`run.sh`）。正式 run 是 `44cc91a4`（工作樹乾淨；§14.3 的契約在 `306607e3` 就已 commit，早於任何對 oracle 的 parity 量測）：
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | `anchor`：與 `A_L_1` 7/7 相同、無 problem、同一個 commit、double buffer；`oracle-rows`：`A_L` serial、5316 筆、V5 通過；sequence 順序三者相同；`saccade_track`：schedule `double_buffer`、exit 0、未 map Python、op library 經 attestation 綁定、artifact／engine／runtime readback／scan 3 次／placement 皆與 lineage 相同、7/7 的寬高幀數與 `seqinfo.ini` 相同 |
+| `detector`（5316 幀） | **EXACT**：double buffer 下每幀從 parity detection buffer 讀回的 rows 與 oracle 的 `_run_detect` 逐位元組相同 |
+| `mot_txt`（7 sequence） | **EXACT**：7/7 重標後逐位元組相同，track ID 數相同（113／103／153／37／168／92／149） |
+| `graph_captures`（7 sequence） | **EXACT**：whole-detect capture 1／0／1／1／0／0／0（MOT17-02／04／05／09／10／11／13），main NMS 與 GMC 每個 sequence 1，與 oracle log 相同；tracker capture 1；replay 數符合 |
+| 重現性 | 第二次 `parity --against`：`EXACT`，native txt 與 trace sha256 7/7 相同 |
+| 不帶 trace | `parity --no-trace --against`：`mot_txt`、`graph_captures` `EXACT`，txt sha256 7/7 與第一次相同 |
+| PR-9 回歸 | `--schedule serial`：`detector` 5316/5316、`mot_txt` 7/7 `EXACT` |
+| PR-8 回歸 | `saccade_detector_probe`：9 個 section 全部 `EXACT`（5316 幀） |
+| **verdict** | **`EXACT`**（§14.3 第 1–6 條全部成立） |
+
+**負控制**（7 sequence，同一份 oracle）全部被抓到：
+
+| 負控制 | DIFFERS 的 section／sequence |
+|:--|:--|
+| `stale_detector_input` | `detector`：7/7 sequence，只有 3 幀相同（MOT17-02、05、09 的 capture 幀：static input 就是那一幀）；`mot_txt` 7/7 |
+| `stale_gmc_input` | `mot_txt`：7/7；`detector` 5316/5316 `EXACT` |
+| `swapped_detection_parity` | `detector`：5316/5316 幀不同；`mot_txt` 7/7 |
+| `--ref-edit` | `mot_txt`：只有 MOT17-02，第一個不同的行就是改過的那一行（第 0 行） |
+
+`graph_captures` 在四個負控制下都是 `EXACT`（變異不改變 capture 與 replay 的次數）。
+
+**觀察（不是 gate）**：`anchor`（double buffer）與 `oracle-rows`（serial）的 txt 7/7 相同，serial txt 與 `A_L_1` 7/7 相同；native double buffer 與 native serial 的 txt 7/7 相同。同一個 session 的 FPS（定義不同，只並列）：native double buffer（無 trace，整個 frame loop，含 capture）278.9；native serial（有 trace）105.4；oracle `anchor` 的 `OVERALL` 292.98（第 51 幀起）。
+
+**確認（修訂 R1 之後，§14.7）**：在 `f99bb288`（工作樹乾淨）重跑 `anchor`（與 `A_L_1` 7/7 相同）、`oracle-rows`、主 parity 與 `--schedule serial` 回歸：全部 `EXACT`，主 parity 的 native txt 與 trace sha256 與正式 run 7/7 相同（`--against`）。目錄 `results/465_pr10_track/confirm_f99bb288/`。
+
+結果目錄：`results/465_pr10_track/full7_44cc91a4/`（`MANIFEST.md`、`run.sh`、`anchor/`、`oracle_rows/`、`parity/`、`repeat/`、`no_trace/`、`serial_regression/`、`pr8_regression/`、`negctl_*/` 與 log）與 `results/465_pr10_track/attest_306607e3/`；不納入版本控制。
+
+### 14.5 限制
+
+- parity 是同一台機器、headline 組態、`A_L` 的對照，不是一般性的等價主張；沿用 PR-7／PR-8 的條件（nvJPEG 硬體路徑、torch 2.11.0／triton 3.6.0 的 S2 lowering、per-machine 的 operator library 與 realization attestation）。對 `A_L` 是 EXACT，不代表對 headline（owner 的 named limit）。
+- double buffer 的正確性靠 event barrier；race 型的變異沒有當負控制（§14.3）。「不帶 trace」與重現性各量了一次，是同一台機器、同一種負載下的觀察，不是無 race 的證明。
+- 只量了 oracle 的 sequence 順序與 headline 的 graph key；GPU 測試另外在 40 幀上檢查 X、Y、X、Z（dims 改變時重新 capture、相同 dims 沿用）。
+- FPS 只是同 session 的並列，不是效能主張：三者的時間定義不同，native 的 tracker 輸出仍每幀同步讀回（oracle 延後一幀），decode 在 host thread 上依序執行（oracle 預取）。
+- operator library 是 per-build 的：重新 configure／完整 build 可能重新編出不同位元組的 `.so`，之後必須依 §14.2 重新 attest（`anchor` 與 `A_L_1` 相同才可以）。
+- `saccade_track` 的 `DT_NEEDED` 仍含 OpenCV（經 `TRTEngine`）；拆掉是 PR-11。
+
+### 14.7 修訂 R1（owner review 之後）
+
+review 發現 `saccade_track` 以 `opt.schedule == "serial" || !plan_schedule(cfg).double_buffer` 選排程：`||` short-circuit，`--schedule serial` 時 `plan_schedule` 完全不執行，所以一份 torn config（`steps.schedule.double_buffer` 與 `SACCADE_DETECT_BARRIER`／`SACCADE_DOUBLE_BUFFER` 不一致）可以用 developer 選項繞過 §14.1 承諾的 fail-closed。修法：`select_schedule(cfg, serial_requested)` 先無條件執行 `plan_schedule`，override 只選 runtime、不跳過驗證；`saccade_track` 改用它。測試：`test_shipping_native_config.cpp` 釘住 `select_schedule`（兩種 torn config × 有無 override 都拒絕）；`test_saccade_track_schedule_cli.py` 直接跑 binary（不需 GPU：在載入任何模型之前就拒絕），torn config 加或不加 `--schedule serial` 都必須 exit 2 並給出 schedule 錯誤。修正前的 binary 剛好在兩個 `--schedule serial` case 失敗。
+
+預設路徑的選擇不變（headline config 仍是 double buffer），§14.4 的正式 run 不重做；修正 commit 上另跑一次確認（主 parity 與 PR-9 serial 回歸），結果記在 §14.4 之後的「確認」一行。
+
+### 14.6 重現
+
+```bash
+cmake --build build --target saccade_track saccade_detector_probe saccade_shipping_double_buffer_runtime_test
+.venv/bin/python tools/resctl.py run gpu0 -- build/shipping/saccade_shipping_double_buffer_runtime_test \
+    configs/shipping/mamba_whole_graph.resolved.json \
+    models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json \
+    configs/shipping/mamba_head_realization.attestation.json . datasets/MOT17/train
+bash results/465_pr10_track/<label>/run.sh   # anchor, oracle-rows, parity, repeat, no-trace, serial + PR-8 regressions, 4 negctls
+
+# the shipping entrypoint alone (schedule from the config: double buffer)
+build/shipping/saccade_track --config configs/shipping/mamba_whole_graph.resolved.json \
+    --lineage models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json \
+    --attestation configs/shipping/mamba_head_realization.attestation.json \
+    --out <dir> datasets/MOT17/train/MOT17-02-SDP datasets/MOT17/train/MOT17-04-SDP ...
+```

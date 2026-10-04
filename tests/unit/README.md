@@ -15,6 +15,7 @@
 | `test_math_model_doc_consistency.py` | eval,tracking | contract | active | Pin the LaTeX math-model document (``docs/latex``) to the code it describes. |
 | `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
 | `test_native_detector_oracle_pins.py` | system | contract | active | Oracle pins for the native detector (#465 Phase B PR-8, U3b-2). |
+| `test_native_double_buffer_oracle_pins.py` | system | contract | active | Oracle pins for the native double-buffer runtime (#465 Phase B PR-10, U5). |
 | `test_native_head_failure_localization_r2_runner.py` | system | contract | active | The #465 localization r2 runner implements its frozen declaration and nothing else. |
 | `test_native_head_failure_localization_runner.py` | system | contract | active | The #465 localization runner implements its frozen declaration and nothing else. |
 | `test_native_head_parity_libtorch_runner.py` | system | contract | active | The #465 PR-2L runner implements its frozen declaration and PR-2's policy verbatim. |
@@ -22,7 +23,7 @@
 | `test_native_head_parity_tf32_off_runner.py` | system | contract | active | The #465 PR-2R runner is PR-2's gate with only the TF32-off head swapped in. |
 | `test_native_ingest_oracle_pins.py` | system | contract | active | Oracle pins for the native ingest (#465 Phase B PR-7, U3b-1). |
 | `test_native_track_oracle_pins.py` | system | contract | active | Oracle pins for the native end-to-end serial runtime (#465 Phase B PR-9). |
-| `test_native_track_parity.py` | system | contract | active | ``native_track_parity.py`` comparators on synthetic inputs (#465 PR-9). |
+| `test_native_track_parity.py` | system | contract | active | ``native_track_parity.py`` comparators on synthetic inputs (#465 PR-9, PR-10). |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
 | `test_post_detector_host_oracle_pins.py` | system | contract | active | Oracle pins for the native post-detector replay host (#465 Phase B PR-5, U3a). |
 | `test_post_detector_replay_dump_verify.py` | system | contract | active | ``dump_post_detector_replay.py --verify`` on synthetic dumps (#465 PR-6). |

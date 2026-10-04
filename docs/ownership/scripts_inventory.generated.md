@@ -12,7 +12,7 @@ Total tracked scripts: **529**. Source of truth = each script's own docstring + 
 | Label | Meaning | Count |
 |-------|---------|------:|
 | `stable` | supported workflow entrypoint; keep path stable | 191 |
-| `diagnostic` | reusable analysis/debug tool, not a main workflow | 213 |
+| `diagnostic` | reusable analysis/debug tool, not a main workflow | 212 |
 | `experiment` | tied to a named experiment or historical sweep | 118 |
 | `archive-candidate` | no longer active; keep only if referenced by docs/results | 6 |
 | `generated` | output or cache; should be ignored, not tracked | 0 |
@@ -337,7 +337,7 @@ Total tracked scripts: **529**. Source of truth = each script's own docstring + 
 | `native_head_parity_libtorch_structural_check.py` | experiment | cli | Exercise the #465 PR-2L runner's L1 worker and L2 child entry on synthetic frames (no MOT17 data). |
 | `native_head_parity_tf32_off.py` | experiment | cli | Run the #465 PR-2R head parity gate (TF32-off TRT head vs PyTorch oracle) and write its packet. |
 | `native_ingest_parity.py` |  | - | Native ingest parity vs the torchvision ingest path (#465 Phase B PR-7). |
-| `native_track_parity.py` | diagnostic | cli | Native end-to-end serial track parity vs the A_L serial run (#465 Phase B PR-9). |
+| `native_track_parity.py` |  | - | Native end-to-end track parity vs the A_L runs (#465 Phase B PR-9, PR-10). |
 | `probe_forwarded_embedding_assoc_cost.py` | diagnostic | cli | Probe: online assoc cost via forwarded (copy) clean-FIFO embeddings. |
 | `probe_occ_audit_bank_reference.py` | diagnostic | cli | Probe: occ-exit audit with bank-sourced reference vs post-hoc re-extract. |
 | `probe_sparse_bank_equivalence.py` | diagnostic | cli | Probe: can a sparse per-ID key-embedding bank replace the dense Cheb-GR bank? |

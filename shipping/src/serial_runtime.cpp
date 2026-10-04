@@ -1,6 +1,7 @@
 // Native end-to-end serial runtime (#465 Phase B PR-9); see serial_runtime.hpp.
 #include "saccade_shipping/serial_runtime.hpp"
 
+#include <chrono>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -152,6 +153,7 @@ SequenceRunResult SerialRuntime::run_sequence(const std::filesystem::path& seque
     st.im_width = input.im_width;
     st.im_height = input.im_height;
     st.seq_length = input.seq_length;
+    const auto loop_start = std::chrono::steady_clock::now();
     try {
         for (int k = 1; k <= static_cast<int>(ingest.frame_count()); ++k) {
             const IngestFrame f = ingest.ingest(k);
@@ -186,6 +188,8 @@ SequenceRunResult SerialRuntime::run_sequence(const std::filesystem::path& seque
         throw;
     }
     cudaFree(previous);
+    st.schedule.loop_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - loop_start).count();
 
     st.pre_roll_updates = post->pre_roll_updates_run();
     st.track_ids = output.track_ids();
