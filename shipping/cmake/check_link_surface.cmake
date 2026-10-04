@@ -6,8 +6,9 @@
 #   cmake -DREADELF=readelf -DBINARY=build/shipping/saccade_track \
 #         -P shipping/cmake/check_link_surface.cmake
 #
-# This covers the direct NEEDED entries only; the full closure, RUNPATH and the
-# rest of G2 are PR-12.
+# This covers the direct NEEDED entries only; the full closure, RUNPATH, SM list
+# and the rest of G2 are checked on the installed tree by
+# scripts/native/check_shipping_tree.py (#465 PR-12).
 if(NOT BINARY OR NOT READELF)
     message(FATAL_ERROR "usage: cmake -DREADELF=<readelf> -DBINARY=<file> -P check_link_surface.cmake")
 endif()

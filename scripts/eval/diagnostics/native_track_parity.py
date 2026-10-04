@@ -46,6 +46,14 @@ runtime; ``--ref-edit`` changes one character of the first sequence's oracle
 txt in memory (comparator check); ``--against`` compares the native txt and
 trace hashes with an earlier report. ``--track-binary`` runs another build of
 the entrypoint (#465 PR-11: the ``-DSACCADE_WITH_OPENCV=OFF`` build).
+#465 PR-12 (the installed shipping tree, docs §16): ``--model-root`` runs it on
+the tree's model root (its config, lineage, attestation and the files they
+bind) and ``--track-library-path`` gives that process alone an
+``LD_LIBRARY_PATH`` (the tree's RUNPATH is ``$ORIGIN``-relative only);
+``--native-from DIR`` runs nothing and judges a saccade_track run made
+elsewhere with the same arguments (the clean container:
+``scripts/native/run_shipping_container.sh``), from ``DIR/native``,
+``DIR/trace`` and ``DIR/track_report.json``.
 
 Usage (GPU, gpu0 lease; R=results/465_pr10_track/<label>)::
 
@@ -70,6 +78,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import struct
 import subprocess
@@ -367,12 +376,13 @@ def report_problems(
 
 def run_track(args: argparse.Namespace, out: Path) -> tuple[int, Path]:
     report = out / "track_report.json"
+    root = args.model_root
     cmd = [
         str(project_root / args.track_binary),
-        "--config", det.RESOLVED_CONFIG,
-        "--lineage", det.LINEAGE,
-        "--attestation", det.ATTESTATION,
-        "--model-root", ".",
+        "--config", str(root / det.RESOLVED_CONFIG),
+        "--lineage", str(root / det.LINEAGE),
+        "--attestation", str(root / det.ATTESTATION),
+        "--model-root", str(root),
         "--out", str(out / "native"),
         "--report", str(report),
         "--measurement-mutation", args.mutation,
@@ -384,9 +394,12 @@ def run_track(args: argparse.Namespace, out: Path) -> tuple[int, Path]:
     if args.max_frames:
         cmd += ["--max-frames", str(args.max_frames)]
     cmd += [str(Path(det.DATA_ROOT) / det.SPLIT / s) for s in args.sequences]
+    env = None
+    if args.track_library_path is not None:
+        env = {**os.environ, "LD_LIBRARY_PATH": str(args.track_library_path)}
     with (out / "saccade_track.log").open("w") as log:
         rc = subprocess.run(
-            cmd, cwd=project_root, stdout=log, stderr=subprocess.STDOUT
+            cmd, cwd=project_root, stdout=log, stderr=subprocess.STDOUT, env=env
         ).returncode
     return rc, report
 
@@ -470,7 +483,15 @@ def run_parity(args: argparse.Namespace) -> int:
         )
 
     out: Path = args.out
-    rc, track_report_path = run_track(args, out)
+    if args.native_from is not None:
+        # A run made elsewhere (the clean container): judge its files.
+        native = args.native_from
+        log = (native / "saccade_track.log").read_text(errors="replace")
+        rc = 0 if log.rstrip().endswith("exit=0") else 1
+        track_report_path = native / "track_report.json"
+    else:
+        native = out
+        rc, track_report_path = run_track(args, out)
     if rc != 0:
         problems.append(f"saccade_track exited {rc}")
     rep = (
@@ -506,8 +527,8 @@ def run_parity(args: argparse.Namespace) -> int:
         oracle_bin = rows_dir / "rows" / seq / "detector.bin"
         if det._sha256_file(oracle_bin) != meta["sha256"]:
             problems.append(f"{oracle_bin}: sha256 differs from its meta.json")
-        native_bin = out / "trace" / seq / "detector.bin"
-        native_txt_path = out / "native" / f"{seq}.txt"
+        native_bin = native / "trace" / seq / "detector.bin"
+        native_txt_path = native / "native" / f"{seq}.txt"
         native_txt = native_txt_path.read_text()
         oracle_txt = (txt_dir / f"{seq}.txt").read_text()
         if args.ref_edit and i == 0:
@@ -617,6 +638,9 @@ def run_parity(args: argparse.Namespace) -> int:
         "lineage_sha256": det._sha256_file(project_root / det.LINEAGE),
         "track_binary": str(args.track_binary),
         "track_binary_sha256": det._sha256_file(project_root / args.track_binary),
+        "model_root": str(args.model_root),
+        "track_library_path": args.track_library_path,
+        "native_from": str(args.native_from) if args.native_from else None,
         "schedule": args.schedule,
         "oracle_rows": str(rows_dir),
         "oracle_rows_report": rows_report,
@@ -705,6 +729,26 @@ def main(argv: list[str] | None = None) -> int:
         default=Path(TRACK),
         help="the saccade_track to run (relative to the repository root)",
     )
+    q.add_argument(
+        "--model-root",
+        type=Path,
+        default=Path("."),
+        help="the model root saccade_track reads (config, lineage, attestation and "
+        "the files they bind at their repository-relative paths)",
+    )
+    q.add_argument(
+        "--track-library-path",
+        default=None,
+        help="LD_LIBRARY_PATH for the saccade_track process only",
+    )
+    q.add_argument(
+        "--native-from",
+        type=Path,
+        default=None,
+        help="judge this saccade_track run (DIR/native, DIR/trace, "
+        "DIR/track_report.json, DIR/saccade_track.log ending exit=0) instead of "
+        "running one; --track-binary names the binary that ran it",
+    )
     args = ap.parse_args(sys.argv[1:] if argv is None else argv)
 
     args.out = args.out.resolve()
@@ -727,7 +771,11 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.against is not None:
         args.against = args.against.resolve()
-    if not (project_root / args.track_binary).exists():
+    if args.native_from is not None:
+        if args.mutation != "none" or args.no_trace:
+            ap.error("--native-from judges a plain traced run")
+        args.native_from = args.native_from.resolve()
+    elif not (project_root / args.track_binary).exists():
         ap.error(
             f"{args.track_binary} not built (cmake --build build --target saccade_track)"
         )

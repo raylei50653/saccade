@@ -210,6 +210,42 @@ if(TARGET saccade_tracking)
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_link_surface.cmake
         VERBATIM)
 
+    # The shipping tree (#465 PR-12): `cmake --install <build> --component
+    # shipping --prefix <tree>` gives
+    #   bin/saccade_track         RUNPATH $ORIGIN/../lib only (no build or venv
+    #                             path); lib/ is the slot a Phase C bundle
+    #                             would fill, empty here
+    #   share/saccade/...         the model root (install_model_root.cmake)
+    # Third-party runtime libraries (CUDA runtime, nvJPEG, TensorRT, LibTorch)
+    # are not in the tree: whether and how they ship is Phase C.
+    # Device code: find_package(Torch) turns CMAKE_CUDA_ARCHITECTURES off and
+    # compiles every CUDA target for TORCH_CUDA_ARCH_LIST (the local GPU when
+    # unset). The shipping tree needs the explicit list below, LibTorch's own
+    # (torch 2.11.0+cu130: sm_75/80/86/90/100/120) with PTX for the newest; the
+    # install refuses a build configured otherwise. The list covers
+    # saccade_track's device code only: the attested operator library stays
+    # sm_120 SASS and the backbone engine is built for one SM and TensorRT
+    # version (docs/reference/native_runtime_resolved_config.md §16).
+    set(SACCADE_SHIPPING_TORCH_CUDA_ARCH_LIST "7.5;8.0;8.6;9.0;10.0;12.0+PTX")
+    set_target_properties(saccade_track PROPERTIES
+        INSTALL_RPATH "\$ORIGIN/../lib"
+        INSTALL_RPATH_USE_LINK_PATH OFF)
+    set(SACCADE_ATTESTED_OP_LIBRARY "${SACCADE_REPO_ROOT}/build/libsaccade_scan_torchop.so" CACHE FILEPATH
+        "The attested operator library the shipping tree carries (its sha256 must be the realization attestation's)")
+    install(CODE "
+        if(NOT \"${TORCH_CUDA_ARCH_LIST}\" STREQUAL \"${SACCADE_SHIPPING_TORCH_CUDA_ARCH_LIST}\")
+            message(FATAL_ERROR \"shipping tree: this build compiles CUDA for TORCH_CUDA_ARCH_LIST='${TORCH_CUDA_ARCH_LIST}'; configure with -DTORCH_CUDA_ARCH_LIST='${SACCADE_SHIPPING_TORCH_CUDA_ARCH_LIST}' (#465 PR-12)\")
+        endif()" COMPONENT shipping)
+    install(TARGETS saccade_track RUNTIME DESTINATION bin COMPONENT shipping)
+    install(CODE "
+        set(SACCADE_REPO_ROOT \"${SACCADE_REPO_ROOT}\")
+        set(SACCADE_MODEL_ROOT_DEST \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/share/saccade\")
+        set(SACCADE_SHIPPING_CONFIG configs/shipping/mamba_whole_graph.resolved.json)
+        set(SACCADE_SHIPPING_LINEAGE models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json)
+        set(SACCADE_SHIPPING_ATTESTATION configs/shipping/mamba_head_realization.attestation.json)
+        set(SACCADE_ATTESTED_OP_LIBRARY \"${SACCADE_ATTESTED_OP_LIBRARY}\")
+        include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/install_model_root.cmake\")" COMPONENT shipping)
+
     if(ENABLE_NATIVE_TESTS)
         # Needs a CUDA device: builds the real objects.
         add_executable(saccade_shipping_native_build_test

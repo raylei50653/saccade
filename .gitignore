@@ -8,6 +8,7 @@ build_trt_venv/
 build-native-test/
 build-shipping/
 build-noopencv/
+build-release/
 dist/
 wheels/
 *.egg-info
