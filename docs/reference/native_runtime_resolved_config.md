@@ -871,7 +871,25 @@ PR-11 是 boundary §6 的 U6a：`saccade_tracking` 不再連 `saccade_perceptio
 
 ### 15.4 驗收
 
-（正式 run 之後填寫。）
+同一台機器（RTX 5070 Ti Laptop），正式 run 在 `6502fbeb`（工作樹乾淨；§15.3 的契約在同一個 commit，早於任何對照），全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library 在 run 前後都是 attestation 綁定的 `aa84cccd…`。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 1 link 結構 | 兩個 build 樹重新 configure 都通過 `saccade_tracking` 的 link 檢查；`test_shipping_link_surface.py` 9 passed |
+| 2 ON 的 link surface | POST_BUILD 通過；NEEDED 13 項，恰好是 main 的 18 項減去 5 個 `libopencv_*`（video、features、imgproc、geometry、core） |
+| 3 OFF build | configure 與完整 build 成功；cache 沒有 `OpenCV_DIR`；0 個 OpenCV include／link 旗標；31 個產出的 ELF 都沒有 `libopencv_*` NEEDED；ctest 22/22；`saccade_track` POST_BUILD 通過 |
+| 4 shipping 行為 | `anchor` 與 `A_L_1` 7/7 相同；`oracle-rows` OK；`parity` `EXACT`（`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7），native txt 與 trace sha256 與 PR-10 正式 run 7/7 相同；`--schedule serial` `EXACT`；OFF build 的 `saccade_track` `EXACT`，txt 與 trace 與 ON 7/7 相同 |
+| 5 headline eval 輸出 | 7/7 txt sha256 與 main 基準相同（IDF1 78.3／MOTA 77.9／IDs 429，只記錄） |
+| 6 ReID adapter | 10 幀的 embedding、取回的 crop、profile 計數與 main 參考 extensions 完全相同；96/96 個 embedding 非零，取回數＝框數；snapshot 仍回報傳入物件的位址 |
+| 7 extract 組態的 eval 輸出 | 7/7 txt 與 main 參考 extensions 相同（IDF1 80.2／IDs 353，只記錄） |
+| 8 GMC CPU 模式 | 180 次呼叫（174 個 warp）的 float hex 與 main 的 tracking extension 完全相同 |
+| **verdict** | **`PASS`**（§15.3 第 1–8 條全部成立） |
+
+**負控制**：link 檢查腳本對 main 的 `saccade_track`（5 個 `libopencv_*`）、PR-11 build 的 `saccade_tracking_ext`（OpenCV）與 `saccade_perception_ext`（`libtorch_python`＋OpenCV）都失敗（exit 1）；`test_shipping_link_surface.py` 在 main 的樹上 4 個 source 測試失敗、5 個腳本測試通過；pytest 的假 `readelf` 三種拒絕都通過。
+
+**main 端的參考**：headline、extract 組態、ReID adapter、GMC CPU 各跑兩次，兩次都相同（有效性條件）。headline 的 main 基準也與 PR-4b 記錄的 `469f159d` 基準 7/7 相同。
+
+結果目錄：`results/465_pr11_cmake/full_6502fbeb/`（`MANIFEST.md`、`run.sh`、各 gate 的 log／diff、`anchor/`、`oracle_rows/`、`parity/`、`serial_regression/`、`parity_off/`、`headline/`、`extract_ho_live/`、`reid_adapter.json`、`gmc_cpu.json`）、`results/465_pr11_cmake/baseline_main_7cc076c5/`（main 端的參考與 main 的 `saccade_track` 副本）、`results/465_pr11_cmake/negctl_source_test_on_main/`；量測腳本 `run_headline.sh`、`run_eval.sh`、`reid_adapter_check.py`、`gmc_cpu_check.py` 在 `results/465_pr11_cmake/`。不納入版本控制。
 
 ### 15.5 限制
 
