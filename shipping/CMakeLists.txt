@@ -250,14 +250,17 @@ if(TARGET saccade_tracking)
     #                             the entrypoint through the system loader with
     #                             --library-path lib/vendor and --audit
     #   libexec/saccade_track     the entrypoint, RUNPATH $ORIGIN/../lib only (no
-    #                             build or venv path); bytes as in PR-12
+    #                             build or venv path); the pinned bytes
+    #                             (entrypoint_pin.json; PR-C2: no measurement
+    #                             hook or developer option)
     #   lib/saccade_loader_audit.so  the loader provenance check (src/loader_audit.c)
     #   lib/vendor/<SONAME>       the bundled third-party set, pinned by sha256
     #                             in third_party_set.json (owner decision C-D1)
     #   licenses/                 each wheel's license files, THIRD_PARTY.md,
     #                             Saccade's LICENSE / NOTICE
     #   share/saccade/...         the model root (install_model_root.cmake)
-    # docs/reference/native_runtime_resolved_config.md §16 (tree), §17 (bundle).
+    # docs/reference/native_runtime_resolved_config.md §16 (tree), §17 (bundle),
+    # §18 (CLI surface).
     # Device code: find_package(Torch) turns CMAKE_CUDA_ARCHITECTURES off and
     # compiles every CUDA target for TORCH_CUDA_ARCH_LIST (the local GPU when
     # unset). The shipping tree needs the explicit list below, LibTorch's own
@@ -278,7 +281,8 @@ if(TARGET saccade_tracking)
         endif()" COMPONENT shipping)
     # The entrypoint bytes (PR-C1): a rebuild of the same sources is not
     # byte-identical (entrypoint_pin.json), so the package carries the pinned
-    # PR-12 binary named by SACCADE_SHIPPING_ENTRYPOINT, hash-checked at
+    # binary (PR-12's until PR-C2, then PR-C2's) named by
+    # SACCADE_SHIPPING_ENTRYPOINT, hash-checked at
     # install. Unset, the install takes this build's saccade_track (a
     # development tree; the bundle check reports that it is not the pin).
     set(SACCADE_SHIPPING_ENTRYPOINT "" CACHE FILEPATH

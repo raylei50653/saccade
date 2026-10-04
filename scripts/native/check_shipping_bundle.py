@@ -4,7 +4,7 @@
 The tree is what ``cmake --install <build> --component shipping`` writes after
 PR-C1 (docs/reference/native_runtime_resolved_config.md §17): the launcher
 ``bin/saccade_track``, the entrypoint ``libexec/saccade_track`` (the pinned
-PR-12 bytes), the loader provenance check ``lib/saccade_loader_audit.so``, the
+bytes, shipping/entrypoint_pin.json), the loader provenance check ``lib/saccade_loader_audit.so``, the
 bundled third-party set ``lib/vendor/`` (shipping/third_party_set.json),
 ``licenses/`` and the model root ``share/saccade/``. Developer tooling only
 (``developer_build_debug``); the ELF and log readers are
