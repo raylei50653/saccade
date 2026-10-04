@@ -32,8 +32,8 @@
 #include "tracking/copy_pad.cuh"
 #include "tracking/relink_gate.hpp"
 #include "tracking/kalman_gpu.cuh"
-#include "perception/feature_extractor.hpp"
-#include "perception/preprocessor.hpp"
+#include "tracking/perception_reid_adapter.hpp"
+#include "tracking/gmc_cpu.hpp"
 #include <opencv2/opencv.hpp>
 #include <Eigen/Dense>
 
@@ -4588,7 +4588,7 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             int channels = (info.ndim == 3) ? static_cast<int>(info.shape[2]) : 1;
             int type = (channels == 3) ? CV_8UC3 : CV_8UC1;
             cv::Mat mat(h, w, type, info.ptr);
-            auto warp = self.estimate_mat(mat, downscale);
+            auto warp = gmc_estimate_mat(self, mat, downscale);
             if (warp.empty()) return py::none().cast<py::object>();
             return py::cast(warp);
         }, py::arg("frame"), py::arg("downscale") = -1)
@@ -4971,8 +4971,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def(py::init([](uintptr_t reid_ptr, uintptr_t cropper_ptr,
                          const PerceptionPipeline::Config& cfg) {
             auto* pipeline = new PerceptionPipeline(
-                reinterpret_cast<FeatureExtractor*>(reid_ptr),
-                reinterpret_cast<Cropper*>(cropper_ptr),
+                make_reid_extractor(reinterpret_cast<FeatureExtractor*>(reid_ptr)),
+                make_roi_cropper(reinterpret_cast<Cropper*>(cropper_ptr)),
                 cfg);
             legacy_env::apply(*pipeline);
             return pipeline;

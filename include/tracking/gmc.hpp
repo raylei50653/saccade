@@ -2,8 +2,8 @@
 
 #include "saccade/common.hpp"
 #include "tracking/perception_params.hpp"
+#include <memory>
 #include <vector>
-#include <opencv2/opencv.hpp>
 #include <cuda_runtime.h>
 #include <cufft.h>
 
@@ -13,7 +13,9 @@ namespace saccade {
  * @brief Camera Motion Compensation.
  * 
  * Supports both CPU-based (BoT-SORT style LK + RANSAC) and 
- * pure GPU-based (UCMCTrack style Phase Correlation) modes.
+ * pure GPU-based (UCMCTrack style Phase Correlation) modes. The CPU mode is
+ * gmc_estimate_mat() in tracking/gmc_cpu.hpp: it needs OpenCV, this class
+ * does not (#465 PR-11).
  */
 class SACCADE_TRACKING_API GMC {
 public:
@@ -109,14 +111,6 @@ public:
     /** @brief PCR (peak-to-RMS ratio) from the most recent completed GPU phase correlation. */
     float pcr_score();
 
-    /**
-     * @brief Estimate affine camera warp using CPU Mat (for Python compatibility).
-     * @param frame BGR or RGB Mat
-     * @param downscale Internal downscale factor (overrides ctor if > 0)
-     * @return 6-float vector
-     */
-    std::vector<float> estimate_mat(const cv::Mat& frame, int downscale = -1);
-
     void reset();
     void set_profiling_enabled(bool enabled);
     void reset_profile_stats();
@@ -139,8 +133,11 @@ private:
     float ransac_threshold_;
     float pcr_thresh_ = 5.0f;
 
-    cv::Mat prev_gray_;
-    std::vector<cv::Point2f> prev_pts_;
+    // State of the CPU estimate (previous gray frame and tracked points),
+    // created and read only by tracking/gmc_cpu.cpp; reset() drops it.
+    // Type-erased so that this class needs no OpenCV.
+    friend struct GmcCpuFlow;
+    std::shared_ptr<void> cpu_flow_state_;
 
     // Buffer for GPU -> CPU transfer (Legacy/Fallback)
     void* d_gray_small_ = nullptr;

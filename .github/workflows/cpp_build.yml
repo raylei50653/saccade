@@ -105,6 +105,9 @@ jobs:
       - name: Build C++ Core and Python Extension
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
+          # Relative paths in the cache keys, so the OpenCV-free build below
+          # (another build directory) reuses these objects.
+          CCACHE_BASEDIR: ${{ github.workspace }}
         run: |
           mkdir build
           cd build
@@ -118,6 +121,30 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache
           make -j$(nproc)
+          ccache -s
+
+      # #465 PR-11: OpenCV is optional. Configure without it (OpenCV must not
+      # even be searched) and build the shipping entrypoint; its POST_BUILD
+      # step fails if saccade_track needs OpenCV or Python.
+      - name: Build shipping entrypoint without OpenCV
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_BASEDIR: ${{ github.workspace }}
+        run: |
+          PYTHON_EXE=$(uv run python -c "import sys; print(sys.executable)")
+          uv run cmake -S . -B build-noopencv \
+            -DSACCADE_WITH_OPENCV=OFF \
+            -DPYTHON_EXECUTABLE=$PYTHON_EXE \
+            -Dpybind11_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())") \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTORCH_CUDA_ARCH_LIST=7.5 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache
+          if grep -q '^OpenCV_DIR' build-noopencv/CMakeCache.txt; then
+            echo "SACCADE_WITH_OPENCV=OFF still searched for OpenCV"; exit 1
+          fi
+          uv run cmake --build build-noopencv --target saccade_track -j$(nproc)
           ccache -s
 
       - name: Verify Python Module Loadable

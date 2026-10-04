@@ -195,6 +195,20 @@ if(TARGET saccade_tracking)
 
     add_executable(saccade_track tools/saccade_track.cpp)
     target_link_libraries(saccade_track PRIVATE saccade_shipping_runtime)
+    # NEEDED = what the entrypoint uses. The toolchain default is
+    # --no-as-needed, so otherwise any library that lands before torch's own
+    # --as-needed switch on the link line (e.g. libnvinfer_plugin, which nothing
+    # here calls) becomes a dependency by link order alone (#465 PR-11).
+    target_link_options(saccade_track PRIVATE LINKER:--as-needed)
+    # The entrypoint must not need OpenCV or Python (#465 PR-11): a build that
+    # links either fails here.
+    if(NOT CMAKE_READELF)
+        find_program(CMAKE_READELF readelf REQUIRED)
+    endif()
+    add_custom_command(TARGET saccade_track POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -DREADELF=${CMAKE_READELF} -DBINARY=$<TARGET_FILE:saccade_track>
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_link_surface.cmake
+        VERBATIM)
 
     if(ENABLE_NATIVE_TESTS)
         # Needs a CUDA device: builds the real objects.

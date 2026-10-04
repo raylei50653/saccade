@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <utility>
 
 namespace saccade {
 
@@ -33,8 +34,9 @@ void measure_gpu_stage(cudaStream_t stream, double& out_ms, Fn&& fn) {
 
 } // namespace
 
-PerceptionPipeline::PerceptionPipeline(FeatureExtractor* reid, Cropper* cropper, Config cfg)
-    : reid_(reid), cropper_(cropper), cfg_(cfg) {
+PerceptionPipeline::PerceptionPipeline(
+    std::unique_ptr<ReidExtractor> reid, std::unique_ptr<RoiCropper> cropper, Config cfg)
+    : reid_(std::move(reid)), cropper_(std::move(cropper)), cfg_(cfg) {
     if (cfg_.max_detections > 0)
         ensure_scratch(cfg_.max_detections, nullptr);
 }
@@ -1632,8 +1634,8 @@ void PerceptionPipeline::set_filter_compaction_mode(FilterCompactionMode mode) {
 
 PerceptionPipelineSnapshot PerceptionPipeline::snapshot() const {
     PerceptionPipelineSnapshot out;
-    out.reid_ptr = reinterpret_cast<std::uintptr_t>(reid_);
-    out.cropper_ptr = reinterpret_cast<std::uintptr_t>(cropper_);
+    out.reid_ptr = reid_ ? reinterpret_cast<std::uintptr_t>(reid_->wired_object()) : 0;
+    out.cropper_ptr = cropper_ ? reinterpret_cast<std::uintptr_t>(cropper_->wired_object()) : 0;
     out.config = cfg_;
     out.postprocess_profiling_enabled = postprocess_profiling_enabled_;
     out.filter_compaction = filter_compaction_mode_;

@@ -1,15 +1,15 @@
 #pragma once
 
 #include "saccade/common.hpp"
-#include "perception/feature_extractor.hpp"
-#include "perception/preprocessor.hpp"
 #include "tracking/crop_pool.hpp"
 #include "tracking/crop_ring_store.hpp"
 #include "tracking/reid_crop_store.hpp"
 #include "tracking/perception_params.hpp"
+#include "tracking/reid_backend.hpp"
 #include "tracking/reid_queue.hpp"
 #include <cuda_runtime.h>
 #include <cstdint>
+#include <memory>
 
 namespace saccade {
 
@@ -77,7 +77,10 @@ public:
     // Fields and defaults: tracking/perception_params.hpp.
     using Config = PerceptionPipelineConfig;
 
-    PerceptionPipeline(FeatureExtractor* reid, Cropper* cropper, Config cfg);
+    // reid / cropper: the ReID backend (tracking/reid_backend.hpp), owned by
+    // the pipeline; null = no ReID (the shipping runtime passes none).
+    PerceptionPipeline(std::unique_ptr<ReidExtractor> reid, std::unique_ptr<RoiCropper> cropper,
+                       Config cfg);
     ~PerceptionPipeline();
 
     PerceptionPipeline(const PerceptionPipeline&) = delete;
@@ -609,8 +612,8 @@ public:
     PerceptionPipelineSnapshot snapshot() const;
 
 private:
-    FeatureExtractor* reid_;
-    Cropper*          cropper_;
+    std::unique_ptr<ReidExtractor> reid_;
+    std::unique_ptr<RoiCropper>    cropper_;
     Config            cfg_;
 
     // Scratch buffers for filter and NMS stages

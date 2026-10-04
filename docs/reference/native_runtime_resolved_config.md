@@ -812,3 +812,98 @@ build/shipping/saccade_track --config configs/shipping/mamba_whole_graph.resolve
     --attestation configs/shipping/mamba_head_realization.attestation.json \
     --out <dir> datasets/MOT17/train/MOT17-02-SDP datasets/MOT17/train/MOT17-04-SDP ...
 ```
+
+## 15. CMake 拆分：tracking 不連 perception、OpenCV 可選（PR-11／U6a）
+
+PR-11 是 boundary §6 的 U6a：`saccade_tracking` 不再連 `saccade_perception`，OpenCV 改成可選，讓 shipping entrypoint `saccade_track` 兩者都不需要。PR-10 之後 `saccade_track` 的 `DT_NEEDED` 有 5 個 OpenCV 函式庫：`libsaccade_tracking.a` 裡的 GMC 帶進 CPU LK 路徑，`PerceptionPipeline` 的 ReID 路徑帶進 perception 的 `FeatureExtractor`／`Cropper`，後者又帶進 `preprocessor.cpp` 的 `cv::resize`（linker map：`gmc.cpp.o`、`pipeline.cpp.o` → `feature_extractor.cpp.o`、`preprocessor.cpp.o`）。PR-11 不改任何 stage 的計算，只搬程式碼與改 link 結構；boundary 對它的驗收是「既有 extensions 的 eval 輸出不變」，本節把它展開成 §15.3 的規則。
+
+| 項目 | 位置 |
+|:--|:--|
+| ReID 介面（tracking 端） | `include/tracking/reid_backend.hpp`：`ReidExtractor`、`RoiCropper`；`PerceptionPipeline` 的建構子改收這兩個（擁有；null＝無 ReID） |
+| perception 的 adapter | `include/tracking/perception_reid_adapter.hpp`（header-only，只有 tracking extension include） |
+| GMC 的 CPU 模式 | `include/tracking/gmc_cpu.hpp`、`src/tracking/gmc_cpu.cpp`（`gmc_estimate_mat`，即 Python 的 `GMC.estimate_mat`） |
+| `Preprocessor` 的 CPU 路徑 | `src/perception/preprocessor_cpu.cpp`（只有 `saccade_node` 呼叫） |
+| CMake | root `CMakeLists.txt`：`SACCADE_WITH_OPENCV`、`saccade_opencv_host`、`saccade_eval_runner`、`saccade_tracking` 的 link 檢查；`shipping/CMakeLists.txt`：`saccade_track` 以 `--as-needed` link，POST_BUILD 跑 `shipping/cmake/check_link_surface.cmake` |
+| parity harness | `native_track_parity.py parity --track-binary`（跑另一個 build 的 entrypoint） |
+| 測試 | `tests/unit/test_shipping_link_surface.py`（source 掃描與 link 檢查腳本）；CI `cpp_build.yml` 多一步 OFF build |
+
+### 15.1 搬了什麼
+
+- **`PerceptionPipeline` 的 ReID 後端**：pipeline 原本以 `FeatureExtractor*`／`Cropper*` 直接呼叫 perception。只把 ReID 方法搬到另一個 TU 不夠：`PerceptionPipeline` 實作 `ReidCropStore` 的 virtual 函式（`requery_extract`、`embed_dim`），vtable 會把它們連同 perception 一起拖進任何建構 pipeline 的程式。改成 tracking 自己宣告所需的介面（`extract`、`get_feature_dim`、`get_max_batch`、`get_input_hw`、profiling 三個、`process_gpu`），由 header-only adapter 轉呼叫原本的 `FeatureExtractor`／`Cropper`；perception 類別本身不改。adapter 只在 tracking extension 裡編譯，所以呼叫的仍是該 extension 自己連結的 perception 程式碼（與 PR-11 之前相同），只多一層 virtual 呼叫。`PerceptionPipelineSnapshot` 的 `reid_ptr`／`cropper_ptr` 仍回報建構時傳入的物件位址（adapter 回報它包的物件）。shipping 與 `seq_runner` 傳的都是 null。
+- **GMC 的 CPU 模式**：`GMC::estimate_mat` 的本體一字不改搬到 `gmc_cpu.cpp`。它原本讀寫的兩個成員（前一幀灰階 `cv::Mat`、追蹤點）改放在一個由 `gmc_cpu.cpp` 建立的 state 物件裡，GMC 以 type-erased 的 `shared_ptr<void>` 持有，`GMC::reset()` 丟掉它（原本是 `release()`＋`clear()`；下一次呼叫從空 state 開始，與原本相同）。eval 不會走到這條路徑（`stages.py` 對 C++ GMC 先命中 `estimate_into`），只有直接呼叫 Python API 才會。
+- **`Preprocessor::process`**（CPU letterbox，`cv::resize`）一字不改搬到 `preprocessor_cpu.cpp`；`preprocessor.hpp` 不再 include OpenCV（header 本身沒用到）。
+- **C++ eval runner**（`seq_runner.cpp`、`eval_pool.cpp`，`--cpp-threads` 後面的 `saccade_eval_ext`）移到 `saccade_eval_runner`：它需要 TRT detector（perception）與 `cv::imread`。
+- **CMake**：`saccade_tracking` 只連 CUDA 與 `saccade_tracker_params`，configure 時檢查它的 link libraries 沒有 `saccade_perception` 或 OpenCV（fail closed）。OpenCV 的 include 路徑不再是全域的，只給連 OpenCV 的 target。`SACCADE_WITH_OPENCV=OFF` 時不找 OpenCV（`CMAKE_DISABLE_FIND_PACKAGE_OpenCV`），也不定義需要它的 target：`saccade_opencv_host`、`saccade_eval_runner`、`saccade_tracking_ext`、`saccade_eval_ext`、`saccade_node`；其餘（perception、tracking、兩個 scan 函式庫、shipping、`perception_ext`／`media_ext`／`cheb_gr_online_ext`、native tests）照常 build。
+- **`saccade_track` 的 link surface**：POST_BUILD 以 `readelf -d` 檢查直接 `DT_NEEDED`，有 `libopencv_*`、`libpython*`、`libtorch_python*` 就讓 build 失敗。另外以 `--as-needed` link：這個 toolchain 預設是 `--no-as-needed`，拆分後 perception 的依賴排到 torch 自己的 `--as-needed` 開關之前，`libnvinfer_plugin.so.10` 在沒有任何 symbol 被用到的情況下仍被記成 NEEDED（PR-10 之前是 link 順序剛好讓它被濾掉）。加上之後 NEEDED 只剩實際用到的函式庫，不再取決於 link 順序。
+- **沒有動的**：frozen 的 `tracker_gpu.{hpp,cu}`；operator library 不重新 build（`build/libsaccade_scan_torchop.so` 仍是 attestation 綁定的 `aa84cccd…`，只 build 具名 target，§14.2）；Python 程式碼（`src/saccade/`、eval harness）不改。
+
+### 15.2 開發期間已經看到的（在本節 commit 之前）
+
+只有不涉及 PR-11 對照組的檢查：`build/` 只 build 具名 target 後 op library sha256 不變；`saccade_track` POST_BUILD 通過；`build/` 與 `build-noopencv/` 的 ctest 各 22/22（gpu0）；檢查腳本對 main 的 `saccade_track`（5 個 OpenCV）、tracking extension（OpenCV）與 perception extension（`libtorch_python`＋OpenCV）都報錯；`test_shipping_link_surface.py` 在 main 的樹上 4 個 source 測試失敗、5 個腳本測試通過。對照組的「之前」端已在 main（`7cc076c5`）上量好：headline 跑兩次 7/7 txt 相同（也與 PR-4b 記錄的 `469f159d` 相同）；GMC CPU 檢查跑兩次相同；ReID adapter 檢查以 main 的參考 extensions 跑兩次相同；`mamba_whole_graph_m_extract_ho_live` 以 main 的參考 extensions 跑兩次 7/7 相同。最後這個組態的 log 顯示 offline handover 0 次，沒有任何訊號說明 ReID 抽取影響了它的輸出，所以 ReID adapter 改用直接的 API 檢查（第 6 條），extract 組態只保留為 eval 輸出不變的 gate（第 7 條）。這些 main 端的 run 是在 PR-11 未 commit 的工作樹上、以 main 的 extensions 執行的（Python 程式碼與 main 相同）。沒有跑過任何 PR-11 build 對 main 或對 oracle 的比較。
+
+### 15.3 測量契約（正式 run 之前寫定）
+
+**組態**：同一台機器；`build/`（`SACCADE_WITH_OPENCV=ON`，只 build 具名 target）與 `build-noopencv/`（`-DSACCADE_WITH_OPENCV=OFF`，完整 build）；main 的參考 extensions 由 `7cc076c5` 的 worktree 以同一個 venv build（只 build 五個 extension，兩個 scan 函式庫以 symlink 指向 `build/` 的同一份檔案），以 `SACCADE_BUILD_PATH` 切換；Python 程式碼兩邊相同。全部 GPU 步驟在 gpu0 lease 下依序執行。
+
+**有效性**（任一不成立 ⇒ 對應的 gate 為 `UNRESOLVED`）：正式 run 在乾淨的 commit 上；`build/libsaccade_scan_torchop.so` 的 sha256 在整個 run 前後都等於 attestation 的值；每個 eval run 的 `meta.txt` 顯示載入的 extension 來自指定的 build；main 端的兩次 run 彼此相同（不相同 ⇒ 該 gate `UNRESOLVED`，因為沒有可比較的參考）；ReID adapter 檢查兩邊都抽出非零 embedding、`gather_crops_framed` 取回的數量等於框數。
+
+**PASS 驗收規則**：PR-11 的 verdict 是 `PASS` 若且唯若下列全部成立，否則是 `FAIL`（照 gate 分開報告）：
+
+1. **link 結構**：兩個 build 的 configure 都通過 `saccade_tracking` 的 link 檢查；`test_shipping_link_surface.py` 通過。
+2. **ON 的 link surface**：`build/` 的 `saccade_track` POST_BUILD 通過，且 NEEDED 集合＝main 的 `saccade_track` 的 NEEDED 集合減去那 5 個 `libopencv_*`。
+3. **OFF build**：`build-noopencv/` configure 與完整 build 成功；`CMakeCache.txt` 沒有 `OpenCV_DIR`；沒有任何 target 的 `flags.make`／`link.txt` 帶 OpenCV 的 include 或 link 路徑；每個產出的 ELF 都沒有 `libopencv_*` NEEDED；ctest 全部通過；`saccade_track` POST_BUILD 通過。
+4. **shipping 行為不變**（PR-11 commit 的 `build/`）：
+   - `native_detector_parity.py anchor`（`A_L` double buffer，用重新 build 的 extensions）與 PR-2L `A_L_1` 7/7 逐位元組相同、無 problem；
+   - `oracle-rows`（`A_L` serial）照 §13.3 有效；
+   - `native_track_parity.py parity`（double buffer、trace）`EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7，且 `--against` PR-10 正式 run（`results/465_pr10_track/full7_44cc91a4/parity`）：native txt 與 trace 的 sha256 7/7 相同；
+   - `parity --schedule serial`：`detector` 與 `mot_txt` `EXACT`；
+   - OFF build 的 entrypoint：`parity --track-binary build-noopencv/shipping/saccade_track`（double buffer、trace）`EXACT`，且 `--against` 上面那次 ON 的 parity：txt 與 trace sha256 7/7 相同。
+5. **headline 的 eval 輸出不變**：`run_headline.sh`（boundary §2 的 oracle：`mamba_whole_graph`、`--double-buffer`）以 PR-11 的 `build/` 跑 7 sequence，7 份 MOT txt 的 sha256 與 main 的基準相同。
+6. **ReID adapter 路徑**：`reid_adapter_check.py` 以 eval 自己的接法（`cpp_ptr`，`workbench.py`）把真的 `FeatureExtractor`（mnv4 ReID engine）與 `Cropper` 接進 `PerceptionPipeline`，在 MOT17-02、05 前 5 幀的 GT 框上呼叫 `extract_reid`、`crop_into_pool`／`extract_from_pool`、`enable_crop_ring`／`stash_crops`／`gather_crops_framed` 與 profiling 開關（經過 adapter 的每個方法），記錄每份 embedding 與取回的 crop 的 sha256、確定性的 profile 計數（`images`、`chunks`），以及 `snapshot()` 是否仍回報傳入物件的位址。以 PR-11 的 extensions 跑，結果與 main 參考 extensions 完全相同，且 snapshot 一項為真。
+7. **extract 組態的 eval 輸出**：`run_eval.sh mamba_whole_graph_m_extract_ho_live`（m backbone、crop ring、live handover）以 PR-11 的 `build/` 跑 7 sequence，7 份 txt 與 main 參考 extensions 的 run 相同。它在 eval 裡走 `enable_crop_ring`／`stash_crops`（cropper adapter）；ReID 抽取是否影響它的輸出沒有確立，所以它不算 ReID 抽取的證據。
+8. **GMC CPU 模式**：`gmc_cpu_check.py`（`estimate_mat` 對 MOT17-02 前 60 幀、MOT17-05 前 30 幀，兩組參數，中途與 sequence 之間 `reset()`；每個 warp 以 float hex 記錄）以 PR-11 的 tracking extension 跑，結果與 main 的 tracking extension（PR-11 之前 `build/` 的那一份，也就是 headline 基準所用的檔案）完全相同。
+
+沒有容差。第 4–8 條的比較是逐位元組；任一不同就照 gate 報告第一個不同的檔案／行，停在 PR-11。
+
+**負控制**（記錄在結果目錄）：link 檢查腳本對 main 的 `saccade_track`、PR-11 build 的 `saccade_tracking_ext`（OpenCV）與 `saccade_perception_ext`（`libtorch_python`）必須失敗；`test_shipping_link_surface.py` 在 main 的樹上 source 測試必須失敗；pytest 裡以假的 `readelf` 驅動的三種拒絕。
+
+**不做的**：FPS 或任何效能比較；`saccade_node`（demo）只 build 不跑。
+
+### 15.4 驗收
+
+同一台機器（RTX 5070 Ti Laptop），正式 run 在 `6502fbeb`（工作樹乾淨；§15.3 的契約在同一個 commit，早於任何對照），全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library 在 run 前後都是 attestation 綁定的 `aa84cccd…`。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 1 link 結構 | 兩個 build 樹重新 configure 都通過 `saccade_tracking` 的 link 檢查；`test_shipping_link_surface.py` 9 passed |
+| 2 ON 的 link surface | POST_BUILD 通過；NEEDED 13 項，恰好是 main 的 18 項減去 5 個 `libopencv_*`（video、features、imgproc、geometry、core） |
+| 3 OFF build | configure 與完整 build 成功；cache 沒有 `OpenCV_DIR`；0 個 OpenCV include／link 旗標；31 個產出的 ELF 都沒有 `libopencv_*` NEEDED；ctest 22/22；`saccade_track` POST_BUILD 通過 |
+| 4 shipping 行為 | `anchor` 與 `A_L_1` 7/7 相同；`oracle-rows` OK；`parity` `EXACT`（`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7），native txt 與 trace sha256 與 PR-10 正式 run 7/7 相同；`--schedule serial` `EXACT`；OFF build 的 `saccade_track` `EXACT`，txt 與 trace 與 ON 7/7 相同 |
+| 5 headline eval 輸出 | 7/7 txt sha256 與 main 基準相同（IDF1 78.3／MOTA 77.9／IDs 429，只記錄） |
+| 6 ReID adapter | 10 幀的 embedding、取回的 crop、profile 計數與 main 參考 extensions 完全相同；96/96 個 embedding 非零，取回數＝框數；snapshot 仍回報傳入物件的位址 |
+| 7 extract 組態的 eval 輸出 | 7/7 txt 與 main 參考 extensions 相同（IDF1 80.2／IDs 353，只記錄） |
+| 8 GMC CPU 模式 | 180 次呼叫（174 個 warp）的 float hex 與 main 的 tracking extension 完全相同 |
+| **verdict** | **`PASS`**（§15.3 第 1–8 條全部成立） |
+
+**負控制**：link 檢查腳本對 main 的 `saccade_track`（5 個 `libopencv_*`）、PR-11 build 的 `saccade_tracking_ext`（OpenCV）與 `saccade_perception_ext`（`libtorch_python`＋OpenCV）都失敗（exit 1）；`test_shipping_link_surface.py` 在 main 的樹上 4 個 source 測試失敗、5 個腳本測試通過；pytest 的假 `readelf` 三種拒絕都通過。
+
+**main 端的參考**：headline、extract 組態、ReID adapter、GMC CPU 各跑兩次，兩次都相同（有效性條件）。headline 的 main 基準也與 PR-4b 記錄的 `469f159d` 基準 7/7 相同。
+
+結果目錄：`results/465_pr11_cmake/full_6502fbeb/`（`MANIFEST.md`、`run.sh`、各 gate 的 log／diff、`anchor/`、`oracle_rows/`、`parity/`、`serial_regression/`、`parity_off/`、`headline/`、`extract_ho_live/`、`reid_adapter.json`、`gmc_cpu.json`）、`results/465_pr11_cmake/baseline_main_7cc076c5/`（main 端的參考與 main 的 `saccade_track` 副本）、`results/465_pr11_cmake/negctl_source_test_on_main/`；量測腳本 `run_headline.sh`、`run_eval.sh`、`reid_adapter_check.py`、`gmc_cpu_check.py` 在 `results/465_pr11_cmake/`。不納入版本控制。
+
+### 15.5 限制
+
+- 這是 headline、一個額外 eval 組態與兩個 API 檢查下的觀察，不是一般性的等價主張。headline 不開 ReID、GMC 走 GPU；ReID adapter 以 API 直接量過（mnv4、10 幀，不含 `crop_into_pool_async`／`extract_batch_from_pool` 的非同步批次路徑與 relinker 的 `requery_extract`，它們呼叫的是同樣的 adapter 方法），沒有以每幀 ReID 的 eval 組態量過；CPU GMC 只以 Python API 直接量過（eval 不會走到它）。
+- `SACCADE_WITH_OPENCV=OFF` 只讓 OpenCV 變成可選。configure 仍需要 GStreamer、pybind11 與 Python（venv 推導 CUDA toolchain，`developer_build_debug`）；它們是否在 shipping build 中可選屬 PR-12／Phase C。
+- link surface 的檢查只看 `saccade_track` 的直接 `DT_NEEDED`；閉包、RUNPATH 與其他 G2 項目是 PR-12。
+
+### 15.6 重現
+
+```bash
+cmake build   # reconfigure; then build named targets only (never the op library, §14.2)
+cmake --build build --target saccade_track saccade_detector_probe saccade_tracking_ext saccade_perception_ext \
+    saccade_eval_ext saccade_cheb_gr_online_ext saccade_media_ext saccade_node <native tests>
+cmake -S . -B build-noopencv -DSACCADE_WITH_OPENCV=OFF && cmake --build build-noopencv
+cmake -DREADELF=readelf -DBINARY=build/shipping/saccade_track -P shipping/cmake/check_link_surface.cmake
+bash results/465_pr11_cmake/<label>/run.sh   # §15.3 gates 1-8 and the negative controls
+```
