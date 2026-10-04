@@ -1294,3 +1294,75 @@ PR-C2 是 Phase C 的第二個 PR（[Phase C scope](native_runtime_phase_c_scope
 另外以新的 pin 重跑 §17.4 的 N1–N5、N6a、N6b、N7–N9，必須的結果同 §17.4（N1 的「這次 build 的 `saccade_track`」是 `build-release` 的那一份）；N7、N9 原本帶 `--max-frames 5`，這個選項已經不在 shipping 介面裡，改跑完整的 MOT17-05。
 
 **不做的**：FPS 或任何效能比較；其他 GPU、其他主機、其他 glibc；`saccade_track_measurement` 的容器驗收（它不安裝）；tarball、MANIFEST、atomic 安裝與 minisign 簽章（PR-C3／C4）；任何散佈。
+
+### 18.5 驗收
+
+同一台機器（RTX 5070 Ti Laptop，driver 616.92，WSL2）。正式 run：commit `e63fde3f`（工作樹乾淨；§18.4 的契約與新的 pin 在這個 commit，早於任何量測），全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library（`aa84cccd…`）與 pin 的 entrypoint（`92f74ef4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json` 的值；`git diff 04f6f135 HEAD -- shipping/src shipping/include shipping/tools src include` 為空，`shipping/CMakeLists.txt`／`shipping/cmake/` 的差異只有註解行（`validity_sources.txt`）。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 工作樹乾淨；pin 的原始碼不變；`anchor` 與 `A_L_1` 7/7 相同；`oracle-rows` OK；容器是 Ubuntu 24.04.4、glibc 2.39、`LD_LIBRARY_PATH` 未設，9 個工具都不存在 |
+| 1 build 與安裝 | configure、build、install 都 exit 0；`saccade_track` 的 POST_BUILD 兩項通過（13 NEEDED；measurement surface 23 個字串都不在）；`saccade_track_measurement` build 成功；entrypoint 以 pin 安裝；tree 3.7 GiB |
+| 2 靜態檢查 | 12 項 PASS（含 `entrypoint_pinned` 與 `entrypoint_no_measurement_surface`） |
+| 3 host，經 launcher | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7；`--against` PR-12 `parity_pristine`：txt、trace、graph 計數 7/7 相同；`sources` PASS；report 的 `entrypoint` 是 `saccade_track`，沒有 `measurement` 記錄 |
+| 4 乾淨容器（bundle） | exit 0；`EXACT`（同上）；與第 3 條 7/7 相同 |
+| 5 G2-2／G2-4 | `runtime` 三項 PASS；`parity --native-from` `EXACT`，與第 4 條 7/7 相同；三次 run 的 `python_libraries_mapped` 都是空的 |
+| 6a 被移除的選項 | `--measurement-mutation none`、`--schedule serial`、`--max-frames 5`：三次 `rejected` 各 5 項 PASS（exit 2、`unknown argument`；exec chain launcher → loader；沒有開啟 model root、operator library、`/dev/dxg`／`/dev/nvidia*`；沒有輸出） |
+| 6b developer build 的基準 | `--entrypoint measurement`（mutation `none`）`EXACT`，與第 3 條：txt、trace、graph 計數 7/7 相同 |
+| 6c serial 參考 | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7 |
+| 6d 負控制 | 7 個都 `CAUGHT`：`stale_detector_input`（`detector`、`mot_txt` DIFFERS）、`stale_gmc_input`（`mot_txt`）、`swapped_detection_parity`（`detector`、`mot_txt`）、`shared_post_host`（`mot_txt`）、`stale_image_dims`（`detector`、`mot_txt`）、`gmc_previous_frame`（`mot_txt`）、`ref_edit`（`mot_txt`）；double buffer 的三個 `graph_captures` 都是 `EXACT` |
+| **verdict** | **`PASS`**（§18.4 第 1–6 條全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：
+
+| # | 結果 |
+|:--|:--|
+| M1 | PR-C1 r2 的 tree：`static` 的 `entrypoint_no_measurement_surface`、`entrypoint_pinned` 失敗，其餘通過 |
+| M2 | entrypoint 換成 `saccade_track_measurement`：`entrypoint_no_measurement_surface`、`entrypoint_pinned` 失敗；另外 `produced_elves`、`search_path_containment` 失敗（build tree 的 RUNPATH 指向 venv，不是 `$ORIGIN/../lib`） |
+| M3 | POST_BUILD 的 surface 檢查對 `saccade_track_measurement` exit 1 |
+| M4 | `rejected` 對第 5 條的正常 run：`exit_2_unknown_argument`、`no_model_root_open`、`no_gpu_device_open`、`no_output` 失敗（exec chain 通過） |
+| M5 | harness 以 exit 2 拒絕（`use --entrypoint measurement`），沒有執行任何東西 |
+| M6 | `UNRESOLVED`：`report entrypoint 'saccade_track_measurement' != 'saccade_track'`、`a shipping saccade_track report with a measurement record`（三個 section 本身 `EXACT`，validity 擋下） |
+| N1 | 安裝失敗：這次 build 的 `saccade_track`（`83005519…`）≠ pin |
+| N2 | `static`：`vendor_set_pinned` 失敗 |
+| N3 | `static`：`layout_exact`、`vendor_set_pinned`、`g2_1_needed_closure` 失敗；容器 run exit 2（`dlopen …libsaccade_scan_torchop.so: libnvrtc.so.13: cannot open`） |
+| N4 | `static`：`layout_exact` 失敗；容器 run exit 127，`foreign copy on the search path: /opt/saccade/lib/vendor/../../nvidia/cu13/lib/libcublas.so.13` |
+| N5 | `static`：`layout_exact`、`launcher_exact` 失敗；容器 run exit 0，`runtime`：exec chain 與 opened set 失敗 |
+| N6a | exit 0；MOT17-05 txt 與第 4 條相同；auditor 載入之後 47 個物件，沒有來自 `/opt/foreign` 的 |
+| N6b | 同 N6a。觀察：launcher 的 sh 載入了 preload 的 `/opt/foreign/libcudart.so.13`（auditor 載入之前，同 §17.5） |
+| N7 | exit 127：`libnvinfer.so.10: cannot open shared object file`（完整 MOT17-05） |
+| N8 | `static`：`layout_exact`、`g2_3_no_python_files` 失敗 |
+| N9 | `runtime`：exec chain 失敗，其餘兩項通過（完整 MOT17-05） |
+
+**觀察（不是 gate）**：本 run 在 `build-release` 編出的 `saccade_track` 是 `83005519…`、`saccade_track_measurement` 是 `e6d98c84…`；pin（`build-prc2-pin`，同一份原始碼）是 `92f74ef4…`。
+
+結果目錄：`results/465_prc2_cli/full_e63fde3f/`（`run.sh`、`validity_sources.txt`、`tree/`、`static.json`、`anchor/`、`oracle_rows/`、`parity_host/`、`ld_host/`、`sources.json`、`container_bundle/`、`parity_bundle/`、`container_strace/`、`runtime.json`、`parity_strace/`、`cli/`、`negctl/`、`pins_before.txt`／`pins_after.txt`）；pin 在 `results/465_prc2_cli/entrypoint_04f6f135/`，開發試做在 `results/465_prc2_dev/`。不納入版本控制。
+
+### 18.6 限制
+
+- **「沒有 mutation capability」的證據是三層，不是證明**：(1) 原始碼：每一個 hook 都在 `#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS` 之內，shipping 的 entrypoint 以 `#error` 拒絕 measurement variant（`test_shipping_measurement_surface.py` 逐行檢查 hook 名稱）；(2) binary：pin 不含 `measurement_surface.json` 的 23 個字串（POST_BUILD、`static`）；(3) 行為：被移除的選項在讀任何檔案之前被拒絕（6a）。字串檢查只能抓到清單上的名字；一個不帶這些名字的新 hook 要靠第 (1) 層與 review。
+- **resolved config 仍然是輸入**：shipping binary 依 config 計算；config 由 strict loader 驗證與排程檢查把關，但不在 PR-C2 的範圍內以 hash 綁定（PR-C3 的 MANIFEST 會記錄它的 sha256）。這是輸入，不是注入 hook。
+- **`--trace` 留在 shipping**：它只寫檔，但每幀多一次 main stream 的 sync（§14），不是 shipping 的預設組態；不帶 `--trace` 的 shipping run 在本 PR 沒有另外量（同 §14 以來的狀態）。
+- **launcher 的註解**仍寫「the PR-12 executable, bytes unchanged」：launcher 的位元組被 `launcher_exact` 綁定，PR-C2 不改 launcher，所以這句註解留到下一次必須改 launcher 的時候。
+- **pin 來自結果目錄**：`results/465_prc2_cli/entrypoint_04f6f135/saccade_track` 不在版本控制裡（同 §17.6 對 PR-12 pin 的限制）；build 不可重現，遺失就要重新 build、重做 parity 並換 pin。
+- `--max-frames` 與 `--schedule serial` 移出 shipping 是本 PR 的決定（§18.1），owner review 時可以改；改回 shipping 需要重新寫 surface 清單與這一節的驗收。
+- 其餘同 §17.6：只支援 sm_120、只在這一台 WSL2 機器與 driver 上驗證；launcher 的 sh 不在保護範圍；安裝仍不是 atomic（PR-C3）；沒有散佈。
+
+### 18.7 重現
+
+```bash
+# the pin (once; build at the implementation commit on a clean tree)
+cmake -S . -B build-prc2-pin -DSACCADE_WITH_OPENCV=OFF -DENABLE_NATIVE_TESTS=OFF \
+    "-DTORCH_CUDA_ARCH_LIST=7.5;8.0;8.6;9.0;10.0;12.0+PTX"
+cmake --build build-prc2-pin --target saccade_track
+cmake --install build-prc2-pin --component shipping --prefix <stage>   # keep <stage>/libexec/saccade_track
+# the formal run
+bash results/465_prc2_cli/<label>/run.sh   # §18.4 gates 1-6, M1-M6, N1-N9
+# by hand
+.venv/bin/python scripts/native/check_shipping_bundle.py static --tree <tree> --report static.json
+.venv/bin/python scripts/native/check_shipping_bundle.py rejected --strace-prefix <out>/strace/s \
+    --log <out>/saccade_track.log --out-dir <out> --option=--measurement-mutation \
+    --tree-mount /opt/saccade --report rejected.json
+.venv/bin/python scripts/eval/diagnostics/native_track_parity.py parity --entrypoint measurement \
+    --out <out> --oracle-rows <oracle_rows> --oracle-txt <anchor> --mutation stale_gmc_input
+```
