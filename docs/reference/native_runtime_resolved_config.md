@@ -777,6 +777,8 @@ PR-10 把 PR-9 的端到端 runtime 換成 oracle 本身的排程：boundary §2
 
 **觀察（不是 gate）**：`anchor`（double buffer）與 `oracle-rows`（serial）的 txt 7/7 相同，serial txt 與 `A_L_1` 7/7 相同；native double buffer 與 native serial 的 txt 7/7 相同。同一個 session 的 FPS（定義不同，只並列）：native double buffer（無 trace，整個 frame loop，含 capture）278.9；native serial（有 trace）105.4；oracle `anchor` 的 `OVERALL` 292.98（第 51 幀起）。
 
+**確認（修訂 R1 之後，§14.7）**：在 `f99bb288`（工作樹乾淨）重跑 `anchor`（與 `A_L_1` 7/7 相同）、`oracle-rows`、主 parity 與 `--schedule serial` 回歸：全部 `EXACT`，主 parity 的 native txt 與 trace sha256 與正式 run 7/7 相同（`--against`）。目錄 `results/465_pr10_track/confirm_f99bb288/`。
+
 結果目錄：`results/465_pr10_track/full7_44cc91a4/`（`MANIFEST.md`、`run.sh`、`anchor/`、`oracle_rows/`、`parity/`、`repeat/`、`no_trace/`、`serial_regression/`、`pr8_regression/`、`negctl_*/` 與 log）與 `results/465_pr10_track/attest_306607e3/`；不納入版本控制。
 
 ### 14.5 限制
