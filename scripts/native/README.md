@@ -10,6 +10,10 @@
   - 建立 coverage build、執行 native tests、輸出 gcov 摘要。
 - `verify_consumer_install.sh`
   - 在 checkout 之外重做第三方安裝路徑（新 venv → `pip install 'saccade[native-build]'` → `cmake -DPYTHON_EXECUTABLE=<venv>` → `.pth` / `SACCADE_BUILD_PATH` smoke），ADR 025 的 fresh-consumer test。
+- `check_shipping_tree.py`
+  - #465 PR-12：檢查 `cmake --install --component shipping` 的 shipping tree（G2 四項、`$ORIGIN` RUNPATH、SM＋PTX、glibc baseline），見 `docs/reference/native_runtime_resolved_config.md` §16。
+- `run_shipping_container.sh`
+  - #465 PR-12：在乾淨的 Ubuntu 24.04 容器（無 Python、無編譯器）跑 shipping tree，`pristine` 或加 `strace`。
 
 ## 說明
 
@@ -23,8 +27,10 @@
 | Script | Status | Usage | Function |
 |--------|--------|-------|----------|
 | `build_fpn_reid.py` | stable | - | Build the legacy FPN ReID CUDA extension with setuptools. |
+| `check_shipping_tree.py` | diagnostic | cli | G2 checks of the installed shipping tree (#465 Phase B PR-12). |
 | `coverage_native.sh` | stable | - | Configure/build native targets with coverage instrumentation. |
 | `rebuild.sh` | stable | - | Saccade C++/CUDA Extension Rebuild Script |
+| `run_shipping_container.sh` | diagnostic | cli | Run the installed shipping tree in a clean Ubuntu 24.04 container (#465 PR-12). |
 | `verify_consumer_install.sh` | stable | cli | Fresh-consumer install test for the native extension (ADR 025). |
 
 <!-- END generated script index -->

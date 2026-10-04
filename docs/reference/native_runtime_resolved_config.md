@@ -989,3 +989,63 @@ PR-12 是 boundary §6 的 U6b，Phase B 的最後一個 PR：把 shipping entry
 另有 `tests/unit/test_shipping_g2_checks.py` 以假的 `readelf`／`cuobjdump`／strace 輸入驅動的拒絕案例。
 
 **不做的**：FPS 或任何效能比較；`sm_120` 以外的 SASS／PTX 只檢查有編進去，沒有在其他 GPU 上執行（這台機器只有 `sm_120`）；bundle 第三方函式庫、改用較舊的 glibc／toolchain、shipping CLI 的開發選項（`--trace`／`--report`／`--measurement-mutation`）去留，都屬 Phase C。
+
+### 16.4 驗收
+
+同一台機器（RTX 5070 Ti Laptop，driver 616.92，WSL2），正式 run 在 `c44dd876`（工作樹乾淨；§16.3 的契約在同一個 commit，早於任何正式量測），全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library 在 run 前後都是 attestation 綁定的 `aa84cccd…`。
+
+**r1 無效、r2 是正式結果。** 第一次執行（`full_c44dd876/`）的 gate 3 把 `LD_DEBUG_OUTPUT` 設成 `$R/ld_*/ld`，glibc 因此寫出 `ld_*/ld.<pid>`，解析步驟卻讀 `ld_*/ld/ld.*`；沒有產生第三方目錄，gate 2–6 與 N3–N8 都沒有在真的輸入上執行（容器把不存在的掛載來源當成空目錄，saccade_track 找不到函式庫）。r2（`full_c44dd876_r2/`）是同一份腳本只改這兩個前綴，同一個 commit，從頭重跑（包括重新 build `build-release/`）。r1 留在原處並附 `INVALID.txt`。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 工作樹乾淨；`anchor` 與 `A_L_1` 7/7 相同；`oracle-rows` OK；容器是 Ubuntu 24.04.4、glibc 2.39、libstdc++ 6.0.33，9 個工具都不存在 |
+| 1 build 與安裝 | configure、build、install 都 exit 0；POST_BUILD link surface OK（13 NEEDED）；tree 7 個檔案 |
+| 2 靜態檢查 | 五項 PASS。閉包 32 項（23 項在第三方目錄、9 項 base system），沒有 Python 函式庫。`saccade_track` 的 RUNPATH＝`$ORIGIN/../lib`；operator library（例外）保留 7 個絕對 RUNPATH 條目。`saccade_track` SASS `sm_75/80/86/90/100/120`＋PTX `sm_120`；operator library 只有 `sm_120` SASS、沒有 PTX。最高版本需求：`saccade_track` GLIBC 2.38／GLIBCXX 3.4.29／CXXABI 1.3.15，operator library 2.32／3.4.21／1.3.15，第三方目錄 2.28／3.4.22／1.3.11 |
+| 3 第三方集合 | 兩個 run 各載入 44 個物件；第三方 27 個，sha256 集合相同，operator library 相同；base system 10 個（含 host 的 zlib）、driver 6 個 |
+| 4 host 上的 tree binary | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7；txt 與 trace 的 sha256 與 PR-11 正式 run 7/7 相同 |
+| 5 乾淨容器 | exit 0；`EXACT`（同上）；與第 4 條 7/7 相同 |
+| 6 G2-2／G2-4 | 三項 PASS：只有一次 `execve`（`/opt/saccade/bin/saccade_track`，成功）；沒有任何對 Python／Triton／inductor 路徑的 open；開啟的共享物件＝第 3 條開發版 run 的第三方集合與 operator library。`parity --native-from` `EXACT`，與第 5 條 7/7 相同；三次 run 的 `python_libraries_mapped` 都是空的 |
+| **verdict** | **`PASS`**（§16.3 第 1–6 條全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：
+
+| # | 結果 |
+|:--|:--|
+| N1 | 安裝失敗：`TORCH_CUDA_ARCH_LIST=''` 不是 shipping 清單 |
+| N2 | 安裝失敗：operator library 的 sha256 `74bf95a5…` ≠ attestation。在那之前 `bin/saccade_track` 與其他 model root 檔案已經複製到目標目錄（安裝不是 atomic；被拒絕的 tree 不完整） |
+| N3 | `static`：RUNPATH（9 個絕對條目）與 SM＋PTX（只有 `sm_120`）失敗，其餘通過 |
+| N4 | `static`：G2-3 失敗（`share/saccade/helper.py`） |
+| N5 | `static`：RUNPATH 規則失敗（例外的 sha256 不是 attestation 的） |
+| N6 | `static`：G2-1 失敗（`libnvjpeg.so.13` 無法解析）；容器 run exit 127（loader 找不到 `libnvjpeg.so.13`） |
+| N7 | `static`：glibc baseline 失敗（`lib/libzvbi.so.0` 需要 `GLIBC_2.44`） |
+| N8 | `runtime`：exec 檢查失敗（`/bin/sh`、`saccade_track` 兩次 `execve`），其餘兩項通過 |
+
+**觀察（不是 gate）**：`libnvrtc.so.13` 有被載入（operator library 的 NEEDED），但 `libnvrtc-builtins` 沒有被開啟，也就是這次 run 沒有 NVRTC JIT。容器的 base system（Ubuntu 的 glibc 2.39、libstdc++ 6.0.33、zlib 1.3）與 host（Arch 的 glibc 2.44、libstdc++ 6.0.36、zlib 1.3.2）不同，輸出仍逐位元組相同；這是這個組態下的觀察。
+
+**run 之後的變更**：`run_shipping_container.sh` 在 tree 或第三方目錄不存在時直接拒絕（r1 的失敗模式：`docker -v` 會建立空的 root 目錄）。只影響這個開發工具，不影響任何量測。
+
+結果目錄：`results/465_pr12_shipping/full_c44dd876_r2/`（`MANIFEST.md`、`run.sh`、`tree/`、`deps/`、`deps.json`、`static.json`、`runtime.json`、`ld_dev/`、`ld_tree/`、`anchor/`、`oracle_rows/`、`parity_host/`、`container_pristine/`、`parity_pristine/`、`container_strace/`、`parity_strace/`、`negctl/`）；r1 在 `results/465_pr12_shipping/full_c44dd876/`。不納入版本控制。
+
+### 16.5 限制
+
+- **GPU 可攜性**：`saccade_track` 帶 6 個 SM 的 SASS 與 `sm_120` PTX，但 operator library 只有 `sm_120` SASS，backbone engine 是為這張 GPU 與這個 TensorRT 版本 build 的。所以 tree 整體只能在 `sm_120` 上執行；本 PR 不主張超出所有載入的 CUDA artifact 都支援的硬體之外的可攜性。其他 SM 的 SASS／PTX 只確認有編進去，沒有在其他 GPU 上執行過。
+- **operator library 的 RUNPATH**：它保留 7 個絕對的 build／venv 路徑（列舉的例外，以 hash 綁定）。在乾淨容器裡這些路徑不存在，它的 NEEDED 經 `LD_LIBRARY_PATH` 解析。要去掉它需要重新 build 與重新 attest（owner 決策 1）。
+- **第三方函式庫不在 tree 裡**：容器由 `LD_LIBRARY_PATH` 取得 27 個第三方物件。loader 會讀這個環境變數（saccade_track 本身不讀任何環境變數）。是否 bundle、以什麼形式，是 Phase C。base system 依賴映像本身的 glibc、GCC runtime 與 zlib。
+- **乾淨容器不是另一台機器**：同一張 GPU、同一個 driver（container toolkit 掛進去），只是 userland 換成沒有 Python、沒有編譯器的 Ubuntu 24.04。
+- **glibc baseline** 是 Ubuntu 24.04（2.39），由這個 toolchain（GCC 16、glibc 2.44 的 host）build 出來的 `saccade_track` 需要 2.38 與 CXXABI 1.3.15；更低的 baseline 需要換 toolchain（Phase C）。
+- **model root 的路徑**照抄 repository 的相對路徑（operator library 在 `share/saccade/build/`），因為 lineage 與 attestation 是凍結的。configure 仍需要 Python、pybind11、GStreamer（`developer_build_debug`）。shipping CLI 仍有開發選項（`--trace`、`--report`、`--measurement-mutation`）。這些都留給 Phase C。
+- **安裝不是 atomic**（N2）：被拒絕時目標目錄可能留下部分檔案。
+- G2-2／G2-4 是這一個 7-seq run 的 strace 觀察（`execve`／`execveat`／`open`／`openat`，含失敗的嘗試）。`vfork`／`posix_spawn` 最後也要經過 `execve`，所以有涵蓋；不經 `execve` 也不經 `open` 的程式碼載入（例如 `memfd`）不在觀察範圍內。另外，靜態連結進 binary 的直譯器不會出現在 NEEDED 或 open 裡：tree 的 `saccade_track` 的符號表（`nm`、`nm -D`）沒有任何 `Py*` 符號，字串裡唯一的 `libpython` 是 `detector_host.cpp` 檢查 `/proc/self/maps` 用的字面值（run 後補量，不是 §16.3 的 gate）。
+
+### 16.6 重現
+
+```bash
+cmake -S . -B build-release -DSACCADE_WITH_OPENCV=OFF -DENABLE_NATIVE_TESTS=OFF \
+    "-DTORCH_CUDA_ARCH_LIST=7.5;8.0;8.6;9.0;10.0;12.0+PTX"
+cmake --build build-release --target saccade_track
+cmake --install build-release --component shipping --prefix <tree>
+# third-party set from an LD_DEBUG=files run (check_shipping_tree.py loaded / deps), then
+.venv/bin/python scripts/native/check_shipping_tree.py static --tree <tree> --deps-manifest deps.json --deps-dir <deps> --report static.json
+bash scripts/native/run_shipping_container.sh pristine|strace <tree> <deps> <out>
+bash results/465_pr12_shipping/<label>/run.sh   # §16.3 gates 1-6 and N1-N8
+```

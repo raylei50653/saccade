@@ -25,6 +25,14 @@ if [ $# -lt 4 ]; then
     sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//' | head -n -1
     exit 2
 fi
+# docker -v creates a missing source as an empty root-owned directory, which
+# would turn a missing tree or deps set into a loader error inside the run.
+for d in "$2" "$3"; do
+    if [ ! -d "$d" ]; then
+        echo "$d is not a directory" >&2
+        exit 2
+    fi
+done
 MODE=$1 TREE=$(realpath "$2") DEPS=$(realpath "$3") OUT=$4
 shift 4
 SEQS=("$@")
