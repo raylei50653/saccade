@@ -1378,3 +1378,5 @@ Review 在 `60d66da7`／republish `2e0ae90c` 重現兩個 checker 漏檢：只�
 - 回歸測試涵蓋存留 trace、directory-relative model open、cwd-relative model open、GPU 裝置、無法解析／不完整的 open、失敗的 trace 寫入、自訂 trace 路徑，以及能解析的無關唯讀 open。
 
 後續驗證保留 §18.5 的原始紀錄，另建新結果目錄：以更新的 checker 重驗三次歷史拒絕 log，再在同一乾淨容器以 `strace -yy` 新跑三次被移除的選項。這次只驗證拒絕 gate 與 checker，沒有重跑完整 detector／MOT parity；shipping 原始碼與 entrypoint／operator library pin 不變，§18.5 的正式 run 仍是原來的證據。
+
+**驗證結果**：乾淨 commit `2a3cce80`，`results/465_prc2_cli/review_fix_2a3cce80/`（`run.py`、`summary.json`、`historical_*.json`、`rejected_*/`）。歷史重驗 3/3 PASS；新容器拒絕 3/3 PASS，每次五項 gate 全通過。checker 回歸測試 47/47 PASS；shipping sources 與 `04f6f135` 相同，pin／operator hash 在新 run 前後均相同。`summary.json` sha256：`8c2b8d824774e09a5ae20169c5cd27e188257a372302c13e5a5968fe59a0c9e0`。這是 §18.8 的後續驗證，不取代 §18.5 的正式 parity。
