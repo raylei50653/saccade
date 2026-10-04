@@ -12,8 +12,8 @@
   },
   "op_library": {
     "path": "build/libsaccade_scan_torchop.so",
-    "sha256": "098dd23329c3a57519e17b8f90d83ebc1036e7692c6daee2c26a831543dc5f0d",
-    "bytes": 3517488,
+    "sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+    "bytes": 3517632,
     "needed": [
       "libtorch.so",
       "libc10.so",
@@ -39,8 +39,8 @@
   },
   "a_l_reproduction": {
     "tool": "scripts/eval/diagnostics/native_detector_parity.py anchor",
-    "git_head": "ad234e3d2392e8908f3f03c74251dfe941f1f498",
-    "generated_utc": "2026-10-03T12:18:26Z",
+    "git_head": "306607e3a94416dab327711a726ff6667a9859a4",
+    "generated_utc": "2026-10-04T01:33:15Z",
     "reference": "results/native_head_parity_465_libtorch/20260928T152911Z/l2/A_L_1",
     "mot17_argv": [
       "scripts/eval/mot17.py",
@@ -52,7 +52,7 @@
       "--sequences",
       "MOT17-02-SDP,MOT17-04-SDP,MOT17-05-SDP,MOT17-09-SDP,MOT17-10-SDP,MOT17-11-SDP,MOT17-13-SDP",
       "--output",
-      "results/465_pr8_detector/anchor_ad234e3d/A_L"
+      "results/465_pr10_track/attest_306607e3/anchor/A_L"
     ],
     "txt_sha256": {
       "MOT17-02-SDP": {
