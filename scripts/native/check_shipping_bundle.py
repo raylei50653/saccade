@@ -172,6 +172,12 @@ def bundle_closure(
             if g2._PYTHON_LIB.match(name):
                 problems.append(f"{rel} needs {name}")
             if name in vendor_names:
+                if not (tree / VENDOR / name).is_file():
+                    problems.append(f"{rel}: NEEDED {name} is missing from {VENDOR}")
+                    resolved.setdefault(
+                        name, {"name": name, "path": None, "class": "vendor"}
+                    )
+                    continue
                 resolved.setdefault(
                     name, {"name": name, "path": f"{VENDOR}/{name}", "class": "vendor"}
                 )

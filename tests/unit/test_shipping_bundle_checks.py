@@ -187,12 +187,22 @@ def test_closure_needs_vendor_and_flags_python(tmp_path: Path) -> None:
         rel = str(Path(cmd[-1]).relative_to(tmp_path))
         return "".join(f" 0x1 (NEEDED) Shared library: [{n}]\n" for n in needed[rel])
 
+    (tmp_path / "lib/vendor").mkdir(parents=True)
+    (tmp_path / "lib/vendor/libtorch.so").write_bytes(b"")
     clo, problems = bundle.bundle_closure(
         tmp_path, ["libexec/saccade_track"], {"libtorch.so"}, run
     )
     assert {c["name"]: c["class"] for c in clo}["libtorch.so"] == "vendor"
     assert any("libmissing.so.1 is not in lib/vendor" in p for p in problems)
     assert any("libpython3.12" in p for p in problems)
+
+
+def test_closure_reports_a_missing_vendor_object(tmp_path: Path) -> None:
+    def run(cmd: list[str]) -> str:
+        return " 0x1 (NEEDED) Shared library: [libnvrtc.so.13]\n"
+
+    _, problems = bundle.bundle_closure(tmp_path, ["op.so"], {"libnvrtc.so.13"}, run)
+    assert problems == ["op.so: NEEDED libnvrtc.so.13 is missing from lib/vendor"]
 
 
 # ── runtime ────────────────────────────────────────────────────────────────────

@@ -1138,4 +1138,16 @@ P0、P1、P3、P4、P5 的 MOT txt 相同（`b3a1d9bb…`）。容器裡的 driv
 
 另有 `tests/unit/test_shipping_bundle_checks.py` 的拒絕案例，以及在真的 loader 上：DT_RPATH 的候選優先於 `--library-path`（沒有 auditor 時被放進去的那一份會被載入），有 auditor 時 exit 127。
 
+**修正 A1（2026-10-04，r1 之後、r2 之前）**：第一次正式 run（r1，`results/465_prc1_bundle/full_51840396/`，commit `51840396`）的 gate 1–5 全部成立（`EXACT`，與 PR-12 正式 run 7/7 相同），但有兩個負控制沒有照上表執行，所以 r1 不作為正式結果，整個 run 在 A1 的 commit 上從頭重跑（r2）：
+
+- **N3**：容器那一半照預期失敗（exit 2，`dlopen … libnvrtc.so.13: cannot open`），但 `static` 沒有產出報告：`g2_1_needed_closure` 對 `lib/vendor` 裡不存在的物件跑 `readelf`，工具以 exit 2 結束。修正：閉包遇到不存在的 vendor 物件時回報 `NEEDED … is missing from lib/vendor`（加測試）。這只改檢查工具，不改 tree 或任何量測。
+- **N6**：預測不成立。容器的 `LD_PRELOAD` 也作用在 launcher 自己的 sh 上：被 preload 的那份 `libcublas.so.13` 找不到它的 NEEDED `libcublasLt.so.13`，sh 在 loader 階段以 exit 127 結束，`saccade_track` 沒有啟動。這不是 provenance 被繞過（沒有任何東西以那份 libcublas 執行），但這個控制沒有測到它要測的東西：launcher 對 entrypoint process 的保護。N6 改為兩條：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N6a | 容器帶 `LD_LIBRARY_PATH` 指向一個放了多一個位元組的 `libcublas.so.13` 與 `libcudart.so.13` 的目錄（唯讀掛載），加 `LD_DEBUG=files` | `bundle`（MOT17-05）exit 0、MOT txt 與第 4 條的 MOT17-05 相同、auditor 載入之後的 loader log 沒有任何來自那個目錄的物件 |
+| N6b | N6a 再加 `LD_PRELOAD` 指向那份 `libcudart.so.13`（它的 NEEDED 都是 base system，sh 能載入） | 同 N6a。另外記錄（不是 gate）：auditor 載入之前，也就是 launcher 的 sh，是否載入了那份 preload |
+
+r1 的原 N6 結果（launcher 的 sh exit 127）記為觀察。其他 gate、負控制與判準不變。
+
 **不做的**：FPS 或任何效能比較；其他 GPU、其他主機（原生 Linux）、其他 glibc；第三方位元組在執行時的雜湊（安裝與 `static` 負責）；CLI 的開發選項（PR-C2）；tarball、MANIFEST、atomic 安裝與 minisign 簽章（PR-C3／C4）；任何散佈。
