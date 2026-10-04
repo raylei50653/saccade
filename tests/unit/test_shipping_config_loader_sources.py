@@ -112,8 +112,9 @@ _GPU_OBJECTS = {
 # (src/perception/trt_engine.cpp, which reads no environment).
 _DETECTOR_HOST = {"detector_host.cpp"}
 _DETECTOR_OBJECTS = {"perception/trt_engine.hpp"}
-# The end-to-end serial runtime (PR-9) owns the run's PerceptionPipeline.
-_RUNTIME = {"serial_runtime.cpp"}
+# The end-to-end runtimes own the run's PerceptionPipeline: serial (PR-9) and
+# double buffer (PR-10).
+_RUNTIME = {"serial_runtime.cpp", "double_buffer_runtime.cpp"}
 _RUNTIME_OBJECTS = {"tracking/pipeline.hpp"}
 
 

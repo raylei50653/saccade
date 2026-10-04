@@ -1,4 +1,4 @@
-"""``native_track_parity.py`` comparators on synthetic inputs (#465 PR-9).
+"""``native_track_parity.py`` comparators on synthetic inputs (#465 PR-9, PR-10).
 
 The PR-9 verdict rests on two comparisons: the native detector rows at the
 end-to-end wiring against the oracle run's ``detector.bin``, and the native
@@ -6,6 +6,13 @@ MOT txt against the oracle's after relabeling its run-global ids. These tests
 pin that both comparators see a one-bit / one-character difference, that the
 relabeling refuses an id map it cannot invert, and that the validity check
 fails closed on every field of the ``saccade_track`` report it reads.
+
+PR-10 adds the double-buffer schedule: the graph-capture section (the oracle
+log's per-sequence captures vs the native counts, and the native replay
+counts vs the frames) must see a one-count difference, the oracle-log parser
+must attribute captures to the sequence block they fall in, and the
+double-buffer oracle (an ``anchor`` run) must fail closed on each validity
+field.
 """
 
 # scope: system
@@ -160,11 +167,130 @@ def test_report_problems_fail_closed(path: tuple[str, ...], value: Any) -> None:
     assert T.report_problems(bad, att, lineage, ["S1", "S2"], "none", None) != []
 
 
-def test_negative_controls_name_a_section() -> None:
+def test_report_problems_checks_the_schedule() -> None:
+    rep, att, lineage = _good_report()
+    rep["schedule"] = "double_buffer"
+    args = (att, lineage, ["S1", "S2"], "none", None)
+    assert T.report_problems(rep, *args, "double_buffer") == []
+    assert T.report_problems(rep, *args, "serial") != []
+
+
+def test_negative_controls_name_a_section_and_a_schedule() -> None:
     assert set(T.NEGCTL_EXPECT.values()) <= {"detector", "mot_txt"}
     assert {
         "shared_post_host",
         "stale_image_dims",
         "gmc_previous_frame",
+        "stale_detector_input",
+        "stale_gmc_input",
+        "swapped_detection_parity",
         "ref_edit",
     } == set(T.NEGCTL_EXPECT)
+    assert set(T.NEGCTL_SCHEDULE) == set(T.NEGCTL_EXPECT) - {"ref_edit"}
+    assert set(T.NEGCTL_SCHEDULE.values()) == set(T.SCHEDULES)
+
+
+_ORACLE_LOG = """\
+🕯️ [TrackerGraph] Captured tracker update for seq S1
+  [double-buffer] detect(N+1) overlaps tracker(N) on a side stream
+🕯️ [WholeDetectGraph] Capturing graphed callable for shape (1, 3, 1080, 1920) img=(1080, 1920)
+🕯️ [MainNMSGraphNoCopyback] Captured main NMS nocopyback graph (graph=<x>)
+🕯️ [GMCGraph] Captured C++ cuFFT GMC graph for seq S1 (img=1080×1920 ds=4)
+🕯️ [TrackerGraph] Captured tracker update for seq S2
+🕯️ [MainNMSGraphNoCopyback] Captured main NMS nocopyback graph (graph=<y>)
+🕯️ [GMCGraph] Captured C++ cuFFT GMC graph for seq S2 (img=1080×1920 ds=4)
+"""
+
+
+def test_oracle_graph_captures_per_sequence_block() -> None:
+    assert T.oracle_graph_captures(_ORACLE_LOG) == {
+        "S1": {"detector": 1, "nms": 1, "gmc": 1},
+        "S2": {"detector": 0, "nms": 1, "gmc": 1},
+    }
+    with pytest.raises(RuntimeError, match="before any sequence"):
+        T.oracle_graph_captures(_ORACLE_LOG.split("\n", 2)[2])
+    swapped = _ORACLE_LOG.replace("graph for seq S2", "graph for seq S1")
+    with pytest.raises(RuntimeError, match="inside S2"):
+        T.oracle_graph_captures(swapped)
+
+
+def _native_graphs() -> dict[str, Any]:
+    return {
+        "frames": 10,
+        "tracker_updates": 10,
+        "graphs": {
+            "detector_captures": 1,
+            "detector_warmup_runs": 4,
+            "detector_replays": 10,
+            "nms_captures": 1,
+            "nms_replays": 10,
+            "gmc_captures": 1,
+            "gmc_replays": 9,
+            "tracker_captures": 1,
+            "tracker_replays": 10,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("detector_captures", 0),
+        ("nms_captures", 2),
+        ("gmc_captures", 0),
+        ("tracker_captures", 2),
+        ("detector_replays", 9),
+        ("nms_replays", 9),
+        ("gmc_replays", 10),
+        ("tracker_replays", 11),
+    ],
+)
+def test_compare_graphs_one_count(key: str, value: int) -> None:
+    oracle = {"detector": 1, "nms": 1, "gmc": 1}
+    assert T.compare_graphs(_native_graphs(), oracle)["verdict"] == "EXACT"
+    bad = _native_graphs()
+    bad["graphs"][key] = value
+    assert T.compare_graphs(bad, oracle)["verdict"] == "DIFFERS"
+
+
+def test_compare_graphs_needs_an_oracle_block() -> None:
+    r = T.compare_graphs(_native_graphs(), None)
+    assert r["verdict"] == "DIFFERS" and r["problems"]
+
+
+def _good_anchor() -> dict[str, Any]:
+    return {
+        "schema": T.det.ANCHOR_SCHEMA,
+        "problems": [],
+        "identical": True,
+        "git": {"head": "abc", "dirty": False},
+        "mot17_argv": [
+            "scripts/eval/mot17.py",
+            "--double-buffer",
+            "--sequences",
+            "S1,S2",
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("schema", "other"),
+        ("problems", ["V5: x"]),
+        ("identical", False),
+        ("git", {"head": "abc", "dirty": True}),
+        ("git", {"head": "def", "dirty": False}),
+        ("mot17_argv", ["scripts/eval/mot17.py", "--sequences", "S1,S2"]),
+        (
+            "mot17_argv",
+            ["scripts/eval/mot17.py", "--double-buffer", "--sequences", "S2,S1"],
+        ),
+    ],
+)
+def test_oracle_txt_problems_fail_closed(tmp_path: Path, key: str, value: Any) -> None:
+    good = _good_anchor()
+    assert T.oracle_txt_problems(tmp_path, good, ["S1", "S2"], "abc") == []
+    bad = copy.deepcopy(good)
+    bad[key] = value
+    assert T.oracle_txt_problems(tmp_path, bad, ["S1", "S2"], "abc") != []

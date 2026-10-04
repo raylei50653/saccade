@@ -13,7 +13,10 @@
 //   * the tracker setters run in the oracle's call order;
 //   * a value a native setter would canonicalize fails readback;
 //   * every resolved value reaches exactly one native field;
-//   * the process environment does not change any planned value.
+//   * the process environment does not change any planned value;
+//   * the schedule plan (PR-10): the committed config plans the double buffer
+//     with all four graphs, and each oracle precondition that disagrees with
+//     it is refused.
 // The GPU objects are covered by test_shipping_native_build.cpp.
 
 #include <cmath>
@@ -30,6 +33,7 @@
 
 #include "saccade_shipping/native_config.hpp"
 #include "saccade_shipping/resolved_config.hpp"
+#include "saccade_shipping/schedule_plan.hpp"
 
 namespace sh = saccade::shipping;
 using saccade::FilterCompactionMode;
@@ -443,6 +447,40 @@ void test_environment_does_not_change_the_plan(const sh::ResolvedShippingConfig&
     for (const auto& name : names) unsetenv(name.c_str());
 }
 
+template <class F>
+bool schedule_refused(const sh::ResolvedShippingConfig& cfg, const F& edit) {
+    sh::ResolvedShippingConfig c = cfg;
+    edit(c);
+    try {
+        sh::plan_schedule(c);
+    } catch (const ConfigError&) {
+        return true;
+    }
+    return false;
+}
+
+void test_schedule_plan(const sh::ResolvedShippingConfig& cfg) {
+    const sh::SchedulePlan p = sh::plan_schedule(cfg);
+    CHECK(p.double_buffer && p.whole_detect_graph && p.main_nms_graph && p.gmc_graph &&
+          p.tracker_graph);
+    using C = sh::ResolvedShippingConfig;
+    CHECK(schedule_refused(cfg, [](C& c) { c.host_params.env.double_buffer.reset(); }));
+    CHECK(schedule_refused(cfg, [](C& c) { c.host_params.steps.schedule_double_buffer = false; }));
+    CHECK(schedule_refused(cfg, [](C& c) { c.host_params.env.detect_barrier = std::string("full"); }));
+    CHECK(schedule_refused(cfg, [](C& c) { c.host_params.env.detect_barrier.reset(); }));
+    CHECK(schedule_refused(cfg, [](C& c) { c.host_params.detector.build.use_whole_graph = false; }));
+    CHECK(schedule_refused(cfg, [](C& c) { c.host_params.env.main_nms_graphed.reset(); }));
+    CHECK(schedule_refused(cfg, [](C& c) { c.host_params.onms.enabled = true; }));
+    CHECK(schedule_refused(cfg, [](C& c) { c.host_params.cfg.gmc_mode = "tile"; }));
+    CHECK(schedule_refused(cfg, [](C& c) { c.host_params.steps.gmc_fg_mask = true; }));
+    CHECK(schedule_refused(cfg, [](C& c) { c.host_params.steps.track_graphed_update = false; }));
+    // Serial: both switches off together is a valid (serial) plan.
+    C serial = cfg;
+    serial.host_params.steps.schedule_double_buffer = false;
+    serial.host_params.env.double_buffer.reset();
+    CHECK(!sh::plan_schedule(serial).double_buffer);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -464,6 +502,7 @@ int main(int argc, char** argv) {
         test_canonicalized_values_fail_readback(golden);
         test_every_resolved_value_reaches_one_native_field(golden);
         test_environment_does_not_change_the_plan(cfg);
+        test_schedule_plan(cfg);
     } catch (const ConfigError& e) {
         std::fprintf(stderr, "unexpected ConfigError: %s\n", e.what());
         return 1;

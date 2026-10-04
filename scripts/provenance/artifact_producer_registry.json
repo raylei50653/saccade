@@ -394,7 +394,7 @@
     },
     "scripts/eval/diagnostics/native_track_parity.py": {
       "classification": "run_producer_wired",
-      "reason": "#465 PR-9 native end-to-end serial track parity harness; claims its --out directory with open_run before the first byte"
+      "reason": "#465 PR-9 / PR-10 native end-to-end track parity harness (serial and double buffer); claims its --out directory with open_run before the first byte"
     },
     "scripts/eval/diagnostics/native_ingest_parity.py": {
       "classification": "run_producer_wired",

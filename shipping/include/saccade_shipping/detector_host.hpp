@@ -26,6 +26,21 @@
 // host's stream; the head's forward; S2 (detector_s2.hpp, ATen topk); a
 // device -> host copy of the rows, then a stream synchronize. Every value
 // comes from the plan; nothing reads the environment.
+//
+// Whole-detect CUDA graph (`detect_graphed`, PR-10 / U5): the oracle's
+// `MambaGatedDetector._forward_whole_graph` under the double-buffer schedule.
+// The same resize -> engine -> head -> S2 is captured once per key (frame
+// shape, image dims) with LibTorch's graph capture (private memory pool,
+// thread-local capture mode, as cuda_capture.graphed_callables) and replayed
+// on the host's stream; the frame is copied into the graph's static input
+// first (make_graphed_callables). On a key miss: one warm-up run if the host
+// is not warm (`_whole_graph_warmup`), the three warm-up iterations of
+// make_graphed_callables, then the capture; a cache that already holds ten
+// graphs is cleared first. `set_image_dims` with new dims clears the cache and
+// the warm flag (`set_whole_graph_img_dims`); the same dims keep both. After
+// the replay the rows are copied out of the graph's static output into the
+// caller's buffers on the same stream -- the oracle's output clones, plus
+// `_run_native_tensor_prep`'s float -> int32 class cast.
 #pragma once
 
 #include <cuda_runtime.h>
@@ -66,6 +81,23 @@ enum class DetectorMutation {
 const char* detector_mutation_name(DetectorMutation m);
 DetectorMutation parse_detector_mutation(const std::string& name);
 
+// Device destination of one frame's rows: boxes [n*4], scores [n], int32
+// classes [n], capacity >= max_det.
+struct DeviceRowsOut {
+    float* boxes = nullptr;
+    float* scores = nullptr;
+    std::int32_t* classes = nullptr;
+    int capacity = 0;
+};
+
+// What the whole-detect graph did so far (the report and the tests).
+struct WholeGraphStats {
+    int captures = 0;
+    int warmup_runs = 0;    // eager runs before captures (1 when not warm, + 3)
+    int replays = 0;
+    int cache_clears = 0;   // by set_image_dims with new dims, or a full cache
+};
+
 // Device views of one frame's stages, valid until the next `detect`.
 struct DetectorStages {
     const float* resized = nullptr;   // [1, 3, img, img]
@@ -97,6 +129,15 @@ public:
     DetectionRows detect(const float* frame_chw, int height, int width);
 
     const DetectorStages& stages() const;
+
+    // One frame through the whole-detect graph (see above), enqueued on the
+    // host's stream; does not synchronize. `frame_chw` must stay unchanged
+    // until the stream has passed this call. Returns the row count (max_det).
+    // Mutations are eager-only: refused here. `refresh_input` false skips the
+    // static-input copy (developer measurement only: a negative control).
+    int detect_graphed(const float* frame_chw, int height, int width, const DeviceRowsOut& out,
+                       bool refresh_input = true);
+    const WholeGraphStats& graph_stats() const;
 
     void set_mutation_for_measurement(DetectorMutation m);
 

@@ -1,15 +1,17 @@
-// saccade_track: the native shipping entrypoint (#465 boundary §2), serial
-// configuration (Phase B PR-9, U3b-3).
+// saccade_track: the native shipping entrypoint (#465 boundary §2; Phase B
+// PR-9 serial, PR-10 double buffer + CUDA graphs).
 //
 // For each sequence directory (seqinfo.ini + img1/*.jpg), in the order given:
-// native ingest -> detector -> post-detector host -> MOT emit and tail
-// (saccade_shipping/serial_runtime.hpp), and `<out>/<sequence>.txt` with the
-// oracle's line format. One process runs every sequence, as one oracle run
+// native ingest -> detector -> post-detector host -> MOT emit and tail, and
+// `<out>/<sequence>.txt` with the oracle's line format. The schedule is the
+// one the resolved config names (schedule_plan.hpp): the oracle's double
+// buffer with its CUDA graphs (saccade_shipping/double_buffer_runtime.hpp) for
+// the headline config. One process runs every sequence, as one oracle run
 // does: the decoder, detector and PerceptionPipeline are per run; the frame
-// pool, tracker, GMC and track ids are per sequence. The only inputs are the
+// pools, tracker, GMC and track ids are per sequence. The only inputs are the
 // resolved config, the frozen head lineage, the operator library's
 // realization attestation and the files they bind; no environment variable is
-// read. Graph capture and double buffering are PR-10.
+// read.
 //
 // Exit 0: every sequence written; 2: any error (message on stderr; a refused
 // config or input stops before or at that sequence).
@@ -28,8 +30,14 @@
 //                   (int32 frame, n, is_tiled; float32 boxes [n, 4]; float32
 //                   scores [n]; int32 classes [n]), for the parity harness
 //   --max-frames N  frames 1..min(N, seqLength), the oracle's --max-frames
-//   --measurement-mutation none|shared_post_host|stale_image_dims|gmc_previous_frame
-//                   break one wiring rule on purpose (negative controls)
+//   --schedule serial
+//                   the PR-9 serial, eager runtime (serial_runtime.hpp) instead
+//                   of the config's schedule (the PR-9 reference)
+//   --measurement-mutation M
+//                   break one wiring rule on purpose (negative controls):
+//                   serial: shared_post_host|stale_image_dims|gmc_previous_frame;
+//                   double buffer: stale_detector_input|stale_gmc_input|
+//                   swapped_detection_parity
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -41,6 +49,7 @@
 #include <string>
 #include <vector>
 
+#include "saccade_shipping/double_buffer_runtime.hpp"
 #include "saccade_shipping/serial_runtime.hpp"
 #include "saccade_shipping/sha256.hpp"
 #include "saccade_shipping/strict_json.hpp"
@@ -54,7 +63,7 @@ namespace {
 
 struct Options {
     std::string config, lineage, attestation, model_root = ".", out, report, trace,
-                                                                 mutation = "none";
+        mutation = "none", schedule;
     int max_frames = 0;
     std::vector<std::string> sequences;
 };
@@ -76,14 +85,15 @@ Options parse_args(int argc, char** argv) {
         else if (a == "--trace") o.trace = next();
         else if (a == "--max-frames") o.max_frames = std::stoi(next());
         else if (a == "--measurement-mutation") o.mutation = next();
+        else if (a == "--schedule") o.schedule = next();
         else if (a.rfind("--", 0) == 0) fail("unknown argument " + a);
         else o.sequences.push_back(a);
     }
     if (o.config.empty() || o.lineage.empty() || o.out.empty() || o.sequences.empty() ||
-        o.max_frames < 0) {
+        o.max_frames < 0 || !(o.schedule.empty() || o.schedule == "serial")) {
         fail("usage: saccade_track --config JSON --lineage JSON [--attestation JSON] "
              "[--model-root DIR] --out DIR SEQUENCE_DIR... [--report JSON] [--trace DIR] "
-             "[--max-frames N] [--measurement-mutation M]");
+             "[--max-frames N] [--schedule serial] [--measurement-mutation M]");
     }
     return o;
 }
@@ -151,7 +161,8 @@ JsonValue runtime_json(const sh::HeadRuntimeRequirements& r) {
     return o;
 }
 
-JsonValue load_json(const sh::SerialRuntime& rt) {
+template <class Runtime>
+JsonValue load_json(const Runtime& rt) {
     const sh::DetectorPlan& p = rt.detector_plan();
     const sh::HeadLoadReport& r = rt.load_report();
     JsonValue plan = JsonValue::make_object();
@@ -200,18 +211,24 @@ JsonValue stats_json(const sh::SequenceRunStats& s, const std::string& txt_sha25
     o.set("txt", JsonValue::make_string(txt_path));
     o.set("txt_sha256", JsonValue::make_string(txt_sha256));
     o.set("trace_records", trace_records < 0 ? JsonValue::make_null() : JsonValue::make_int(trace_records));
+    const sh::ScheduleStats& g = s.schedule;
+    JsonValue graphs = JsonValue::make_object();
+    graphs.set("detector_captures", JsonValue::make_int(g.detector_captures));
+    graphs.set("detector_warmup_runs", JsonValue::make_int(g.detector_warmup_runs));
+    graphs.set("detector_replays", JsonValue::make_int(g.detector_replays));
+    graphs.set("nms_captures", JsonValue::make_int(g.post.nms_captures));
+    graphs.set("nms_replays", JsonValue::make_int(g.post.nms_replays));
+    graphs.set("gmc_captures", JsonValue::make_int(g.post.gmc_captures));
+    graphs.set("gmc_replays", JsonValue::make_int(g.post.gmc_replays));
+    graphs.set("tracker_captures", JsonValue::make_int(g.post.tracker_captures));
+    graphs.set("tracker_replays", JsonValue::make_int(g.post.tracker_replays));
+    o.set("graphs", std::move(graphs));
+    o.set("loop_seconds", JsonValue::make_float(g.loop_seconds));
     return o;
 }
 
-int run(const Options& opt) {
-    const sh::RuntimeMutation mutation = sh::parse_runtime_mutation(opt.mutation);
-    std::set<std::string> names;
-    for (const std::string& s : opt.sequences) {
-        if (!names.insert(sequence_name(s)).second) fail("sequence " + sequence_name(s) + " given twice");
-    }
-    const sh::ResolvedShippingConfig cfg = sh::load_resolved_shipping_config_file(opt.config);
-    sh::SerialRuntime rt(cfg, {opt.lineage, opt.attestation}, opt.model_root);
-    rt.set_mutation_for_measurement(mutation);
+template <class Runtime>
+int run_with(Runtime& rt, const Options& opt, const char* schedule, const char* mutation) {
     std::filesystem::create_directories(opt.out);
 
     JsonValue seqs = JsonValue::make_object();
@@ -245,8 +262,8 @@ int run(const Options& opt) {
         rep.set("config", JsonValue::make_string(opt.config));
         rep.set("lineage", JsonValue::make_string(opt.lineage));
         rep.set("attestation", JsonValue::make_string(opt.attestation));
-        rep.set("schedule", JsonValue::make_string("serial"));
-        rep.set("mutation", JsonValue::make_string(sh::runtime_mutation_name(mutation)));
+        rep.set("schedule", JsonValue::make_string(schedule));
+        rep.set("mutation", JsonValue::make_string(mutation));
         rep.set("max_frames", JsonValue::make_int(opt.max_frames));
         rep.set("detector", load_json(rt));
         JsonValue nv = JsonValue::make_object();
@@ -262,6 +279,25 @@ int run(const Options& opt) {
         write_text(opt.report, sh::dump_python_json(rep) + "\n");
     }
     return 0;
+}
+
+int run(const Options& opt) {
+    std::set<std::string> names;
+    for (const std::string& s : opt.sequences) {
+        if (!names.insert(sequence_name(s)).second) fail("sequence " + sequence_name(s) + " given twice");
+    }
+    const sh::ResolvedShippingConfig cfg = sh::load_resolved_shipping_config_file(opt.config);
+    const sh::DetectorInputs inputs{opt.lineage, opt.attestation};
+    if (opt.schedule == "serial" || !sh::plan_schedule(cfg).double_buffer) {
+        const sh::RuntimeMutation m = sh::parse_runtime_mutation(opt.mutation);
+        sh::SerialRuntime rt(cfg, inputs, opt.model_root);
+        rt.set_mutation_for_measurement(m);
+        return run_with(rt, opt, "serial", sh::runtime_mutation_name(m));
+    }
+    const sh::DoubleBufferMutation m = sh::parse_double_buffer_mutation(opt.mutation);
+    sh::DoubleBufferRuntime rt(cfg, inputs, opt.model_root);
+    rt.set_mutation_for_measurement(m);
+    return run_with(rt, opt, "double_buffer", sh::double_buffer_mutation_name(m));
 }
 
 }  // namespace

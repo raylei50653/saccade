@@ -163,9 +163,10 @@ def test_host_update_into_arguments() -> None:
         "/*embeddings_ptr=*/nullptr, b.trk_gmc, /*light_factor=*/0.0f, "
         "/*mid_thresh_scale=*/1.0f, plan_.max_objects)"
     ) in call
-    # Pre-roll and per-frame update both pass the padded capacity.
+    # Pre-roll, the graph capture (GraphMode::Captured, PR-10) and the eager
+    # per-frame update all pass the padded capacity.
     sites = re.findall(r"\btracker_update\(([^)]*)\);", host)
-    assert sites == ["plan_.max_assoc", "plan_.max_assoc"]
+    assert sites == ["plan_.max_assoc", "plan_.max_assoc", "plan_.max_assoc"]
 
 
 def test_detection_filters_fixture_is_fresh() -> None:

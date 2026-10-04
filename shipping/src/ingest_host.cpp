@@ -159,29 +159,45 @@ DecodePath JpegDecoder::decode_rgb(const std::vector<std::uint8_t>& bitstream,
 }
 
 IngestHost::IngestHost(const IngestPlan& plan, const SequenceInput& input, JpegDecoder& decoder,
-                       cudaStream_t stream)
+                       cudaStream_t stream, int pools)
     : plan_(plan), input_(input), decoder_(decoder), stream_(stream) {
     if (input_.im_width <= 0 || input_.im_height <= 0) {
         throw InputError("shipping ingest: sequence geometry must be positive");
     }
-    const std::size_t n = 3 * static_cast<std::size_t>(input_.im_width) *
-                          static_cast<std::size_t>(input_.im_height);
-    cuda_check(cudaMalloc(reinterpret_cast<void**>(&rgb_), n), "decode buffer");
-    // AdaptiveFramePool.frame_buffer: torch.zeros((3, h, w), float32).
-    cuda_check(cudaMalloc(reinterpret_cast<void**>(&frame_), n * sizeof(float)), "frame buffer");
-    cuda_check(cudaMemsetAsync(frame_, 0, n * sizeof(float), stream_), "frame buffer");
-    cuda_check(cudaStreamSynchronize(stream_), "frame buffer");
+    if (pools != 1 && pools != 2) throw std::invalid_argument("shipping ingest: pools must be 1 or 2");
+    const std::size_t n = frame_floats();
+    try {
+        for (int p = 0; p < pools; ++p) {
+            rgb_.push_back(nullptr);
+            cuda_check(cudaMalloc(reinterpret_cast<void**>(&rgb_.back()), n), "decode buffer");
+            // AdaptiveFramePool.frame_buffer: torch.zeros((3, h, w), float32).
+            frame_.push_back(nullptr);
+            cuda_check(cudaMalloc(reinterpret_cast<void**>(&frame_.back()), n * sizeof(float)),
+                       "frame buffer");
+            cuda_check(cudaMemsetAsync(frame_.back(), 0, n * sizeof(float), stream_), "frame buffer");
+        }
+        cuda_check(cudaStreamSynchronize(stream_), "frame buffer");
+    } catch (...) {
+        for (float* f : frame_) cudaFree(f);
+        for (std::uint8_t* r : rgb_) cudaFree(r);
+        throw;
+    }
 }
 
 IngestHost::~IngestHost() {
-    cudaFree(frame_);
-    cudaFree(rgb_);
+    for (float* f : frame_) cudaFree(f);
+    for (std::uint8_t* r : rgb_) cudaFree(r);
 }
 
-IngestFrame IngestHost::ingest(int frame) {
+std::size_t IngestHost::frame_floats() const {
+    return 3 * static_cast<std::size_t>(input_.im_width) * static_cast<std::size_t>(input_.im_height);
+}
+
+IngestFrame IngestHost::decode(int frame, int pool) {
     if (frame < 1 || static_cast<std::size_t>(frame) > input_.frames.size()) {
         throw std::out_of_range("shipping ingest: frame " + std::to_string(frame) + " out of range");
     }
+    std::uint8_t* rgb = rgb_.at(static_cast<std::size_t>(pool));
     const std::string& name = input_.frames[static_cast<std::size_t>(frame - 1)];
     const std::vector<std::uint8_t> bytes = read_frame_file(input_.img_dir / name);
     const JpegImageInfo info = decoder_.image_info(bytes);
@@ -192,11 +208,19 @@ IngestFrame IngestHost::ingest(int frame) {
                          std::to_string(info.height) + ", seqinfo.ini says " +
                          std::to_string(input_.im_width) + "x" + std::to_string(input_.im_height));
     }
-    const DecodePath path = decoder_.decode_rgb(bytes, info, rgb_);
-    const std::size_t n = 3 * static_cast<std::size_t>(info.width) * static_cast<std::size_t>(info.height);
-    normalize_rgb_u8(rgb_, frame_, n, plan_.normalize_scale, stream_);
+    return IngestFrame{name, decoder_.decode_rgb(bytes, info, rgb)};
+}
+
+void IngestHost::normalize(int pool, cudaStream_t stream) {
+    const auto p = static_cast<std::size_t>(pool);
+    normalize_rgb_u8(rgb_.at(p), frame_.at(p), frame_floats(), plan_.normalize_scale, stream);
+}
+
+IngestFrame IngestHost::ingest(int frame) {
+    const IngestFrame f = decode(frame, 0);
+    normalize(0, stream_);
     cuda_check(cudaStreamSynchronize(stream_), "ingest stream sync");
-    return IngestFrame{name, path};
+    return f;
 }
 
 }  // namespace saccade::shipping

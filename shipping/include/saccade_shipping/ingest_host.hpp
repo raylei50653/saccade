@@ -26,8 +26,14 @@
 // `IngestHost` runs one sequence: read the file, decode, check the decoded
 // size against seqinfo.ini, normalize into the float32 frame buffer -- the
 // oracle's pool.frame_buffer, i.e. the `frame_chw` PostDetectorHost::process
-// takes. Serial and eager (graphs and double buffering are U5). Reads no
-// environment and no value outside the plan and the sequence input.
+// takes. `ingest` is the serial path (decode + normalize + synchronize, pool
+// 0). The double-buffer schedule (PR-10, U5) holds two pools, as the oracle
+// holds two AdaptiveFramePools, and splits the two halves: `decode` into a
+// pool's decode buffer on the host thread (the oracle's decode worker; the
+// decode has completed when it returns), `normalize` into that pool's frame
+// buffer on the caller's (detect) stream, as `_run_detect`'s ingest_preprocess
+// runs on the double-buffer stream. Reads no environment and no value outside
+// the plan and the sequence input.
 #pragma once
 
 #include <cuda_runtime.h>
@@ -97,8 +103,9 @@ struct IngestFrame {
 class IngestHost {
 public:
     // `decoder` (one per process, as torchvision keeps one) must outlive the host.
+    // `pools`: 1 (serial) or 2 (double buffer); each is zero-initialized.
     IngestHost(const IngestPlan& plan, const SequenceInput& input, JpegDecoder& decoder,
-               cudaStream_t stream);
+               cudaStream_t stream, int pools = 1);
     ~IngestHost();
     IngestHost(const IngestHost&) = delete;
     IngestHost& operator=(const IngestHost&) = delete;
@@ -111,19 +118,29 @@ public:
     // imWidth x imHeight).
     IngestFrame ingest(int frame);
 
+    // Decodes frame k (1-based) into `pool`'s decode buffer; the same checks
+    // as `ingest`. Returns when the decode has completed. The caller orders it
+    // after every read of that decode buffer.
+    IngestFrame decode(int frame, int pool);
+    // Enqueues the normalize of `pool`'s decode buffer into its frame buffer
+    // on `stream`; does not synchronize.
+    void normalize(int pool, cudaStream_t stream);
+
+    int pools() const { return static_cast<int>(rgb_.size()); }
+    std::size_t frame_floats() const;
     int width() const { return input_.im_width; }
     int height() const { return input_.im_height; }
     // Device, planar [3, height, width]: the decoder output and the frame buffer.
-    const std::uint8_t* decoded_rgb() const { return rgb_; }
-    const float* frame_chw() const { return frame_; }
+    const std::uint8_t* decoded_rgb(int pool = 0) const { return rgb_.at(static_cast<std::size_t>(pool)); }
+    const float* frame_chw(int pool = 0) const { return frame_.at(static_cast<std::size_t>(pool)); }
 
 private:
     IngestPlan plan_;
     SequenceInput input_;
     JpegDecoder& decoder_;
     cudaStream_t stream_;
-    std::uint8_t* rgb_ = nullptr;
-    float* frame_ = nullptr;
+    std::vector<std::uint8_t*> rgb_;
+    std::vector<float*> frame_;
 };
 
 }  // namespace saccade::shipping

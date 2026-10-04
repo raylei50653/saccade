@@ -30,6 +30,35 @@ T* device_alloc(std::size_t count, const char* what) {
     return static_cast<T*>(p);
 }
 
+// One captured stream segment (cudaStreamBeginCapture, thread-local mode).
+struct Graph {
+    cudaGraph_t graph = nullptr;
+    cudaGraphExec_t exec = nullptr;
+    ~Graph() {
+        if (exec != nullptr) cudaGraphExecDestroy(exec);
+        if (graph != nullptr) cudaGraphDestroy(graph);
+    }
+    bool captured() const { return exec != nullptr; }
+    template <class F>
+    void capture(cudaStream_t stream, const char* what, const F& body) {
+        cuda_check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal), what);
+        try {
+            body();
+        } catch (...) {
+            cudaGraph_t partial = nullptr;
+            if (cudaStreamEndCapture(stream, &partial) == cudaSuccess && partial != nullptr) {
+                cudaGraphDestroy(partial);
+            }
+            throw;
+        }
+        cuda_check(cudaStreamEndCapture(stream, &graph), what);
+        cuda_check(cudaGraphInstantiate(&exec, graph, 0), what);
+    }
+    void launch(cudaStream_t stream, const char* what) const {
+        cuda_check(cudaGraphLaunch(exec, stream), what);
+    }
+};
+
 template <class T>
 void d2h(std::vector<T>& dst, const T* src, std::size_t count, cudaStream_t stream) {
     dst.resize(count);
@@ -71,17 +100,25 @@ struct PostDetectorHost::DeviceBuffers {
     float* trk_gmc;  // GraphedTrackerUpdate.d_gmc: identity until a warp is copied in
     float *out_boxes, *out_scores;
     std::int32_t *out_ids, *out_classes, *out_det_idx, *out_count;
+    float* gmc_frame;  // GraphMode::Captured: the GMC graph's input (`_gmc_frame_buf`)
+};
+
+struct PostDetectorHost::Graphs {
+    Graph nms, gmc, tracker;
 };
 
 PostDetectorHost::PostDetectorHost(const ResolvedShippingConfig& cfg, SequenceGeometry geometry,
-                                   PerceptionPipeline& pipeline, cudaStream_t stream)
+                                   PerceptionPipeline& pipeline, cudaStream_t stream,
+                                   GraphMode graphs)
     : plan_(plan_post_detector(cfg)),
       geometry_(geometry),
       pipeline_(pipeline),
       stream_(stream),
       tracker_(build_tracker(cfg, geometry)),
       gmc_(plan_.gmc ? build_gmc(cfg) : nullptr),
-      buf_(std::make_unique<DeviceBuffers>()) {
+      buf_(std::make_unique<DeviceBuffers>()),
+      graphs_(graphs),
+      g_(std::make_unique<Graphs>()) {
     const auto n = static_cast<std::size_t>(plan_.nms_fixed_n);
     const auto a = static_cast<std::size_t>(plan_.max_assoc);
     const auto o = static_cast<std::size_t>(plan_.max_objects);
@@ -107,12 +144,21 @@ PostDetectorHost::PostDetectorHost(const ResolvedShippingConfig& cfg, SequenceGe
     b.out_classes = b.alloc<std::int32_t>(o, "tracker output");
     b.out_det_idx = b.alloc<std::int32_t>(o, "tracker output");
     b.out_count = b.alloc<std::int32_t>(1, "tracker output");
+    // torch.zeros(3, h, w) when the direct GMC is in use.
+    b.gmc_frame = graphs_ == GraphMode::Captured && gmc_
+                      ? b.alloc<float>(3 * static_cast<std::size_t>(geometry_.im_width) *
+                                           static_cast<std::size_t>(geometry_.im_height),
+                                       "gmc frame")
+                      : nullptr;
     const float identity[6] = {1.f, 0.f, 0.f, 0.f, 1.f, 0.f};  // torch.eye(2, 3)
     cuda_check(cudaMemcpy(b.trk_gmc, identity, sizeof(identity), cudaMemcpyHostToDevice),
           "tracker gmc");
 }
 
-PostDetectorHost::~PostDetectorHost() = default;
+PostDetectorHost::~PostDetectorHost() {
+    // Replays may still be queued on the stream when the graphs and buffers go.
+    cudaStreamSynchronize(stream_);
+}
 
 void PostDetectorHost::set_pre_roll_for_measurement(int updates) {
     if (pre_rolled_ || updates < 0) {
@@ -137,7 +183,58 @@ void PostDetectorHost::run_pre_roll() {
         ++pre_roll_run_;
     }
     cuda_check(cudaStreamSynchronize(stream_), "pre-roll");
+    if (graphs_ == GraphMode::Captured) {
+        g_->tracker.capture(stream_, "tracker capture", [&] { tracker_update(plan_.max_assoc); });
+        ++graph_stats_.tracker_captures;
+    }
     pre_rolled_ = true;
+}
+
+void PostDetectorHost::main_nms(int nf, int w, int h, bool is_tiled) {
+    auto& b = *buf_;
+    auto call = [&] {
+        pipeline_.process_detections_main_nms_graph_nocopyback(
+            b.nms_in_boxes, b.nms_in_scores, b.nms_in_classes, nf, w, h, is_tiled, b.post_boxes,
+            b.post_scores, b.post_classes, b.post_suspect, b.post_count, nullptr, nullptr, 0, 0.0f,
+            stream_);
+    };
+    if (graphs_ == GraphMode::Eager) {
+        call();
+        return;
+    }
+    if (!g_->nms.captured()) {
+        call();  // warm-up, eager, on the real (padded) input
+        cuda_check(cudaStreamSynchronize(stream_), "main NMS warm-up");
+        g_->nms.capture(stream_, "main NMS capture", call);
+        ++graph_stats_.nms_captures;
+    }
+    g_->nms.launch(stream_, "main NMS replay");
+    ++graph_stats_.nms_replays;
+}
+
+void PostDetectorHost::gmc(const float* frame_chw, int w, int h) {
+    auto& b = *buf_;
+    if (graphs_ == GraphMode::Eager) {
+        gmc_->estimate_into_direct(frame_chw, w, h, stream_, b.gmc_warp);
+        return;
+    }
+    const std::size_t bytes = 3 * static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * sizeof(float);
+    if (!g_->gmc.captured()) {
+        cuda_check(cudaMemcpyAsync(b.gmc_frame, frame_chw, bytes, cudaMemcpyDeviceToDevice, stream_),
+                   "gmc frame");
+        gmc_->estimate_into_direct(b.gmc_frame, w, h, stream_, b.gmc_warp);
+        cuda_check(cudaStreamSynchronize(stream_), "gmc warm-up");
+        g_->gmc.capture(stream_, "gmc capture",
+                        [&] { gmc_->estimate_into_direct(b.gmc_frame, w, h, stream_, b.gmc_warp); });
+        ++graph_stats_.gmc_captures;
+        return;  // the capture branch does not replay
+    }
+    if (!stale_gmc_input_) {
+        cuda_check(cudaMemcpyAsync(b.gmc_frame, frame_chw, bytes, cudaMemcpyDeviceToDevice, stream_),
+                   "gmc frame");
+    }
+    g_->gmc.launch(stream_, "gmc replay");
+    ++graph_stats_.gmc_replays;
 }
 
 FrameResult PostDetectorHost::process(const DeviceDetections& det, const float* frame_chw) {
@@ -163,10 +260,7 @@ FrameResult PostDetectorHost::process(const DeviceDetections& det, const float* 
     const int nf = plan_.nms_fixed_n;
     copy_pad_detections(det.boxes, det.scores, det.classes, std::min(det.n, nf), b.nms_in_boxes,
                         b.nms_in_scores, b.nms_in_classes, nf, stream_);
-    pipeline_.process_detections_main_nms_graph_nocopyback(
-        b.nms_in_boxes, b.nms_in_scores, b.nms_in_classes, nf, w, h, det.is_tiled, b.post_boxes,
-        b.post_scores, b.post_classes, b.post_suspect, b.post_count, nullptr, nullptr, 0, 0.0f,
-        stream_);
+    main_nms(nf, w, h, det.is_tiled);
     const int n_post = pipeline_.process_detections_split_pipeline_graphed(
         b.post_boxes, b.post_scores, b.post_classes, b.post_suspect, b.post_count, nf,
         private_priors, n_private, stream_);
@@ -186,9 +280,7 @@ FrameResult PostDetectorHost::process(const DeviceDetections& det, const float* 
     if (plan_.fp_hard) apply_fp_hard_filter(r.tracker_input, plan_.fp_hard_filter);
 
     // _run_reid_and_gmc (ReID off): GMC on the frame.
-    if (gmc_) {
-        gmc_->estimate_into_direct(frame_chw, w, h, stream_, b.gmc_warp);
-    }
+    if (gmc_) gmc(frame_chw, w, h);
 
     // _run_track via GraphedTrackerUpdate: pre-roll at the sequence's first
     // update, then copy_inputs (rows, zero tail, warp) and the update.
@@ -218,7 +310,12 @@ FrameResult PostDetectorHost::process(const DeviceDetections& det, const float* 
                               stream_),
               "tracker gmc");
     }
-    tracker_update(plan_.max_assoc);
+    if (graphs_ == GraphMode::Captured) {
+        g_->tracker.launch(stream_, "tracker replay");
+        ++graph_stats_.tracker_replays;
+    } else {
+        tracker_update(plan_.max_assoc);
+    }
 
     std::int32_t count = 0;
     cuda_check(cudaMemcpyAsync(&count, b.out_count, sizeof(count), cudaMemcpyDeviceToHost, stream_),

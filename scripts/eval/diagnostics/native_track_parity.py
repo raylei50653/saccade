@@ -1,42 +1,63 @@
 #!/usr/bin/env python3
-"""Native end-to-end serial track parity vs the A_L serial run (#465 Phase B PR-9).
+"""Native end-to-end track parity vs the A_L runs (#465 Phase B PR-9, PR-10).
 
-Issue #465 Phase B PR-9 (U3b-3; boundary §6 "7-seq MOT txt 對 Python serial
-組態"; measurement contract: docs/reference/native_runtime_resolved_config.md
-§13). Developer tooling only. The oracle is ``A_L`` in the serial
-configuration, recorded by ``native_detector_parity.py oracle-rows`` (one
-``mot17.py`` run without ``--double-buffer``, PR-1L head injected by the frozen
-PR-2L runner's functions, operator library bound by the realization
-attestation): its ``mot/<seq>.txt`` and ``mot/_global_id_map.txt``, and its
-``evaluator._run_detect`` rows (``rows/<seq>/detector.bin``).
+Issue #465 Phase B PR-9 (U3b-3, serial; boundary §6 "7-seq MOT txt 對 Python
+serial 組態") and PR-10 (U5, double buffer + CUDA graphs; "7-seq MOT txt 對 §2
+oracle（double-buffer）"); measurement contracts:
+docs/reference/native_runtime_resolved_config.md §13 and §14. Developer tooling
+only. The oracle is ``A_L`` (PR-1L head injected by the frozen PR-2L runner's
+functions, operator library bound by the realization attestation):
+
+* ``--schedule serial`` (PR-9): the serial run recorded by
+  ``native_detector_parity.py oracle-rows``: its ``mot/<seq>.txt``,
+  ``mot/_global_id_map.txt`` and ``evaluator._run_detect`` rows
+  (``rows/<seq>/detector.bin``);
+* ``--schedule double_buffer`` (PR-10, the default): the MOT txt of the
+  double-buffer run ``native_detector_parity.py anchor`` writes
+  (``--oracle-txt``: ``A_L/<seq>.txt``, ``A_L/_global_id_map.txt``,
+  ``A_L.stdout.log``); the detector rows are still the serial
+  ``oracle-rows`` (the oracle's detector is frame-independent: the same
+  ``_run_detect`` on the side stream).
 
 The native side is ``build/shipping/saccade_track`` (own process, no Python):
 every requested sequence in one process, in the oracle run's order, with
 ``--trace`` (each frame's detector rows) and ``--report``. Sections:
 
-``detector``  native detector rows at the end-to-end wiring vs the oracle
-              run's ``_run_detect`` rows, per frame, bit for bit;
-``mot_txt``   native ``<seq>.txt`` vs the oracle's, byte for byte after
-              relabeling (the oracle numbers ids run-globally; its ids for a
-              sequence are the per-sequence ids plus the ids earlier sequences
-              used, read from its ``_global_id_map.txt``, which must list the
-              sequence's ids as one contiguous block), and the same number of
-              track ids.
+``detector``        native detector rows at the end-to-end wiring vs the
+                    oracle's ``_run_detect`` rows, per frame, bit for bit;
+``mot_txt``         native ``<seq>.txt`` vs the oracle's, byte for byte after
+                    relabeling (the oracle numbers ids run-globally; its ids
+                    for a sequence are the per-sequence ids plus the ids
+                    earlier sequences used, read from its
+                    ``_global_id_map.txt``, which must list the sequence's ids
+                    as one contiguous block), and the same number of track ids;
+``graph_captures``  (double buffer only) per sequence, the native whole-detect,
+                    main NMS and GMC graph captures vs the captures the oracle
+                    logs in that sequence, and the native replay counts vs the
+                    frames (the tracker graph's capture is not logged by the
+                    oracle; its native count must be 1).
 
-No tolerance: ``EXACT`` only when both sections are, on every sequence.
-``--mutation`` runs a ``saccade_track`` wiring negative control;
-``--ref-edit`` changes one character of the first sequence's oracle txt in
-memory (comparator check); ``--against`` compares the native txt and trace
-hashes with an earlier report.
+No tolerance: ``EXACT`` only when every section is, on every sequence.
+``--no-trace`` runs ``saccade_track`` without ``--trace`` (the shipping
+configuration: the trace reads each frame's rows back with an extra sync, which
+could hide a race) and reports ``detector`` as ``NOT_RUN``.
+``--mutation`` runs a ``saccade_track`` negative control of the schedule's
+runtime; ``--ref-edit`` changes one character of the first sequence's oracle
+txt in memory (comparator check); ``--against`` compares the native txt and
+trace hashes with an earlier report.
 
-Usage (GPU, gpu0 lease; R=results/465_pr9_track/<label>)::
+Usage (GPU, gpu0 lease; R=results/465_pr10_track/<label>)::
 
+    .venv/bin/python scripts/eval/diagnostics/native_detector_parity.py \\
+        anchor --out $R/anchor
     .venv/bin/python scripts/eval/diagnostics/native_detector_parity.py \\
         oracle-rows --out $R/oracle_rows
     .venv/bin/python scripts/eval/diagnostics/native_track_parity.py \\
-        parity --out $R/parity --oracle-rows $R/oracle_rows \\
-        [--sequences S,..] [--max-frames N] [--mutation M | --ref-edit] \\
-        [--against $R/parity/report.json]
+        parity --out $R/parity --oracle-rows $R/oracle_rows --oracle-txt $R/anchor \\
+        [--mutation M | --ref-edit] [--against $R/parity/report.json]
+    .venv/bin/python scripts/eval/diagnostics/native_track_parity.py \\
+        parity --schedule serial --out $R/serial --oracle-rows $R/oracle_rows \\
+        [--sequences S,..] [--max-frames N]
 
 Exit 0: EXACT / negative control caught; 1: a difference; 2: error.
 """
@@ -48,6 +69,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import re
 import struct
 import subprocess
 import sys
@@ -63,12 +85,36 @@ DETECTOR_HARNESS = "scripts/eval/diagnostics/native_detector_parity.py"
 INGEST_HARNESS = "scripts/eval/diagnostics/native_ingest_parity.py"
 DET_RECORD = struct.Struct("<3i")  # frame, n, is_tiled
 FIRST_DIFFS_KEPT = 20
-# Wiring negative controls: the section that must report DIFFERS.
+SCHEDULES = ("double_buffer", "serial")
+# Negative controls: the section that must report DIFFERS. The serial
+# runtime's wiring controls (PR-9) and the double-buffer runtime's schedule /
+# graph controls (PR-10); ref_edit is the comparator check of either.
 NEGCTL_EXPECT = {
     "shared_post_host": "mot_txt",
     "stale_image_dims": "detector",
     "gmc_previous_frame": "mot_txt",
+    "stale_detector_input": "detector",
+    "stale_gmc_input": "mot_txt",
+    "swapped_detection_parity": "detector",
     "ref_edit": "mot_txt",
+}
+NEGCTL_SCHEDULE = {
+    "shared_post_host": "serial",
+    "stale_image_dims": "serial",
+    "gmc_previous_frame": "serial",
+    "stale_detector_input": "double_buffer",
+    "stale_gmc_input": "double_buffer",
+    "swapped_detection_parity": "double_buffer",
+}
+# What the oracle logs when it captures a graph (pipeline.py / stages.py /
+# mamba_gated_detector.py). The "[TrackerGraph] Captured" line is printed when
+# GraphedTrackerUpdate is constructed, before its lazy capture, so it only
+# marks where a sequence's log begins.
+_SEQ_START = re.compile(r"\[TrackerGraph\] Captured tracker update for seq (\S+)")
+_ORACLE_CAPTURES = {
+    "detector": re.compile(r"\[WholeDetectGraph\] Capturing graphed callable"),
+    "nms": re.compile(r"\[MainNMSGraphNoCopyback\] Captured main NMS nocopyback graph"),
+    "gmc": re.compile(r"\[GMCGraph\] Captured C\+\+ cuFFT GMC graph for seq (\S+)"),
 }
 
 
@@ -191,6 +237,70 @@ def compare_mot(native: str, oracle_relabeled: str) -> dict[str, Any]:
     }
 
 
+# ── graph captures (double buffer) ─────────────────────────────────────────────
+
+
+def oracle_graph_captures(log_text: str) -> dict[str, dict[str, int]]:
+    """``seq -> {detector, nms, gmc}`` capture counts from the oracle's log,
+    attributed to the sequence whose log block they fall in."""
+    out: dict[str, dict[str, int]] = {}
+    seq = None
+    for line in log_text.splitlines():
+        m = _SEQ_START.search(line)
+        if m:
+            seq = m.group(1)
+            out.setdefault(seq, {k: 0 for k in _ORACLE_CAPTURES})
+            continue
+        for name, pat in _ORACLE_CAPTURES.items():
+            g = pat.search(line)
+            if not g:
+                continue
+            if seq is None:
+                raise RuntimeError(f"oracle log: a {name} capture before any sequence")
+            if name == "gmc" and g.group(1) != seq:
+                raise RuntimeError(
+                    f"oracle log: GMC capture for {g.group(1)} inside {seq}"
+                )
+            out[seq][name] += 1
+    return out
+
+
+def compare_graphs(
+    native: dict[str, Any], oracle: dict[str, int] | None
+) -> dict[str, Any]:
+    """One sequence's native graph counts (track report) vs the oracle log."""
+    g = native["graphs"]
+    frames, updates = native["frames"], native["tracker_updates"]
+    problems = []
+    if oracle is None:
+        problems.append("no oracle log block for the sequence")
+    else:
+        for key, ours in (
+            ("detector", g["detector_captures"]),
+            ("nms", g["nms_captures"]),
+            ("gmc", g["gmc_captures"]),
+        ):
+            if ours != oracle[key]:
+                problems.append(f"{key} captures {ours} != oracle {oracle[key]}")
+    if g["tracker_captures"] != (1 if updates > 0 else 0):
+        problems.append(f"tracker captures {g['tracker_captures']}")
+    expected = {
+        "detector_replays": frames,
+        "nms_replays": updates,
+        "tracker_replays": updates,
+        "gmc_replays": max(updates - 1, 0),
+    }
+    for key, want in expected.items():
+        if g[key] != want:
+            problems.append(f"{key} {g[key]} != {want}")
+    return {
+        "native": g,
+        "oracle": oracle,
+        "problems": problems,
+        "verdict": "EXACT" if not problems else "DIFFERS",
+    }
+
+
 # ── validity ───────────────────────────────────────────────────────────────────
 
 
@@ -201,10 +311,11 @@ def report_problems(
     sequences: list[str],
     mutation: str,
     max_frames: int | None,
+    schedule: str = "serial",
 ) -> list[str]:
     """Validity of the saccade_track run, from its report (fail closed)."""
     problems = []
-    if rep.get("format") != TRACK_REPORT_FORMAT or rep.get("schedule") != "serial":
+    if rep.get("format") != TRACK_REPORT_FORMAT or rep.get("schedule") != schedule:
         problems.append(
             f"report {rep.get('format')!r} schedule {rep.get('schedule')!r}"
         )
@@ -263,9 +374,12 @@ def run_track(args: argparse.Namespace, out: Path) -> tuple[int, Path]:
         "--model-root", ".",
         "--out", str(out / "native"),
         "--report", str(report),
-        "--trace", str(out / "trace"),
         "--measurement-mutation", args.mutation,
     ]  # fmt: skip
+    if not args.no_trace:
+        cmd += ["--trace", str(out / "trace")]
+    if args.schedule == "serial":
+        cmd += ["--schedule", "serial"]
     if args.max_frames:
         cmd += ["--max-frames", str(args.max_frames)]
     cmd += [str(Path(det.DATA_ROOT) / det.SPLIT / s) for s in args.sequences]
@@ -282,6 +396,8 @@ def compare_against(report: dict[str, Any], prior_path: Path) -> dict[str, Any]:
     for seq, cur in report["per_sequence"].items():
         old = prior["per_sequence"].get(seq)
         for key in ("native_txt_sha256", "native_trace_sha256"):
+            if cur.get(key) is None:  # --no-trace
+                continue
             if old is None or old.get(key) != cur[key]:
                 diffs.append({"sequence": seq, "key": key})
     same_set = set(prior["per_sequence"]) == set(report["per_sequence"])
@@ -292,11 +408,36 @@ def compare_against(report: dict[str, Any], prior_path: Path) -> dict[str, Any]:
     }
 
 
+def oracle_txt_problems(
+    anchor_dir: Path, anchor: dict[str, Any], sequences: list[str], head: str
+) -> list[str]:
+    """Validity of the double-buffer oracle (an ``anchor`` run)."""
+    problems = []
+    if anchor.get("schema") != det.ANCHOR_SCHEMA:
+        problems.append(f"{anchor_dir}: not an anchor report")
+    if anchor.get("problems"):
+        problems.append(f"{anchor_dir}: anchor problems {anchor['problems']}")
+    if anchor.get("identical") is not True:
+        problems.append(f"{anchor_dir}: the A_L re-run is not identical to PR-2L A_L_1")
+    argv = anchor.get("mot17_argv") or []
+    if "--double-buffer" not in argv:
+        problems.append("the oracle-txt run was not double-buffer")
+    order = (
+        argv[argv.index("--sequences") + 1].split(",") if "--sequences" in argv else []
+    )
+    if order != sequences:
+        problems.append(f"oracle-txt sequence order {order} != {sequences}")
+    if anchor.get("git", {}).get("dirty") or anchor.get("git", {}).get("head") != head:
+        problems.append("the oracle-txt run is not at this clean commit")
+    return problems
+
+
 def run_parity(args: argparse.Namespace) -> int:
     att = det.read_attestation()
     lineage = json.loads((project_root / det.LINEAGE).read_text())
     rows_dir: Path = args.oracle_rows
     rows_report = json.loads((rows_dir / "oracle_rows.json").read_text())
+    double_buffer = args.schedule == "double_buffer"
     problems = []
     if not rows_report.get("ok"):
         problems.append(f"{rows_dir}: oracle-rows run is not ok")
@@ -313,6 +454,19 @@ def run_parity(args: argparse.Namespace) -> int:
     )
     if oracle_max != args.max_frames:
         problems.append(f"oracle --max-frames {oracle_max} != {args.max_frames}")
+    txt_dir, map_path = rows_dir / "mot", rows_dir / "mot" / "_global_id_map.txt"
+    anchor: dict[str, Any] = {}
+    oracle_graphs: dict[str, dict[str, int]] = {}
+    if double_buffer:
+        anchor = json.loads((args.oracle_txt / "anchor.json").read_text())
+        problems += oracle_txt_problems(
+            args.oracle_txt, anchor, args.sequences, det._git_state()["head"]
+        )
+        txt_dir = args.oracle_txt / "A_L"
+        map_path = txt_dir / "_global_id_map.txt"
+        oracle_graphs = oracle_graph_captures(
+            (args.oracle_txt / "A_L.stdout.log").read_text(errors="replace")
+        )
 
     out: Path = args.out
     rc, track_report_path = run_track(args, out)
@@ -323,11 +477,17 @@ def run_parity(args: argparse.Namespace) -> int:
     )
     if rep:
         problems += report_problems(
-            rep, att, lineage, args.sequences, args.mutation, args.max_frames
+            rep,
+            att,
+            lineage,
+            args.sequences,
+            args.mutation,
+            args.max_frames,
+            args.schedule,
         )
 
     ingest = _load_module(INGEST_HARNESS, "native_ingest_parity")
-    blocks = id_blocks(rows_dir / "mot" / "_global_id_map.txt")
+    blocks = id_blocks(map_path)
     per_seq: dict[str, Any] = {}
     for i, seq in enumerate(args.sequences):
         if seq not in rep.get("sequences", {}):
@@ -348,7 +508,7 @@ def run_parity(args: argparse.Namespace) -> int:
         native_bin = out / "trace" / seq / "detector.bin"
         native_txt_path = out / "native" / f"{seq}.txt"
         native_txt = native_txt_path.read_text()
-        oracle_txt = (rows_dir / "mot" / f"{seq}.txt").read_text()
+        oracle_txt = (txt_dir / f"{seq}.txt").read_text()
         if args.ref_edit and i == 0:
             # Comparator check: one character of the oracle's first line.
             j = oracle_txt.index(",", oracle_txt.index(",") + 1) + 1
@@ -372,7 +532,12 @@ def run_parity(args: argparse.Namespace) -> int:
             if mot["byte_identical_after_relabel"] and st["track_ids"] == oracle_ids
             else "DIFFERS"
         )
-        detector = compare_detector(native_bin, oracle_bin)
+        detector = (
+            {"verdict": "NOT_RUN", "frames": 0, "equal_frames": 0}
+            if args.no_trace
+            else compare_detector(native_bin, oracle_bin)
+        )
+        loop = st.get("loop_seconds") or 0.0
         per_seq[seq] = {
             "frames": st["frames"],
             "tracker_updates": st["tracker_updates"],
@@ -385,12 +550,25 @@ def run_parity(args: argparse.Namespace) -> int:
             "detector": detector,
             "mot_txt": mot,
             "native_txt_sha256": det._sha256_file(native_txt_path),
-            "native_trace_sha256": det._sha256_file(native_bin),
-            "oracle_txt_sha256": det._sha256_file(rows_dir / "mot" / f"{seq}.txt"),
+            "native_trace_sha256": None
+            if args.no_trace
+            else det._sha256_file(native_bin),
+            "oracle_txt_sha256": det._sha256_file(txt_dir / f"{seq}.txt"),
+            "oracle_serial_txt_sha256": det._sha256_file(
+                rows_dir / "mot" / f"{seq}.txt"
+            ),
+            "native_loop_seconds": loop,
+            "native_loop_fps": st["frames"] / loop if loop > 0 else None,
         }
+        if double_buffer:
+            per_seq[seq]["graph_captures"] = compare_graphs(st, oracle_graphs.get(seq))
 
-    sections = {}
-    for name in ("detector", "mot_txt"):
+    sections: dict[str, Any] = {}
+    names = ("detector", "mot_txt") + (("graph_captures",) if double_buffer else ())
+    for name in names:
+        if name == "detector" and args.no_trace:
+            sections[name] = {"verdict": "NOT_RUN"}
+            continue
         differ = [s for s in per_seq if per_seq[s][name]["verdict"] != "EXACT"]
         sections[name] = {
             "sequences": len(per_seq),
@@ -400,25 +578,36 @@ def run_parity(args: argparse.Namespace) -> int:
             if not differ and len(per_seq) == len(args.sequences)
             else "DIFFERS",
         }
-    sections["detector"]["frames"] = sum(
-        p["detector"]["frames"] for p in per_seq.values()
-    )
-    sections["detector"]["equal_frames"] = sum(
-        p["detector"]["equal_frames"] for p in per_seq.values()
-    )
+    if not args.no_trace:
+        sections["detector"]["frames"] = sum(
+            p["detector"]["frames"] for p in per_seq.values()
+        )
+        sections["detector"]["equal_frames"] = sum(
+            p["detector"]["equal_frames"] for p in per_seq.values()
+        )
     if problems:
         verdict = "UNRESOLVED"
-    elif all(s["verdict"] == "EXACT" for s in sections.values()):
+    elif all(s["verdict"] in ("EXACT", "NOT_RUN") for s in sections.values()):
         verdict = "EXACT"
     else:
         verdict = "NOT_EXACT"
-    # Observation, not a gate: the serial oracle's txt vs PR-2L's A_L_1
-    # (double-buffer) reference.
+    # Observations, not gates: the serial oracle's txt vs PR-2L's A_L_1
+    # (double-buffer) reference, and (double buffer) the double-buffer oracle's
+    # txt vs the serial oracle's.
     a_l_1 = {
-        seq: per_seq[seq]["oracle_txt_sha256"]
+        seq: per_seq[seq]["oracle_serial_txt_sha256"]
         == det.PR2L_A_L_REFERENCE_TXT_SHA256.get(seq)
         for seq in per_seq
     }
+    db_vs_serial = (
+        {
+            seq: per_seq[seq]["oracle_txt_sha256"]
+            == per_seq[seq]["oracle_serial_txt_sha256"]
+            for seq in per_seq
+        }
+        if double_buffer
+        else None
+    )
     report: dict[str, Any] = {
         "schema": SCHEMA,
         "generated_utc": det._utc(),
@@ -426,12 +615,16 @@ def run_parity(args: argparse.Namespace) -> int:
         "attestation_sha256": det._sha256_file(project_root / det.ATTESTATION),
         "lineage_sha256": det._sha256_file(project_root / det.LINEAGE),
         "track_binary_sha256": det._sha256_file(project_root / TRACK),
+        "schedule": args.schedule,
         "oracle_rows": str(rows_dir),
         "oracle_rows_report": rows_report,
+        "oracle_txt": str(args.oracle_txt) if double_buffer else None,
+        "oracle_txt_report": anchor or None,
         "sequences": args.sequences,
         "max_frames": args.max_frames,
         "mutation": args.mutation,
         "ref_edit": args.ref_edit,
+        "trace": not args.no_trace,
         "track_report": rep,
         "problems": problems,
         "sections": sections,
@@ -439,6 +632,7 @@ def run_parity(args: argparse.Namespace) -> int:
         "observation_oracle_txt_equals_pr2l_a_l_1": a_l_1
         if not args.max_frames
         else None,
+        "observation_oracle_double_buffer_txt_equals_serial": db_vs_serial,
         "per_sequence": per_seq,
     }
     negctl = "ref_edit" if args.ref_edit else args.mutation
@@ -449,7 +643,7 @@ def run_parity(args: argparse.Namespace) -> int:
             "expected_section": expected,
             "caught": not problems and sections[expected]["verdict"] == "DIFFERS",
             "sections_differ": [
-                n for n, s in sections.items() if s["verdict"] != "EXACT"
+                n for n, s in sections.items() if s["verdict"] == "DIFFERS"
             ],
         }
     if args.against is not None:
@@ -482,9 +676,16 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     seqs = lambda s: [x for x in s.split(",") if x]  # noqa: E731
-    q = sub.add_parser("parity", help="end-to-end native vs A_L serial comparison")
+    q = sub.add_parser("parity", help="end-to-end native vs A_L comparison")
     q.add_argument("--out", type=Path, required=True)
+    q.add_argument("--schedule", choices=SCHEDULES, default="double_buffer")
     q.add_argument("--oracle-rows", type=Path, required=True)
+    q.add_argument(
+        "--oracle-txt",
+        type=Path,
+        default=None,
+        help="an anchor run (double buffer): its A_L/<seq>.txt is the MOT oracle",
+    )
     q.add_argument("--sequences", type=seqs, default=list(det.SEQUENCES))
     q.add_argument("--max-frames", type=int, default=None)
     neg = q.add_mutually_exclusive_group()
@@ -495,12 +696,27 @@ def main(argv: list[str] | None = None) -> int:
     )
     neg.add_argument("--ref-edit", action="store_true")
     q.add_argument("--against", type=Path, default=None)
+    q.add_argument("--no-trace", action="store_true")
     args = ap.parse_args(sys.argv[1:] if argv is None else argv)
 
     args.out = args.out.resolve()
     if args.out.exists() and any(args.out.iterdir()):
         ap.error(f"{args.out} is not empty")
     args.oracle_rows = args.oracle_rows.resolve()
+    if args.schedule == "double_buffer":
+        if args.oracle_txt is None:
+            ap.error("--schedule double_buffer needs --oracle-txt (an anchor run)")
+        if args.max_frames:
+            ap.error("the double-buffer oracle (anchor) runs whole sequences")
+        args.oracle_txt = args.oracle_txt.resolve()
+    elif args.oracle_txt is not None:
+        ap.error("--oracle-txt is the double-buffer oracle")
+    if args.no_trace and (args.mutation != "none" or args.ref_edit):
+        ap.error("--no-trace is the shipping configuration: no negative control")
+    if args.mutation != "none" and NEGCTL_SCHEDULE[args.mutation] != args.schedule:
+        ap.error(
+            f"--mutation {args.mutation} is a {NEGCTL_SCHEDULE[args.mutation]} control"
+        )
     if args.against is not None:
         args.against = args.against.resolve()
     if not (project_root / TRACK).exists():

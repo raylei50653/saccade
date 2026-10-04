@@ -19,8 +19,22 @@
 //     replays it (num_dets = max_assoc, no embeddings, light_factor 0,
 //     mid_thresh_scale 1), after kGraphedTrackerUpdatePreRoll empty updates
 //     before the sequence's first real update.
-// U3a is eager: what the oracle captures in CUDA graphs runs here as the same
-// calls (graph capture and double buffering are U5).
+// GraphMode::Eager (U3a, PR-5) runs what the oracle captures in CUDA graphs
+// as the same calls. GraphMode::Captured (U5, PR-10) captures them as the
+// oracle does, once per host (= per sequence), with cudaStreamBeginCapture in
+// thread-local mode:
+//   main NMS     at the first update: copy_pad, one eager nocopyback call, a
+//                sync, the capture, then the replay (stages.py
+//                `_capture_main_nms_graph_nocopyback`); later frames copy_pad
+//                and replay; the private-continuation append stays eager;
+//   GMC          at the first update: the frame copied into the host's GMC
+//                frame buffer, one eager estimate on it, a sync, the capture
+//                and no replay (stages.py `_run_reid_and_gmc`); later frames
+//                copy the frame in and replay;
+//   tracker      the pre-roll as above, then the capture of update_into on
+//                the zero scratch inputs and identity warp (copy_inputs
+//                captures before it writes); every update then copies its
+//                inputs and replays.
 #pragma once
 
 #include <cuda_runtime.h>
@@ -61,6 +75,15 @@ struct TrackerRows {
     std::size_t size() const { return ids.size(); }
 };
 
+enum class GraphMode { Eager, Captured };
+
+// Graph captures and launches so far (the report and the tests).
+struct PostGraphStats {
+    int nms_captures = 0, nms_replays = 0;
+    int gmc_captures = 0, gmc_replays = 0;
+    int tracker_captures = 0, tracker_replays = 0;
+};
+
 struct FrameResult {
     bool updated = false;  // false: empty detector output, nothing ran
     DetectionRows post_nms;      // main NMS + private candidates
@@ -74,7 +97,8 @@ public:
     // Builds the sequence's tracker and GMC from the resolved config
     // (native_build.hpp, readback-checked). `pipeline` must outlive the host.
     PostDetectorHost(const ResolvedShippingConfig& cfg, SequenceGeometry geometry,
-                     PerceptionPipeline& pipeline, cudaStream_t stream);
+                     PerceptionPipeline& pipeline, cudaStream_t stream,
+                     GraphMode graphs = GraphMode::Eager);
     ~PostDetectorHost();
     PostDetectorHost(const PostDetectorHost&) = delete;
     PostDetectorHost& operator=(const PostDetectorHost&) = delete;
@@ -90,11 +114,20 @@ public:
     // value is the plan's). Must be called before the first process().
     void set_pre_roll_for_measurement(int updates);
 
+    GraphMode graph_mode() const { return graphs_; }
+    const PostGraphStats& graph_stats() const { return graph_stats_; }
+    // GraphMode::Captured only (developer measurement: a negative control):
+    // GMC replays without copying the frame into its captured input buffer.
+    void set_stale_gmc_input_for_measurement(bool on) { stale_gmc_input_ = on; }
+
 private:
     struct DeviceBuffers;
+    struct Graphs;
 
     void run_pre_roll();
     void tracker_update(int num_dets);
+    void main_nms(int nf, int w, int h, bool is_tiled);
+    void gmc(const float* frame_chw, int w, int h);
 
     PostDetectorPlan plan_;
     SequenceGeometry geometry_;
@@ -103,6 +136,10 @@ private:
     std::unique_ptr<GPUByteTracker> tracker_;
     std::unique_ptr<GMC> gmc_;
     std::unique_ptr<DeviceBuffers> buf_;
+    GraphMode graphs_;
+    std::unique_ptr<Graphs> g_;
+    PostGraphStats graph_stats_;
+    bool stale_gmc_input_ = false;
     bool pre_rolled_ = false;
     int pre_roll_run_ = 0;
 };

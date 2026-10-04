@@ -22,7 +22,9 @@
 //                 rows). Each host synchronizes the stream before returning,
 //                 so the frame buffer is not overwritten while a stage reads it.
 //
-// Serial and eager: graph capture and double buffering are U5 (PR-10). Track
+// Serial and eager. The oracle's double-buffer schedule with its CUDA graphs
+// is DoubleBufferRuntime (double_buffer_runtime.hpp, PR-10); this runtime stays
+// the PR-9-measured serial reference (`saccade_track --schedule serial`). Track
 // ids are per sequence (boundary §5 B3: no run-global ids in shipping). Reads
 // no environment; every value comes from the plans.
 #pragma once
@@ -80,6 +82,14 @@ public:
     virtual void on_frame(const FrameTrace& t) = 0;
 };
 
+// Graph captures / replays during one sequence (zero in the eager serial
+// runtime), and the frame loop's wall time.
+struct ScheduleStats {
+    int detector_captures = 0, detector_warmup_runs = 0, detector_replays = 0;
+    PostGraphStats post;
+    double loop_seconds = 0.0;  // frames 1..frame_end, steady clock
+};
+
 struct SequenceRunStats {
     std::string name;  // the sequence directory's name
     int im_width = 0, im_height = 0, seq_length = 0;
@@ -91,6 +101,7 @@ struct SequenceRunStats {
     std::size_t track_ids = 0;
     std::size_t lines = 0;
     InterpolationStats interpolation;
+    ScheduleStats schedule;
 };
 
 struct SequenceRunResult {

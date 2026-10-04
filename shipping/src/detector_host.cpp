@@ -6,6 +6,7 @@
 
 #include <ATen/ATen.h>
 #include <ATen/cuda/CUDAContext.h>
+#include <ATen/cuda/CUDAGraph.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
 #include <torch/csrc/jit/passes/inliner.h>
@@ -19,7 +20,9 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <set>
+#include <tuple>
 #include <sstream>
 #include <stdexcept>
 
@@ -162,6 +165,17 @@ struct DetectorHost::Impl {
     DetectorStages stages;
     DetectorMutation mutation = DetectorMutation::None;
 
+    // Whole-detect graphs, keyed (frame h, frame w, image h, image w).
+    struct Captured {
+        at::Tensor static_in;  // [1, 3, h, w]
+        std::unique_ptr<at::cuda::CUDAGraph> graph;
+    };
+    using GraphKey = std::tuple<int, int, int, int>;
+    int img_h = 0, img_w = 0;
+    bool warm = false;
+    std::map<GraphKey, Captured> graphs;
+    WholeGraphStats graph_stats;
+
     Impl(const DetectorPlan& p, cudaStream_t s)
         : plan(p), raw_stream(s), stream(at::cuda::getStreamFromExternal(s, 0)) {}
 };
@@ -278,24 +292,32 @@ void DetectorHost::set_mutation_for_measurement(DetectorMutation m) { impl_->mut
 
 void DetectorHost::set_image_dims(int height, int width) {
     if (height <= 0 || width <= 0) run_error("image dims must be positive");
-    impl_->scales_set = true;
-    impl_->sx = coordinate_scale(width, impl_->plan.img_size);
-    impl_->sy = coordinate_scale(height, impl_->plan.img_size);
+    Impl& m = *impl_;
+    m.scales_set = true;
+    m.sx = coordinate_scale(width, m.plan.img_size);
+    m.sy = coordinate_scale(height, m.plan.img_size);
+    // set_whole_graph_img_dims: the same dims keep the graphs and the warm flag.
+    if (height == m.img_h && width == m.img_w) return;
+    m.img_h = height;
+    m.img_w = width;
+    if (!m.graphs.empty()) {
+        // A replay may still be queued on the stream.
+        if (cudaStreamSynchronize(m.raw_stream) != cudaSuccess) run_error("stream synchronize failed");
+        m.graphs.clear();
+        ++m.graph_stats.cache_clears;
+    }
+    m.warm = false;
 }
 
-DetectionRows DetectorHost::detect(const float* frame_chw, int height, int width) {
-    Impl& m = *impl_;
-    const DetectorPlan& p = m.plan;
-    if (!m.scales_set) run_error("set_image_dims was not called");
-    if (height <= 0 || width <= 0) run_error("frame dims must be positive");
-    if (!same(runtime_readback(), p.runtime)) run_error("runtime requirements changed after load");
-    c10::cuda::CUDAStreamGuard guard(m.stream);
-    torch::NoGradGuard no_grad;
-    const auto f32 = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA, 0);
+namespace {
 
+// _whole_graph_fn on the current (guarded) stream: resize -> engine -> head ->
+// S2 into m.s2_raw / m.s2_scaled (k rows). The eager mutations of the engine
+// and head outputs apply only when `mutate` is set.
+template <class Impl>
+void whole_forward(Impl& m, const at::Tensor& frame, int k, bool mutate) {
+    const DetectorPlan& p = m.plan;
     // resize: F.interpolate(frame[None], (img, img), mode="bilinear", align_corners=False).
-    const at::Tensor frame =
-        at::from_blob(const_cast<float*>(frame_chw), {1, 3, height, width}, f32);
     m.resized = at::upsample_bilinear2d(frame, at::IntArrayRef{p.img_size, p.img_size}, false,
                                         std::nullopt);
     if (!m.resized.is_contiguous()) run_error("resized frame is not contiguous");
@@ -312,7 +334,7 @@ DetectionRows DetectorHost::detect(const float* frame_chw, int height, int width
         }
     }
     if (!m.engine->enqueue_v3(m.raw_stream)) run_error("backbone enqueue failed");
-    if (m.mutation == DetectorMutation::BackboneUlp) next_ulp_inplace(m.feats[0]);
+    if (mutate && m.mutation == DetectorMutation::BackboneUlp) next_ulp_inplace(m.feats[0]);
 
     // head: the PR-1L artifact.
     const auto out = m.head.forward({m.feats[0], m.feats[1], m.feats[2]});
@@ -328,18 +350,34 @@ DetectionRows DetectorHost::detect(const float* frame_chw, int height, int width
         }
         m.head_out[i] = t;
     }
-    if (m.mutation == DetectorMutation::HeadUlp) next_ulp_inplace(m.head_out[0]);
+    if (mutate && m.mutation == DetectorMutation::HeadUlp) next_ulp_inplace(m.head_out[0]);
 
     // S2.
     S2Level levels[3];
     for (int i = 0; i < 3; ++i) {
-        levels[i] = {m.head_out[i].data_ptr<float>(), m.head_out[i + 3].data_ptr<float>(),
+        levels[i] = {m.head_out[i].template data_ptr<float>(), m.head_out[i + 3].template data_ptr<float>(),
                      p.feature_shapes[static_cast<std::size_t>(i)][2],
                      static_cast<float>(kDetectorStrides[static_cast<std::size_t>(i)])};
     }
+    s2_run(levels, p.num_classes, k, m.sx, m.sy, m.s2_raw.template data_ptr<float>(),
+           m.s2_scaled.template data_ptr<float>(), m.raw_stream);
+}
+
+}  // namespace
+
+DetectionRows DetectorHost::detect(const float* frame_chw, int height, int width) {
+    Impl& m = *impl_;
+    const DetectorPlan& p = m.plan;
+    if (!m.scales_set) run_error("set_image_dims was not called");
+    if (height <= 0 || width <= 0) run_error("frame dims must be positive");
+    if (!same(runtime_readback(), p.runtime)) run_error("runtime requirements changed after load");
+    c10::cuda::CUDAStreamGuard guard(m.stream);
+    torch::NoGradGuard no_grad;
+    const auto f32 = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA, 0);
+    const at::Tensor frame =
+        at::from_blob(const_cast<float*>(frame_chw), {1, 3, height, width}, f32);
     const int k = m.mutation == DetectorMutation::S2TopK ? p.max_det - 1 : p.max_det;
-    s2_run(levels, p.num_classes, k, m.sx, m.sy, m.s2_raw.data_ptr<float>(),
-           m.s2_scaled.data_ptr<float>(), m.raw_stream);
+    whole_forward(m, frame, k, /*mutate=*/true);
 
     std::vector<float> raw(static_cast<std::size_t>(k) * 6), scaled(raw.size());
     auto d2h = [&](std::vector<float>& dst, const at::Tensor& src) {
@@ -400,6 +438,71 @@ DetectionRows DetectorHost::detect(const float* frame_chw, int height, int width
         out_rows.classes.push_back(static_cast<std::int32_t>(r[5]));
     }
     return out_rows;
+}
+
+const WholeGraphStats& DetectorHost::graph_stats() const { return impl_->graph_stats; }
+
+int DetectorHost::detect_graphed(const float* frame_chw, int height, int width,
+                                 const DeviceRowsOut& out, bool refresh_input) {
+    Impl& m = *impl_;
+    const DetectorPlan& p = m.plan;
+    if (!m.scales_set) run_error("set_image_dims was not called");
+    if (height <= 0 || width <= 0) run_error("frame dims must be positive");
+    if (m.mutation != DetectorMutation::None) run_error("detector mutations are eager-only");
+    if (out.capacity < p.max_det) run_error("row buffers smaller than max_det");
+    if (!same(runtime_readback(), p.runtime)) run_error("runtime requirements changed after load");
+    c10::cuda::CUDAStreamGuard guard(m.stream);
+    torch::NoGradGuard no_grad;
+    const auto f32 = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA, 0);
+    const at::Tensor frame =
+        at::from_blob(const_cast<float*>(frame_chw), {1, 3, height, width}, f32);
+
+    const Impl::GraphKey key{height, width, m.img_h, m.img_w};
+    auto it = m.graphs.find(key);
+    if (it == m.graphs.end()) {
+        if (!m.warm) {  // _whole_graph_warmup: one run on a clone, then a device sync
+            const at::Tensor warm = frame.clone();
+            whole_forward(m, warm, p.max_det, false);
+            if (cudaDeviceSynchronize() != cudaSuccess) run_error("warm-up synchronize failed");
+            ++m.graph_stats.warmup_runs;
+            m.warm = true;
+        }
+        if (m.graphs.size() >= 10) {
+            m.graphs.clear();
+            ++m.graph_stats.cache_clears;
+        }
+        // make_graphed_callables: sample = frame.clone() is the static input;
+        // three warm-up iterations on it, then the capture.
+        Impl::Captured c;
+        c.static_in = frame.clone();
+        for (int i = 0; i < 3; ++i) {
+            whole_forward(m, c.static_in, p.max_det, false);
+            ++m.graph_stats.warmup_runs;
+        }
+        if (cudaStreamSynchronize(m.raw_stream) != cudaSuccess) run_error("warm-up synchronize failed");
+        c.graph = std::make_unique<at::cuda::CUDAGraph>();
+        c.graph->capture_begin({0, 0}, cudaStreamCaptureModeThreadLocal);
+        whole_forward(m, c.static_in, p.max_det, false);
+        c.graph->capture_end();
+        // The stage views pointed into the graph's pool; nothing reads them in
+        // graph mode.
+        m.resized = at::Tensor();
+        for (auto& t : m.head_out) t = at::Tensor();
+        ++m.graph_stats.captures;
+        it = m.graphs.emplace(key, std::move(c)).first;
+    }
+    Impl::Captured& c = it->second;
+    if (refresh_input) c.static_in.copy_(frame);
+    c.graph->replay();
+    ++m.graph_stats.replays;
+
+    // The rows leave the static output before the next replay can overwrite it.
+    const int n = p.max_det;
+    const at::Tensor rows = m.s2_scaled.narrow(0, 0, n);
+    at::from_blob(out.boxes, {n, 4}, f32).copy_(rows.narrow(1, 0, 4));
+    at::from_blob(out.scores, {n}, f32).copy_(rows.select(1, 4));
+    at::from_blob(out.classes, {n}, f32.dtype(at::kInt)).copy_(rows.select(1, 5));
+    return n;
 }
 
 }  // namespace saccade::shipping

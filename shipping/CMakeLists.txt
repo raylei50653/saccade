@@ -53,7 +53,7 @@ set_target_properties(saccade_shipping_mot PROPERTIES POSITION_INDEPENDENT_CODE 
 # tracking headers (tracker_params.hpp, perception_params.hpp).
 add_library(saccade_shipping_native_config STATIC
     src/native_config.cpp src/post_detector_plan.cpp src/sequence_output.cpp src/ingest_plan.cpp
-    src/sha256.cpp src/detector_plan.cpp)
+    src/sha256.cpp src/detector_plan.cpp src/schedule_plan.cpp)
 target_link_libraries(saccade_shipping_native_config PUBLIC
     saccade_shipping_config saccade_tracker_params saccade_shipping_mot)
 target_compile_options(saccade_shipping_native_config PRIVATE -Wall -Wextra -Wpedantic)
@@ -184,10 +184,11 @@ if(TARGET saccade_tracking)
     add_executable(saccade_detector_probe tools/saccade_detector_probe.cpp)
     target_link_libraries(saccade_detector_probe PRIVATE saccade_shipping_detector saccade_shipping_ingest)
 
-    # End-to-end serial runtime (PR-9): ingest -> detector -> post-detector
-    # host -> MOT emit and tail, and the shipping entrypoint saccade_track
-    # (boundary §2; serial until PR-10).
-    add_library(saccade_shipping_runtime STATIC src/serial_runtime.cpp)
+    # End-to-end runtimes: ingest -> detector -> post-detector host -> MOT emit
+    # and tail, serial and eager (PR-9) and the oracle's double-buffer schedule
+    # with CUDA graphs (PR-10); the shipping entrypoint saccade_track (boundary
+    # §2) runs the schedule the resolved config names.
+    add_library(saccade_shipping_runtime STATIC src/serial_runtime.cpp src/double_buffer_runtime.cpp)
     target_link_libraries(saccade_shipping_runtime PUBLIC
         saccade_shipping_detector saccade_shipping_ingest saccade_shipping_native)
     set_target_properties(saccade_shipping_runtime PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -231,6 +232,18 @@ if(TARGET saccade_tracking)
         target_link_libraries(saccade_shipping_serial_runtime_test PRIVATE saccade_shipping_runtime)
         add_test(NAME saccade_shipping_serial_runtime_test
             COMMAND saccade_shipping_serial_runtime_test ${SACCADE_RESOLVED_CONFIG}
+                    ${SACCADE_REPO_ROOT}/models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json
+                    ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json
+                    ${SACCADE_REPO_ROOT}
+                    ${SACCADE_REPO_ROOT}/datasets/MOT17/train)
+
+        # Double-buffer runtime with CUDA graphs (PR-10): serial-equal output,
+        # the graph capture keys and counts, and the schedule negative controls.
+        add_executable(saccade_shipping_double_buffer_runtime_test
+            ${SACCADE_REPO_ROOT}/tests/native/test_shipping_double_buffer_runtime.cpp)
+        target_link_libraries(saccade_shipping_double_buffer_runtime_test PRIVATE saccade_shipping_runtime)
+        add_test(NAME saccade_shipping_double_buffer_runtime_test
+            COMMAND saccade_shipping_double_buffer_runtime_test ${SACCADE_RESOLVED_CONFIG}
                     ${SACCADE_REPO_ROOT}/models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json
                     ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json
                     ${SACCADE_REPO_ROOT}
