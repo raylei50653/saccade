@@ -1151,3 +1151,58 @@ P0、P1、P3、P4、P5 的 MOT txt 相同（`b3a1d9bb…`）。容器裡的 driv
 r1 的原 N6 結果（launcher 的 sh exit 127）記為觀察。其他 gate、負控制與判準不變。
 
 **不做的**：FPS 或任何效能比較；其他 GPU、其他主機（原生 Linux）、其他 glibc；第三方位元組在執行時的雜湊（安裝與 `static` 負責）；CLI 的開發選項（PR-C2）；tarball、MANIFEST、atomic 安裝與 minisign 簽章（PR-C3／C4）；任何散佈。
+
+### 17.5 驗收
+
+同一台機器（RTX 5070 Ti Laptop，driver 616.92，WSL2）。正式結果是 **r2**：commit `16233e92`（含 A1，工作樹乾淨；§17.4 的契約在 `51840396`，A1 在 `16233e92`，都早於 r2 的任何量測），全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library（`aa84cccd…`）與 pin 的 entrypoint（`d7c6e0d4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json` 的值。r1（`full_51840396/`）留在原處並附 `SUPERSEDED.txt`（§17.4 A1）。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 工作樹乾淨；`anchor` 與 `A_L_1` 7/7 相同；`oracle-rows` OK；容器是 Ubuntu 24.04.4、glibc 2.39、`LD_LIBRARY_PATH` 未設，9 個工具都不存在 |
+| 1 build 與安裝 | configure、build、install 都 exit 0；entrypoint 以 pin 安裝；tree 3.7 GiB |
+| 2 靜態檢查 | 11 項 PASS。containment 的例外只有 `libcusparseLt.so.0` 的空項與 operator library 的 7 個絕對 RUNPATH 條目；閉包 32 項，第三方名字全部解析到 `lib/vendor` |
+| 3 host，經 launcher | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7；txt 與 trace 與 PR-12 正式 run（`parity_pristine`）7/7 相同；`sources` PASS（27 個第三方物件全部來自 `tree/lib/vendor` 且是 pin 的位元組，operator library 與 auditor 來自 tree） |
+| 4 乾淨容器（bundle） | exit 0；`EXACT`（同上）；與第 3 條 7/7 相同 |
+| 5 G2-2／G2-4 | 三項 PASS：exec chain＝`/opt/saccade/bin/saccade_track` → `/lib64/ld-linux-x86-64.so.2 --library-path /opt/saccade/lib/vendor --audit /opt/saccade/lib/saccade_loader_audit.so … /opt/saccade/libexec/saccade_track`，兩次都成功；沒有任何對 Python／Triton／inductor 路徑的 open；開啟的 tree 內共享物件＝27 個 pin 的第三方物件＋operator library＋auditor，沒有外來的。`parity --native-from` `EXACT`，與第 4 條 7/7 相同；三次 run 的 `python_libraries_mapped` 都是空的 |
+| **verdict** | **`PASS`**（§17.4 第 1–5 條全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：
+
+| # | 結果 |
+|:--|:--|
+| N1 | 安裝失敗：這次 build 的 `saccade_track` sha256 `25d65611…` ≠ pin `d7c6e0d4…` |
+| N2 | `static`：`vendor_set_pinned` 失敗，其餘通過 |
+| N3 | `static`：`layout_exact`、`vendor_set_pinned`、`g2_1_needed_closure` 失敗；容器 run exit 2（`dlopen …libsaccade_scan_torchop.so: libnvrtc.so.13: cannot open`） |
+| N4 | `static`：`layout_exact` 失敗；容器 run exit 127，`loader provenance check failed: foreign copy on the search path: /opt/saccade/lib/vendor/../../nvidia/cu13/lib/libcublas.so.13` |
+| N5 | `static`：`layout_exact`、`launcher_exact` 失敗；容器 run exit 0（那一份被載入），`runtime`：exec chain 失敗（loader 沒有 `--audit`）、opened set 失敗（`/opt/saccade/nvidia/cu13/lib/libcublas.so.13` 被開啟） |
+| N6a | exit 0；MOT17-05 txt 與第 4 條相同；auditor 載入之後 47 個物件，沒有來自 `/opt/foreign` 的 |
+| N6b | 同 N6a。觀察：launcher 的 sh 載入了 preload 的 `/opt/foreign/libcudart.so.13`（auditor 載入之前） |
+| N7 | exit 127：`libnvinfer.so.10: cannot open shared object file` |
+| N8 | `static`：`layout_exact`、`g2_3_no_python_files` 失敗 |
+| N9 | `runtime`：exec chain 失敗（`/bin/sh`、launcher、loader 三次 `execve`），其餘兩項通過 |
+
+**觀察（不是 gate）**：`saccade_track` 在三次 build 得到三個不同的 sha256（PR-12 r2 `d7c6e0d4…`、§17.3 開發期間 `a14b76fb…`、本 run 的 `build-release` `25d65611…`），原始碼都相同（§17.2）。
+
+結果目錄：`results/465_prc1_bundle/full_16233e92/`（`run.sh`、`tree/`、`static.json`、`ld_host/`、`sources.json`、`anchor/`、`oracle_rows/`、`parity_host/`、`container_bundle/`、`parity_bundle/`、`container_strace/`、`runtime.json`、`parity_strace/`、`negctl/`、`pins_before.txt`／`pins_after.txt`）；probe 在 `results/465_prc1_probe/p1_474da18b/`，開發試做在 `results/465_prc1_dev/`。不納入版本控制。
+
+### 17.6 限制
+
+- **launcher 的 sh 不在保護範圍內**：呼叫端的 `LD_PRELOAD`／`LD_LIBRARY_PATH` 在 launcher 把它們 unset 之前就作用在 sh 自己身上（N6b 的觀察；r1 的原 N6 是一個依賴解析不到的 preload 讓 sh exit 127）。entrypoint process 不受影響（N6a、N6b）。
+- **auditor 只管路徑，不管位元組**：執行時不雜湊 3.5 GiB 的第三方物件；被就地改寫的 `lib/vendor` 物件只會被安裝時的 sha256 與 `static` 抓到（N2）。安裝後的完整性驗證在 PR-C3 的 MANIFEST。
+- **entrypoint 的位元組來自 PR-12 的結果目錄**：`SACCADE_SHIPPING_ENTRYPOINT` 指向 `results/465_pr12_shipping/full_c44dd876_r2/tree/bin/saccade_track`，那個目錄不在版本控制裡（operator library 在 `build/` 也是同樣的情況）。build 不可重現（§17.5 觀察），所以這份檔案若遺失，就要重新 build 並重做 parity，pin 也要換。
+- **`libcusparseLt.so.0` 的空 RUNPATH 項**（工作目錄）：auditor 拒絕任何相對路徑的候選，但這一條只在 cusparseLt 以名字 dlopen 尚未載入的物件時才會用到，本 run 沒有觀察到這種搜尋。
+- 仍然只支援 sm_120、只在這一台 WSL2 機器與這個 driver 上驗證過；包約 3.7 GiB；安裝仍不是 atomic（PR-C3）；CLI 的開發選項仍在（PR-C2；parity harness 每次都傳 `--measurement-mutation`）。
+- **沒有散佈**：tree 只在本機；nvJitLink／cuFile／nvshmem 的散佈依據確認之前不公開（Phase C scope §4）。
+
+### 17.7 重現
+
+```bash
+cmake -S . -B build-release -DSACCADE_WITH_OPENCV=OFF -DENABLE_NATIVE_TESTS=OFF \
+    "-DTORCH_CUDA_ARCH_LIST=7.5;8.0;8.6;9.0;10.0;12.0+PTX" \
+    -DSACCADE_SHIPPING_ENTRYPOINT=$PWD/results/465_pr12_shipping/full_c44dd876_r2/tree/bin/saccade_track
+cmake --build build-release --target saccade_track
+cmake --install build-release --component shipping --prefix <tree>
+.venv/bin/python scripts/native/check_shipping_bundle.py static --tree <tree> --report static.json
+bash scripts/native/run_shipping_container.sh bundle|bundle-strace <tree> <out>
+bash results/465_prc1_bundle/<label>/run.sh   # §17.4 gates 1-5 and the negative controls
+```
