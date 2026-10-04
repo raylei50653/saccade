@@ -745,3 +745,62 @@ PR-10 把 PR-9 的端到端 runtime 換成 oracle 本身的排程：boundary §2
 拿掉 event wait 這類 race 型的變異不當負控制：結果取決於時序，沒抓到不能證明什麼，抓到也不可重現。
 
 **觀察（不是 gate）**：`anchor`（double buffer）與 `oracle-rows`（serial）的 txt 是否 7/7 相同；native double buffer 與 native serial（第 5 條）的 txt 是否相同；同一個 session 內的 FPS：native double buffer（第 4 條，無 trace）、native serial（第 5 條，有 trace）與 oracle `anchor` 的 `_fps_summary.txt`。三者的定義不同（native 是整個 frame loop 的 wall time、含第 1 幀的 graph capture；oracle 從第 51 幀起算），只並列記錄，不做效能主張（boundary §6 PR-10：FPS 只做同 session 對照）。
+
+### 14.4 驗收
+
+**§14.2 的重新 attestation**：在 `306607e3`（工作樹乾淨）跑 `anchor`，7 個 txt 與 PR-2L `A_L_1` 逐位元組相同、無 problem ⇒ `attest` 把 attestation 改綁新 build（`aa84cccd…`；只有 op library 的 sha256／bytes 與 reproduction 紀錄改變，`A_L` 的 txt hash 不變），以 `44cc91a4` 單獨提交。
+
+同一台機器（RTX 5070 Ti Laptop）、`build/` 組態，全部步驟在 gpu0 lease 下依序執行（`run.sh`）。正式 run 是 `44cc91a4`（工作樹乾淨；§14.3 的契約在 `306607e3` 就已 commit，早於任何對 oracle 的 parity 量測）：
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | `anchor`：與 `A_L_1` 7/7 相同、無 problem、同一個 commit、double buffer；`oracle-rows`：`A_L` serial、5316 筆、V5 通過；sequence 順序三者相同；`saccade_track`：schedule `double_buffer`、exit 0、未 map Python、op library 經 attestation 綁定、artifact／engine／runtime readback／scan 3 次／placement 皆與 lineage 相同、7/7 的寬高幀數與 `seqinfo.ini` 相同 |
+| `detector`（5316 幀） | **EXACT**：double buffer 下每幀從 parity detection buffer 讀回的 rows 與 oracle 的 `_run_detect` 逐位元組相同 |
+| `mot_txt`（7 sequence） | **EXACT**：7/7 重標後逐位元組相同，track ID 數相同（113／103／153／37／168／92／149） |
+| `graph_captures`（7 sequence） | **EXACT**：whole-detect capture 1／0／1／1／0／0／0（MOT17-02／04／05／09／10／11／13），main NMS 與 GMC 每個 sequence 1，與 oracle log 相同；tracker capture 1；replay 數符合 |
+| 重現性 | 第二次 `parity --against`：`EXACT`，native txt 與 trace sha256 7/7 相同 |
+| 不帶 trace | `parity --no-trace --against`：`mot_txt`、`graph_captures` `EXACT`，txt sha256 7/7 與第一次相同 |
+| PR-9 回歸 | `--schedule serial`：`detector` 5316/5316、`mot_txt` 7/7 `EXACT` |
+| PR-8 回歸 | `saccade_detector_probe`：9 個 section 全部 `EXACT`（5316 幀） |
+| **verdict** | **`EXACT`**（§14.3 第 1–6 條全部成立） |
+
+**負控制**（7 sequence，同一份 oracle）全部被抓到：
+
+| 負控制 | DIFFERS 的 section／sequence |
+|:--|:--|
+| `stale_detector_input` | `detector`：7/7 sequence，只有 3 幀相同（MOT17-02、05、09 的 capture 幀：static input 就是那一幀）；`mot_txt` 7/7 |
+| `stale_gmc_input` | `mot_txt`：7/7；`detector` 5316/5316 `EXACT` |
+| `swapped_detection_parity` | `detector`：5316/5316 幀不同；`mot_txt` 7/7 |
+| `--ref-edit` | `mot_txt`：只有 MOT17-02，第一個不同的行就是改過的那一行（第 0 行） |
+
+`graph_captures` 在四個負控制下都是 `EXACT`（變異不改變 capture 與 replay 的次數）。
+
+**觀察（不是 gate）**：`anchor`（double buffer）與 `oracle-rows`（serial）的 txt 7/7 相同，serial txt 與 `A_L_1` 7/7 相同；native double buffer 與 native serial 的 txt 7/7 相同。同一個 session 的 FPS（定義不同，只並列）：native double buffer（無 trace，整個 frame loop，含 capture）278.9；native serial（有 trace）105.4；oracle `anchor` 的 `OVERALL` 292.98（第 51 幀起）。
+
+結果目錄：`results/465_pr10_track/full7_44cc91a4/`（`MANIFEST.md`、`run.sh`、`anchor/`、`oracle_rows/`、`parity/`、`repeat/`、`no_trace/`、`serial_regression/`、`pr8_regression/`、`negctl_*/` 與 log）與 `results/465_pr10_track/attest_306607e3/`；不納入版本控制。
+
+### 14.5 限制
+
+- parity 是同一台機器、headline 組態、`A_L` 的對照，不是一般性的等價主張；沿用 PR-7／PR-8 的條件（nvJPEG 硬體路徑、torch 2.11.0／triton 3.6.0 的 S2 lowering、per-machine 的 operator library 與 realization attestation）。對 `A_L` 是 EXACT，不代表對 headline（owner 的 named limit）。
+- double buffer 的正確性靠 event barrier；race 型的變異沒有當負控制（§14.3）。「不帶 trace」與重現性各量了一次，是同一台機器、同一種負載下的觀察，不是無 race 的證明。
+- 只量了 oracle 的 sequence 順序與 headline 的 graph key；GPU 測試另外在 40 幀上檢查 X、Y、X、Z（dims 改變時重新 capture、相同 dims 沿用）。
+- FPS 只是同 session 的並列，不是效能主張：三者的時間定義不同，native 的 tracker 輸出仍每幀同步讀回（oracle 延後一幀），decode 在 host thread 上依序執行（oracle 預取）。
+- operator library 是 per-build 的：重新 configure／完整 build 可能重新編出不同位元組的 `.so`，之後必須依 §14.2 重新 attest（`anchor` 與 `A_L_1` 相同才可以）。
+- `saccade_track` 的 `DT_NEEDED` 仍含 OpenCV（經 `TRTEngine`）；拆掉是 PR-11。
+
+### 14.6 重現
+
+```bash
+cmake --build build --target saccade_track saccade_detector_probe saccade_shipping_double_buffer_runtime_test
+.venv/bin/python tools/resctl.py run gpu0 -- build/shipping/saccade_shipping_double_buffer_runtime_test \
+    configs/shipping/mamba_whole_graph.resolved.json \
+    models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json \
+    configs/shipping/mamba_head_realization.attestation.json . datasets/MOT17/train
+bash results/465_pr10_track/<label>/run.sh   # anchor, oracle-rows, parity, repeat, no-trace, serial + PR-8 regressions, 4 negctls
+
+# the shipping entrypoint alone (schedule from the config: double buffer)
+build/shipping/saccade_track --config configs/shipping/mamba_whole_graph.resolved.json \
+    --lineage models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json \
+    --attestation configs/shipping/mamba_head_realization.attestation.json \
+    --out <dir> datasets/MOT17/train/MOT17-02-SDP datasets/MOT17/train/MOT17-04-SDP ...
+```
