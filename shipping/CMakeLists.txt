@@ -210,14 +210,20 @@ if(TARGET saccade_tracking)
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_link_surface.cmake
         VERBATIM)
 
-    # The shipping tree (#465 PR-12): `cmake --install <build> --component
-    # shipping --prefix <tree>` gives
-    #   bin/saccade_track         RUNPATH $ORIGIN/../lib only (no build or venv
-    #                             path); lib/ is the slot a Phase C bundle
-    #                             would fill, empty here
+    # The shipping tree (#465 PR-12, bundled in Phase C PR-C1): `cmake --install
+    # <build> --component shipping --prefix <tree>` gives
+    #   bin/saccade_track         the launcher (launcher/saccade_track.sh): runs
+    #                             the entrypoint through the system loader with
+    #                             --library-path lib/vendor and --audit
+    #   libexec/saccade_track     the entrypoint, RUNPATH $ORIGIN/../lib only (no
+    #                             build or venv path); bytes as in PR-12
+    #   lib/saccade_loader_audit.so  the loader provenance check (src/loader_audit.c)
+    #   lib/vendor/<SONAME>       the bundled third-party set, pinned by sha256
+    #                             in third_party_set.json (owner decision C-D1)
+    #   licenses/                 each wheel's license files, THIRD_PARTY.md,
+    #                             Saccade's LICENSE / NOTICE
     #   share/saccade/...         the model root (install_model_root.cmake)
-    # Third-party runtime libraries (CUDA runtime, nvJPEG, TensorRT, LibTorch)
-    # are not in the tree: whether and how they ship is Phase C.
+    # docs/reference/native_runtime_resolved_config.md §16 (tree), §17 (bundle).
     # Device code: find_package(Torch) turns CMAKE_CUDA_ARCHITECTURES off and
     # compiles every CUDA target for TORCH_CUDA_ARCH_LIST (the local GPU when
     # unset). The shipping tree needs the explicit list below, LibTorch's own
@@ -236,7 +242,64 @@ if(TARGET saccade_tracking)
         if(NOT \"${TORCH_CUDA_ARCH_LIST}\" STREQUAL \"${SACCADE_SHIPPING_TORCH_CUDA_ARCH_LIST}\")
             message(FATAL_ERROR \"shipping tree: this build compiles CUDA for TORCH_CUDA_ARCH_LIST='${TORCH_CUDA_ARCH_LIST}'; configure with -DTORCH_CUDA_ARCH_LIST='${SACCADE_SHIPPING_TORCH_CUDA_ARCH_LIST}' (#465 PR-12)\")
         endif()" COMPONENT shipping)
-    install(TARGETS saccade_track RUNTIME DESTINATION bin COMPONENT shipping)
+    # The entrypoint bytes (PR-C1): a rebuild of the same sources is not
+    # byte-identical (entrypoint_pin.json), so the package carries the pinned
+    # PR-12 binary named by SACCADE_SHIPPING_ENTRYPOINT, hash-checked at
+    # install. Unset, the install takes this build's saccade_track (a
+    # development tree; the bundle check reports that it is not the pin).
+    set(SACCADE_SHIPPING_ENTRYPOINT "" CACHE FILEPATH
+        "The pinned saccade_track the shipping tree carries (sha256 = shipping/entrypoint_pin.json); empty = this build's")
+    if(SACCADE_SHIPPING_ENTRYPOINT)
+        install(CODE "
+            file(READ \"${CMAKE_CURRENT_SOURCE_DIR}/entrypoint_pin.json\" _pin)
+            string(JSON _want GET \"\${_pin}\" sha256)
+            if(NOT EXISTS \"${SACCADE_SHIPPING_ENTRYPOINT}\")
+                message(FATAL_ERROR \"shipping tree: ${SACCADE_SHIPPING_ENTRYPOINT} does not exist\")
+            endif()
+            file(SHA256 \"${SACCADE_SHIPPING_ENTRYPOINT}\" _got)
+            if(NOT _got STREQUAL _want)
+                message(FATAL_ERROR \"shipping tree: ${SACCADE_SHIPPING_ENTRYPOINT} sha256 \${_got} != \${_want} (shipping/entrypoint_pin.json)\")
+            endif()
+            set(_dst \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/libexec/saccade_track\")
+            file(MAKE_DIRECTORY \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/libexec\")
+            message(STATUS \"Installing: \${_dst} (pinned, sha256 \${_want})\")
+            file(COPY_FILE \"${SACCADE_SHIPPING_ENTRYPOINT}\" \"\${_dst}\")
+            file(CHMOD \"\${_dst}\" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)" COMPONENT shipping)
+    else()
+        install(TARGETS saccade_track RUNTIME DESTINATION libexec COMPONENT shipping)
+    endif()
+    install(PROGRAMS launcher/saccade_track.sh DESTINATION bin RENAME saccade_track COMPONENT shipping)
+
+    # The loader provenance check (PR-C1): C and libc only (it runs in the
+    # loader's audit namespace). Its bundled-name list comes from the pinned set.
+    enable_language(C)
+    set(SACCADE_THIRD_PARTY_SET ${CMAKE_CURRENT_SOURCE_DIR}/third_party_set.json)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SACCADE_THIRD_PARTY_SET})
+    file(READ ${SACCADE_THIRD_PARTY_SET} _saccade_tp)
+    string(JSON _saccade_tp_n LENGTH "${_saccade_tp}" entries)
+    math(EXPR _saccade_tp_last "${_saccade_tp_n} - 1")
+    set(_saccade_tp_names "")
+    foreach(_i RANGE ${_saccade_tp_last})
+        string(JSON _saccade_tp_soname GET "${_saccade_tp}" entries ${_i} soname)
+        string(APPEND _saccade_tp_names "    \"${_saccade_tp_soname}\",\n")
+    endforeach()
+    file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/loader_audit_names.inc
+        CONTENT "/* Generated from shipping/third_party_set.json; do not edit. */\nstatic const char *const kBundled[] = {\n${_saccade_tp_names}    NULL};\n")
+    add_library(saccade_loader_audit SHARED src/loader_audit.c)
+    target_include_directories(saccade_loader_audit PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+    target_compile_options(saccade_loader_audit PRIVATE -Wall -Wextra -Werror)
+    set_target_properties(saccade_loader_audit PROPERTIES
+        PREFIX "" C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF
+        INSTALL_RPATH "" INSTALL_RPATH_USE_LINK_PATH OFF)
+    add_dependencies(saccade_track saccade_loader_audit)
+    install(TARGETS saccade_loader_audit LIBRARY DESTINATION lib COMPONENT shipping)
+    install(CODE "
+        set(SACCADE_REPO_ROOT \"${SACCADE_REPO_ROOT}\")
+        set(SACCADE_PREFIX_DEST \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\")
+        set(SACCADE_THIRD_PARTY_SET \"${SACCADE_THIRD_PARTY_SET}\")
+        set(SACCADE_ROOT_purelib \"${_saccade_purelib}\")
+        set(SACCADE_ROOT_nvjpeg_wheel \"${saccade_nvjpeg_wheel_SOURCE_DIR}\")
+        include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/install_third_party.cmake\")" COMPONENT shipping)
     install(CODE "
         set(SACCADE_REPO_ROOT \"${SACCADE_REPO_ROOT}\")
         set(SACCADE_MODEL_ROOT_DEST \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/share/saccade\")

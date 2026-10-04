@@ -1049,3 +1049,93 @@ cmake --install build-release --component shipping --prefix <tree>
 bash scripts/native/run_shipping_container.sh pristine|strace <tree> <deps> <out>
 bash results/465_pr12_shipping/<label>/run.sh   # §16.3 gates 1-6 and N1-N8
 ```
+
+## 17. Bundle：第三方集合進 tree、launcher、loader provenance check（Phase C PR-C1）
+
+PR-C1 是 Phase C 的第一個 PR（[Phase C scope](native_runtime_phase_c_scope.md) §6）：把 PR-12 驗收過的 27 個第三方物件以原位元組放進 tree（owner 決策 C-D1），執行時不再需要 `LD_LIBRARY_PATH`。PR-C1 不改任何 stage 的計算，也不改 shipping 的 C++ 原始碼；entrypoint 與 operator library 的位元組都與 PR-12 相同。
+
+| 項目 | 位置 |
+|:--|:--|
+| 第三方集合 pin | `shipping/third_party_set.json`（SONAME、sha256、來源 wheel 與 root、授權檔）；`shipping/THIRD_PARTY.md`；產生工具 `scripts/native/export_third_party_set.py` |
+| entrypoint pin | `shipping/entrypoint_pin.json`；`SACCADE_SHIPPING_ENTRYPOINT` |
+| launcher | `shipping/launcher/saccade_track.sh` → `bin/saccade_track` |
+| loader provenance check | `shipping/src/loader_audit.c` → `lib/saccade_loader_audit.so` |
+| 安裝規則 | `shipping/CMakeLists.txt`、`shipping/cmake/install_third_party.cmake` |
+| 檢查工具 | `scripts/native/check_shipping_bundle.py`（`static`／`sources`／`runtime`）；`run_shipping_container.sh bundle`／`bundle-strace` |
+| 測試 | `tests/unit/test_shipping_bundle_checks.py`（含在真的 loader 上跑 auditor 的案例） |
+
+**owner 指示（2026-10-04，實作之前）**：先 probe glibc loader 的 `--library-path` 做法，再考慮改 `saccade_track`；優先保留 PR-12 executable 與 operator library 的位元組；`/proc/self/maps`／已載入物件的驗證是次要的 fail-closed provenance check；在 nvJitLink／cuFile／nvshmem 的散佈確認之前，bundle 只在本機 build 與測試；C-D5（簽章）＝v1 用 minisign。
+
+### 17.1 Probe（開發觀察，不是正式 run）
+
+`results/465_prc1_probe/p1_474da18b/`：bundle＝PR-12 r2 tree 與 deps 的 hard link，第三方物件放在 `lib/vendor/`；乾淨映像、MOT17-05-SDP 前 30 幀、`LD_DEBUG=files`。
+
+| case | 呼叫方式 | exit | 第三方物件來源 |
+|:--|:--|:--|:--|
+| P0 | PR-12 方式（tree＋deps，`LD_LIBRARY_PATH`） | 0 | deps 27 |
+| P1 | `ld.so --library-path <p>/lib/vendor`，無 `LD_LIBRARY_PATH` | 0 | vendor 27（含 operator library 的 `libnvrtc.so.13`） |
+| P2 | 直接 exec ELF，無 `LD_LIBRARY_PATH` | 127 | `libnvinfer.so.10: cannot open` |
+| P3 | P1＋`LD_LIBRARY_PATH` 指向一份不同的 libcublas | 0 | vendor 27（環境變數被 `--library-path` 取代） |
+| P4 | P1＋在 `<p>/nvidia/cu13/lib` 放一份多一個位元組的 libcublas | 0 | **那一份被載入**，沒有任何訊息 |
+| P5 | P1＋`--audit` auditor | 0 | vendor 27；載入集合＝P1＋auditor |
+| P6 | P4＋`--audit` | 127 | `foreign copy on the search path: …/nvidia/cu13/lib/libcublas.so.13` |
+
+P0、P1、P3、P4、P5 的 MOT txt 相同（`b3a1d9bb…`）。容器裡的 driver 物件是 7 個（P0 與 P1 相同，含 `libnvidia-ptxjitcompiler.so.1`）；§16.4 的 6 個是 host 上的數字。
+
+讀法：
+
+- `--library-path` 在 loader 的搜尋順序中排在 DT_RUNPATH 之前，所以 operator library（以 `dlopen` 載入、帶凍結的絕對 RUNPATH）的 `libnvrtc.so.13` 由 `lib/vendor` 解析：Phase C scope §5.1 的問題不必改 `saccade_track` 就解決。
+- **Phase C scope §5 的更正**：torch 系列（`libtorch*`、`libc10*`、`libgomp`）、`libnvinfer.so.10`、`libnvshmem_host.so.3` 帶的是 **DT_RPATH**，不是 RUNPATH；DT_RPATH 排在 `--library-path` 之前（P4），所以 `--library-path` 單獨擋不住在那些位置被放進去的檔案。把第三方物件放在 `<prefix>/lib/vendor/`（往下兩層）之後，每個相對 RPATH／RUNPATH 都展開在 `<prefix>` 之內；唯一的例外是 `libcusparseLt.so.0` RUNPATH 結尾的空項（目前工作目錄）。
+- auditor（rtld-audit，`--audit`）在載入之前就看得到每個搜尋候選路徑，不必改 `saccade_track` 的位元組，所以取代 scope §5.4 原本「在 `saccade_track` 裡讀 `/proc/self/maps`」的提案。
+
+### 17.2 改了什麼
+
+- **tree 的形狀**：`bin/saccade_track` 是 launcher（POSIX sh，只用 builtin）：`exec /lib64/ld-linux-x86-64.so.2 --library-path <prefix>/lib/vendor --audit <prefix>/lib/saccade_loader_audit.so --argv0 "$0" <prefix>/libexec/saccade_track "$@"`；呼叫端的 `LD_PRELOAD`、`LD_AUDIT`、`LD_LIBRARY_PATH` 先被 unset；prefix 含 `:` 時拒絕（loader 的路徑清單以 `:` 分隔）。ELF 移到 `libexec/saccade_track`，RUNPATH 仍是 `$ORIGIN/../lib`（`lib/` 只放 auditor，沒有第三方物件，所以直接 exec ELF 會在 loader 階段失敗，P2）。
+- **entrypoint 的位元組**：同一份 entrypoint 原始碼、同樣的 flag 重新 build，得到的 `saccade_track` 與 PR-12 的不同（同大小，10644 個位元組不同，分布在 `.rela.dyn`、`.rela.plt`、`.gnu.version*`、`.strtab` 的 nvcc `tmpxft_*` 名稱與 build-id；只記錄，不歸因）。所以 tree 帶的是 PR-12 正式 run r2 安裝的那一份（`d7c6e0d4…`，`shipping/entrypoint_pin.json`），由 `SACCADE_SHIPPING_ENTRYPOINT` 指定、安裝時比對 sha256；未設定時安裝這次 build 的 `saccade_track`，`static` 檢查會報告它不是 pin。
+- **第三方集合**：`install_third_party.cmake` 依 `third_party_set.json` 從 venv site-packages 與 FetchContent 的 nvJPEG wheel 複製 27 個物件到 `lib/vendor/<SONAME>`，逐檔比對 sha256；每個 wheel 的授權檔（也比對 sha256）到 `licenses/<wheel>/`，另放 `licenses/THIRD_PARTY.md` 與 Saccade 自己的 `LICENSE`／`NOTICE`。
+- **auditor**（C，只 NEED `libc.so.6`，沒有 RUNPATH）：從自己的路徑推出 `<prefix>`。`la_objsearch`：名字屬於 bundle 集合的，`lib/vendor/` 以外的候選一律跳過，若該候選檔案存在就 exit 127；相對路徑的候選（不論名字）同樣處理。`la_objopen`：bundle 名字的物件（realpath）必須在 `lib/vendor/`，operator library 必須是 model root 的那一份，任何 `libpython*`／`libtorch_python*` 都 exit 127。不要求 symbol binding 事件（`la_objopen` 回傳 0）。它**不**比對 3.5 GiB 的位元組：位元組的完整性由安裝時的 sha256 與 `static` 檢查負責（PR-C3 的 MANIFEST 驗證之後也會）。
+- **沒有動的**：shipping 與 tracking 的 C++ 原始碼、operator library、model root、PR-12 的檢查工具（`check_shipping_tree.py`）與它的組態（`run_shipping_container.sh pristine`／`strace` 不變）。
+- **不散佈**：PR-C1 產生的 tree 只在本機 build 與測試；在 Phase C scope §4 的授權確認之前，不上傳、不公開任何 tree 或包。
+
+### 17.3 開發期間已經看到的（在本節 commit 之前）
+
+都是工作樹上的試做，不是正式 run：`results/465_prc1_dev/t2`、`t3` 以 pin 的 entrypoint 安裝；`static` 11 項通過；`bundle` 容器跑 7 sequence，exit 0，`LD_LIBRARY_PATH` 未設，MOT txt 7/7 與 PR-12 `container_pristine` 相同；`bundle-strace` 的 `runtime` 3 項通過。host 上經 launcher 跑 MOT17-05 前 30 幀，`sources` 通過（46 個物件，第三方全部來自 `lib/vendor`）。這期間修過兩處：auditor 原本只接受絕對路徑（host 以相對 `--model-root` 執行時誤判 operator library，改成 realpath）；`sources` 原本沿用 PR-12 的名字配對，但 launcher 的 sh 與它 exec 的 loader 共用 pid、寫進同一個 `LD_DEBUG` 檔，改成只讀 auditor 載入之後的 'calling init' 路徑，並以 SONAME 分類。
+
+### 17.4 測量契約（正式 run 之前寫定）
+
+**組態**：同一台機器。`build-release/`：§16.3 的 configure 參數，加 `-DSACCADE_SHIPPING_ENTRYPOINT=<PR-12 r2 tree>/bin/saccade_track`；build `saccade_track`（連帶 build auditor），安裝到 `$R/tree`。oracle（`anchor`、`oracle-rows`）用 `build/` 既有的 extensions，`build/` 不 build 任何 target。容器同 §16.3 的映像與設定，但 bundle 模式：只掛 tree（唯讀）、MOT17 train（唯讀）與輸出目錄，不掛第三方目錄，不設 `LD_LIBRARY_PATH`。全部 GPU 步驟在 gpu0 lease 下依序執行。
+
+**有效性**（任一不成立 ⇒ 受影響的 gate 為 `UNRESOLVED`）：正式 run 在乾淨的 commit 上；`build/libsaccade_scan_torchop.so` 與 PR-12 r2 tree 的 `bin/saccade_track` 的 sha256 在整個 run 前後都分別等於 attestation 與 `entrypoint_pin.json` 的值；`anchor` 與 PR-2L `A_L_1` 7/7 相同、`oracle-rows` 有效（§13.3）；`container.txt` 顯示 Ubuntu 24.04、glibc 2.39、`LD_LIBRARY_PATH` 未設，且 §16.3 列的 9 個工具都不存在。
+
+**PASS 驗收規則**：PR-C1 的 verdict 是 `PASS` 若且唯若下列全部成立，否則是 `FAIL`（照 gate 分開報告）：
+
+1. **build 與安裝**：configure、build 成功，`saccade_track` POST_BUILD 通過；`cmake --install --component shipping` 成功（SM 清單、model root 4 個檔案、entrypoint pin、27 個第三方物件與全部授權檔的 sha256 都通過）。
+2. **靜態檢查**（`check_shipping_bundle.py static`，11 項都 PASS）：`layout_exact`（tree 恰好是預期的檔案集合）、`vendor_set_pinned`、`entrypoint_pinned`、`launcher_exact`、`licenses`、`g2_3_no_python_files`、`produced_elves`（entrypoint 只有 RUNPATH `$ORIGIN/../lib`；auditor 只 NEED `libc.so.6`、沒有搜尋路徑；operator library 是 attestation 的）、`search_path_containment`（例外只有 operator library 的絕對 RUNPATH 與 `libcusparseLt.so.0` 的空項，各以 sha256 綁定）、`g2_1_needed_closure`（從 entrypoint 與 operator library 出發，第三方名字全部在 `lib/vendor`，其餘是 base system／driver，沒有 Python）、`sm_ptx_entrypoint`、`glibc_baseline`（tree 裡每個 ELF，含 `lib/vendor`）。
+3. **host，經 launcher**：`LD_DEBUG=files` 下 `native_track_parity.py parity --track-binary $R/tree/bin/saccade_track --model-root $R/tree/share/saccade`（不給 `--track-library-path`；double buffer、trace）`EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7，且 `--against` PR-12 正式 run 的 `parity_pristine/report.json`：txt 與 trace 的 sha256 7/7 相同；`check_shipping_bundle.py sources` 通過（27 個第三方物件全部來自 `$R/tree/lib/vendor` 且位元組是 pin 的，operator library 與 auditor 來自 tree，沒有其他第三方物件、沒有 Python 函式庫）。
+4. **乾淨容器**（`run_shipping_container.sh bundle`）：7 sequence 在同一個 process 中跑完、exit 0；`parity --native-from` `EXACT`（三個 section 同第 3 條），且 `--against` 第 3 條的 report：txt 與 trace 7/7 相同。
+5. **G2-2／G2-4**（`run_shipping_container.sh bundle-strace`，7 sequence，exit 0）：`check_shipping_bundle.py runtime` 三項都 PASS：
+   - **exec chain**：恰好兩次 `execve`／`execveat`，都成功：先是 `/opt/saccade/bin/saccade_track`（launcher），再是 `/lib64/ld-linux-x86-64.so.2`，argv 以 `--library-path /opt/saccade/lib/vendor --audit /opt/saccade/lib/saccade_loader_audit.so` 開頭且含 `/opt/saccade/libexec/saccade_track`。這是 §16.3 第 6 條「恰好一次 `execve`」在 launcher 形式下的重新定義：兩次 exec 都不是 Python，sh 只執行 builtin；
+   - 沒有任何對 Python／Triton／inductor 路徑的 open（同 §16.3，含失敗的嘗試）；
+   - 成功 open 的 tree 內共享物件（以 sha256 比）恰好是 27 個 pin 的第三方物件＋operator library＋auditor；沒有任何 bundle 名字的物件從 `lib/vendor` 以外被開啟，也沒有 tree 以外的第三方物件。
+   
+   另外 `parity --native-from` 對這次 run `EXACT`，且 txt 與 trace 與第 4 條 7/7 相同。第 3–5 條的 harness 也檢查 `track_report.json` 的 `python_libraries_mapped` 為空。
+
+沒有容差。第 3–5 條的比較是逐位元組；任一不同就照 gate 報告第一個不同的檔案或項目，停在 PR-C1。
+
+**負控制**（tree 副本是 hard link；被改的檔案先刪再寫，不寫穿；每一個都必須被抓到）：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N1 | `SACCADE_SHIPPING_ENTRYPOINT` 指向這次 build 的 `saccade_track` | 安裝失敗（entrypoint pin） |
+| N2 | tree 副本的 `lib/vendor/libcublas.so.13` 多一個位元組 | `static`：`vendor_set_pinned` 失敗 |
+| N3 | tree 副本少 `lib/vendor/libnvrtc.so.13` | `static`：`layout_exact`、`vendor_set_pinned`、`g2_1_needed_closure` 失敗；容器 run（MOT17-05）exit 非 0 |
+| N4 | tree 副本在 `nvidia/cu13/lib/` 多一份（多一個位元組的）`libcublas.so.13` | `static`：`layout_exact` 失敗；容器 run（MOT17-05）exit 127，訊息是 auditor 的 `foreign copy on the search path` |
+| N5 | N4 的 tree，且 launcher 去掉 `--audit` 那一行 | `static`：`layout_exact`、`launcher_exact` 失敗；`bundle-strace`（MOT17-05）的 `runtime`：exec chain 與 opened set 失敗（那一份被開啟）。這一條顯示 runtime 擋下 N4 的是 auditor |
+| N6 | 容器帶 `LD_LIBRARY_PATH` 與 `LD_PRELOAD` 指向一份不同的 libcublas（唯讀掛載），加 `LD_DEBUG=files` | `bundle`（MOT17-05）exit 0、MOT txt 與第 4 條的 MOT17-05 相同、loader log 沒有任何來自那個目錄的物件 |
+| N7 | 容器直接 exec `/opt/saccade/libexec/saccade_track`（不經 launcher） | exit 127（loader 找不到 `libnvinfer.so.10`） |
+| N8 | tree 副本多一個 `share/saccade/helper.py` | `static`：`layout_exact`、`g2_3_no_python_files` 失敗 |
+| N9 | `bundle-strace` 映像以 `/bin/sh -c` 包住 launcher（MOT17-05 前 5 幀） | `runtime`：exec chain 失敗 |
+
+另有 `tests/unit/test_shipping_bundle_checks.py` 的拒絕案例，以及在真的 loader 上：DT_RPATH 的候選優先於 `--library-path`（沒有 auditor 時被放進去的那一份會被載入），有 auditor 時 exit 127。
+
+**不做的**：FPS 或任何效能比較；其他 GPU、其他主機（原生 Linux）、其他 glibc；第三方位元組在執行時的雜湊（安裝與 `static` 負責）；CLI 的開發選項（PR-C2）；tarball、MANIFEST、atomic 安裝與 minisign 簽章（PR-C3／C4）；任何散佈。

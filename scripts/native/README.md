@@ -13,7 +13,11 @@
 - `check_shipping_tree.py`
   - #465 PR-12：檢查 `cmake --install --component shipping` 的 shipping tree（G2 四項、`$ORIGIN` RUNPATH、SM＋PTX、glibc baseline），見 `docs/reference/native_runtime_resolved_config.md` §16。
 - `run_shipping_container.sh`
-  - #465 PR-12：在乾淨的 Ubuntu 24.04 容器（無 Python、無編譯器）跑 shipping tree，`pristine` 或加 `strace`。
+  - #465 PR-12：在乾淨的 Ubuntu 24.04 容器（無 Python、無編譯器）跑 shipping tree，`pristine` 或加 `strace`；PR-C1 加 `bundle`／`bundle-strace`（tree 自帶第三方集合、不設 `LD_LIBRARY_PATH`）。
+- `check_shipping_bundle.py`
+  - #465 PR-C1：檢查 bundle 後的 shipping tree（layout、vendor 集合 pin、entrypoint pin、launcher、auditor、search-path containment、G2 檢查、exec chain），見 `docs/reference/native_runtime_resolved_config.md` §17。
+- `export_third_party_set.py`
+  - #465 PR-C1：從 PR-12 正式 run 的 deps manifest 產生 `shipping/third_party_set.json` 與 `shipping/THIRD_PARTY.md`。
 
 ## 說明
 
@@ -30,7 +34,7 @@
 | `check_shipping_tree.py` | diagnostic | cli | G2 checks of the installed shipping tree (#465 Phase B PR-12). |
 | `coverage_native.sh` | stable | - | Configure/build native targets with coverage instrumentation. |
 | `rebuild.sh` | stable | - | Saccade C++/CUDA Extension Rebuild Script |
-| `run_shipping_container.sh` | diagnostic | cli | Run the installed shipping tree in a clean Ubuntu 24.04 container (#465 PR-12). |
+| `run_shipping_container.sh` | diagnostic | cli | Run the installed shipping tree in a clean Ubuntu 24.04 container (#465 PR-12, PR-C1). |
 | `verify_consumer_install.sh` | stable | cli | Fresh-consumer install test for the native extension (ADR 025). |
 
 <!-- END generated script index -->

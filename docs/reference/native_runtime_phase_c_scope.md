@@ -4,6 +4,8 @@
 > 基準：Phase B 終點＝PR-12（#524，`main`＝`856ccccb`），[native_runtime_resolved_config.md](native_runtime_resolved_config.md) §16；範圍詞彙與 G1／G2 定義沿用 [native_runtime_shipping_boundary.md](native_runtime_shipping_boundary.md) §0–§1。
 > 本文只定義 Phase C 的**決策、邊界與順序**；沒有執行 inference、沒有發任何數字。§3 的大小與 §4 的授權讀法是對現有檔案的靜態讀取，不是法律意見。
 
+> **更正（2026-10-04，PR-C1）**：PR-C1 的 probe（[native_runtime_resolved_config.md](native_runtime_resolved_config.md) §17.1）推翻了 §5 的兩處：(1) torch 系列、`libnvinfer`、`libnvshmem_host` 帶的是 DT_RPATH 不是 RUNPATH，而 DT_RPATH 在 loader 的搜尋順序中排在 `LD_LIBRARY_PATH`／`--library-path` 之前；(2) 修法改為 launcher 以 `ld.so --library-path <prefix>/lib/vendor --audit <auditor>` 執行未改動的 entrypoint，第三方物件放在 `lib/vendor/`（相對 RPATH 全部展開在 prefix 內），次要的 fail-closed 檢查是 rtld-audit library，不是在 `saccade_track` 裡讀 `/proc/self/maps`。另外，重新 build 的 `saccade_track` 與 PR-12 的位元組不同，所以 tree 帶 PR-12 的那一份（`shipping/entrypoint_pin.json`）。**C-D5＝minisign**（owner，2026-10-04，v1）。以下 §5、§6 PR-C1 已據此更正，其餘維持本文凍結時的內容。
+
 本文回答：**PR-12 的 shipping tree 要變成一個終端使用者可以安裝的包，還差什麼、按什麼順序做。**
 
 ---
@@ -45,7 +47,7 @@ C-D1 讓 G2 維持成立（bundle 的是 C/C++ 函式庫，不是 Python）。G1
 | operator library | 不 rebuild、不 re-attest，位元組不變 | C-D2；PR-12 owner 決策 1 |
 | 平台 | Linux x86_64 only；原生 Windows、macOS、aarch64 不在範圍 | ADR 025 矩陣；audit §8 |
 | CLI 開發選項 | PR-C2 決定（§5）；預設提案：`--measurement-mutation` 不進 release binary，`--trace`／`--report` 保留（驗收要用） | `--measurement-mutation` 是負控制注入，不該出現在使用者手上 |
-| 簽章形式 | PR-C3 只產 package digest（sha256）；簽章機制（key 管理、工具）在 PR-C4 前由 owner 定（C-D5，見 §6） | Phase B 的 trust root＝Git commit＋runtime-identity publication，對 release 不夠 |
+| 簽章形式 | PR-C3 只產 package digest（sha256）；簽章在 PR-C4 落地，機制＝**minisign**（C-D5，owner 2026-10-04，v1；key 管理在 PR-C4 寫定） | Phase B 的 trust root＝Git commit＋runtime-identity publication，對 release 不夠 |
 
 ---
 
@@ -91,12 +93,10 @@ NCCL、nvshmem、cusparseLt、cuFile、cuDNN 等是 `libtorch_cuda.so` 的 NEEDE
 
 ## 5. 已知的技術問題（PR-C1 必須處理）
 
-1. **operator library 的 `libnvrtc.so.13`**。operator library 由 `detector_host.cpp:198` 以 `dlopen` 載入；它的 NEEDED 有 `libnvrtc.so.13`，而 `saccade_track` 與 `libtorch_cuda.so` 都不 NEED 它。dynamic loader 解析這個 NEEDED 時只看 operator library 自己的 RUNPATH（7 個凍結的絕對路徑）、`LD_LIBRARY_PATH` 與系統路徑，**不看** `saccade_track` 的 `$ORIGIN/../lib`。拿掉 `LD_LIBRARY_PATH` 後，在別的機器上會解析失敗。不能 `patchelf`（會改動 attested 位元組）。候選修法：
-   - (a) 讓 `saccade_track` 在連結時 NEED `libnvrtc.so.13`，使它在啟動時從 `$ORIGIN/../lib` 載入，`dlopen` 時以 SONAME 命中已載入物件。operator library 不變；載入集合不變（PR-12 已載入 nvrtc）；`saccade_track` 的 NEEDED 從 13 變 14，POST_BUILD 檢查要跟著更新。**預設提案。**
-   - (b) 以 `$ORIGIN`-relative RUNPATH rebuild operator library 並 re-attest：違反 §2 預設與 C-D2，需 owner 另外決定。
+1. **operator library 的 `libnvrtc.so.13`**。operator library 由 `detector_host.cpp:198` 以 `dlopen` 載入；它的 NEEDED 有 `libnvrtc.so.13`，而 `saccade_track` 與 `libtorch_cuda.so` 都不 NEED 它；operator library 自己的 RUNPATH 是 7 個凍結的絕對路徑。不能 `patchelf`（會改動 attested 位元組）。**更正後的修法**（§17.1 P1）：loader 的 `--library-path` 排在 DT_RUNPATH 之前，所以 launcher 以 `ld.so --library-path <prefix>/lib/vendor` 執行時由 `lib/vendor` 解析；`saccade_track` 不必改。（原提案「讓 `saccade_track` NEED `libnvrtc.so.13`」不採用：它要改 entrypoint 的位元組。）
 2. **build host 會假通過**。operator library 的絕對 RUNPATH（`/home/ray/developer/ai/saccade/...`）在 build host 上存在，所以 host 上「沒有 `LD_LIBRARY_PATH` 也能跑」不能當證據。驗收只認乾淨容器，而且要在容器裡 `env -u LD_LIBRARY_PATH`。
-3. **bundled 物件之間的解析**。27 個物件中，凡是有第三方 NEEDED 的，RUNPATH 都含 `$ORIGIN`（例如 `libtorch_cuda.so`、`libcublas.so.13`、`libcusparse.so.12`、cuDNN 各檔），平放在 `lib/` 即可互相解析；沒有 RUNPATH 的（`libcudart`、`libnvrtc`、`libnvJitLink`、`libnccl`、`libcufile`、`libcupti`）都沒有第三方 NEEDED。PR-C1 的靜態檢查要對 `lib/` 每個物件逐一確認 NEEDED 在 `lib/`＋base system＋driver 內閉合，而不是只看 `saccade_track`。
-4. **wheel RUNPATH 會指到包外**。torch 系列的 RUNPATH 在 `$ORIGIN` **之前**列了 `$ORIGIN/../../nvidia/{cudnn,nvshmem,nccl,cusparselt,cu13}/lib`；cuDNN 有 `$ORIGIN/../../{cublas,cuda_nvrtc,cu13}/lib`；`libnvinfer` 有 `$ORIGIN/../nvidia/...`、`$ORIGIN/../tensorrt_*_libs`。在 `<prefix>/lib/` 的配置下，這些路徑落在 `<prefix>/..` 或 `<prefix>/` 底下，也就是包外。若使用者機器上剛好存在這些目錄，loader 會先載入那裡的同 SONAME 物件。因為 C-D1 要求位元組相同，不能改寫這些 RUNPATH。PR-C1 的處理：(a) `saccade_track` 啟動後檢查 `/proc/self/maps`，每個第三方共享物件都必須來自 `$ORIGIN/../lib`，否則 fail-closed（沿用 `detector_host.cpp:137` 讀 `/proc/self/maps` 的既有機制；目前它只回報 `python_libraries_mapped`，不 fail）；(b) 負控制：在 `<prefix>/../nvidia/cu13/lib` 放一份不同的 `libcublas.so.13`，必須被 (a) 擋下。
+3. **bundled 物件之間的解析**。27 個物件中，凡是有第三方 NEEDED 的，搜尋路徑都含 `$ORIGIN`，平放在同一個目錄即可互相解析；沒有搜尋路徑的（`libcudart`、`libnvrtc`、`libnvJitLink`、`libnccl`、`libcufile`、`libcupti`）都沒有第三方 NEEDED。PR-C1 的靜態檢查對 `lib/vendor` 每個物件逐一確認 NEEDED 閉合。
+4. **wheel 的搜尋路徑會指到包外**（更正：這些是 **DT_RPATH**）。torch 系列（`libtorch*`、`libc10*`、`libgomp`）的 DT_RPATH 在 `$ORIGIN` 之前列了 `$ORIGIN/../../nvidia/{cudnn,nvshmem,nccl,cusparselt,cu13}/lib`；`libnvinfer` 的 DT_RPATH 有 `$ORIGIN/../nvidia/...`、`$ORIGIN/../tensorrt_*_libs`；cuDNN 的 RUNPATH 有 `$ORIGIN/../../{cublas,cuda_nvrtc,cu13}/lib`。DT_RPATH 排在 `--library-path` 之前，那些位置若有同 SONAME 的檔案會被靜默載入（§17.1 P4）。不能改寫（C-D1 要求位元組相同）。PR-C1 的處理：(a) 第三方物件放在 `<prefix>/lib/vendor/`，每個相對搜尋路徑都展開在 `<prefix>` 之內（唯一例外是 `libcusparseLt.so.0` RUNPATH 結尾的空項＝工作目錄），配合 `static` 的 `layout_exact`（tree 恰好是預期的檔案）；(b) 次要的 fail-closed 檢查：launcher 以 `--audit` 載入 rtld-audit library，bundle 名字在 `lib/vendor` 以外的候選若存在就 exit 127（§17.1 P6）。
 5. **TensorRT 是 cu12 build、其餘是 cu13**。PR-12 已在這個混合組態下驗收；Phase C 不改，記為 named limit。
 
 ---
@@ -107,14 +107,14 @@ NCCL、nvshmem、cusparseLt、cuFile、cuDNN 等是 `libtorch_cuda.so` 的 NEEDE
 
 | PR | 內容 | 驗收 | 依賴 |
 |:--|:--|:--|:--|
-| **PR-C1** | **bundle**：committed 的第三方集合清單（`shipping/third_party_set.json`：SONAME、sha256、來源 wheel＋版本、授權檔）；`cmake --install --component shipping` 從清單複製到 `lib/` 並逐檔比對 sha256；§5.1 的 nvrtc 修法；§5.4 的載入來源自檢；`check_shipping_tree.py static` 改成閉包必須在 tree＋base＋driver 內完成（不再接受外部第三方目錄）；`licenses/` 與 `THIRD_PARTY.md` | 靜態：G2-1 閉包對 tree 內每個 ELF 完整、沒有 Python；G2-3；RUNPATH 規則（operator library 仍是唯一例外）；`lib/` 的 sha256 集合＝PR-12 的 27 項。乾淨容器 `env -u LD_LIBRARY_PATH`：EXACT，且與 PR-12 正式 run 7/7 相同；strace 的開啟集合＝PR-12 集合，全部來自 tree。負控制至少：少一個 lib、lib 多一個位元組、設回 `LD_LIBRARY_PATH` 指向一份不同的 lib（必須不被使用或被偵測）、移除 nvrtc 修法、§5.4 的包外 `libcublas.so.13` | — |
+| **PR-C1** | **bundle**（更正後，詳見 resolved config 文件 §17）：`shipping/third_party_set.json`（SONAME、sha256、來源 wheel 與 root、授權檔）；安裝時從清單複製到 `lib/vendor/` 並逐檔比對 sha256；`bin/saccade_track`＝launcher（`ld.so --library-path lib/vendor --audit`），ELF 在 `libexec/`，位元組＝PR-12 的 pin；rtld-audit provenance check；`check_shipping_bundle.py`；`licenses/` 與 `THIRD_PARTY.md` | §17.4：靜態 11 項；host 經 launcher EXACT 且與 PR-12 正式 run 7/7 相同、載入來源全在 tree；乾淨容器（無 `LD_LIBRARY_PATH`）EXACT 且相同；strace 的 exec chain（launcher → loader）與開啟集合＝bundle；負控制 N1–N9 | — |
 | **PR-C2** | **CLI surface**：決定開發選項去留（§2 預設提案）；release build 的 `saccade_track` 不含被移除的選項；`--help` 與錯誤訊息整理；不改任何 stage 計算 | 被移除的選項在 release binary 上是 unknown argument；保留的選項行為不變；release binary EXACT 且與 PR-C1 7/7 相同。若 binary 位元組改變，G2 靜態檢查與容器驗收重跑 | PR-C1 |
 | **PR-C3** | **package＋atomic staging**：tarball（命名含版本、`linux-x86_64`、`cu13.0`、`trt10.16`、`sm120`、`glibc2.39`）；`MANIFEST.json`（每檔 sha256、版本 pin、SM 清單、glibc baseline、source commit、attestation 與 lineage 引用、runtime-identity 座標）；package digest；POSIX sh 安裝器：解到同檔案系統的 staging → 依 MANIFEST 逐檔驗證 → `mv` 一次 rename；任何失敗都刪 staging、目標不動；只用 base system 工具（`sh`、`tar`、`sha256sum`） | 從 tarball 安裝到乾淨容器，EXACT 且與 PR-C2 7/7 相同；安裝器負控制：tarball 損壞、單檔被改、目標已存在、磁碟寫入中斷（模擬）都讓目標目錄維持原狀；PR-12 的 N2（非 atomic）不再成立 | PR-C2 |
 | **PR-C4** | **release readiness**：C-D5 簽章機制落地；§4 授權確認的結論寫入 `THIRD_PARTY.md`；`README.txt`（GPU＝sm_120、driver 需求、glibc ≥ 2.39、named limits）；最終驗收紀錄 | owner 確認 §4；簽章可被驗證、竄改後驗證失敗；最終 tarball 從乾淨容器安裝到跑完一次完整 7-seq EXACT | PR-C3、C-D5 |
 
 **仍待 owner 的決策**
 
-- **C-D5 簽章機制**（PR-C4 之前）：例如 minisign／GPG detached signature，或 Sigstore（cosign keyless）。牽涉 key 管理，不是工程預設可以決定的。
+- ~~**C-D5 簽章機制**~~：已定案＝**minisign**（owner，2026-10-04，v1）。key 的產生、保管與輪替在 PR-C4 寫定。
 - **§4 授權確認**（PR-C4 之前）：nvJitLink、cuFile、nvshmem 的散佈依據，以及整體散佈條件是否可接受。在確認之前可以完成 PR-C1–C3 的工程與本機驗收，但**不得公開散佈**任何 tarball。
 - 是否擴到其他 SM／TRT 版本（C-D2 的後續）、是否在原生 Linux（非 WSL2）主機上加一次驗收：不在本次 Phase C，需要時另開 scope。
 
@@ -138,5 +138,5 @@ Phase C 各 PR 共同不得做的事：改任何 stage 計算、preset、thresho
 
 - 沒有實作 PR-C1–C4；沒有改 CMake、安裝規則、檢查工具或 shipping 原始碼。
 - 沒有做法律判斷；§4 只是對授權檔的讀法。
-- 沒有決定簽章機制（C-D5）、其他 SM、其他平台。
+- 沒有決定其他 SM、其他平台（C-D5 後來於 2026-10-04 定為 minisign，見開頭的更正）。
 - 沒有執行任何 run、沒有量 parity、FPS 或精度。
