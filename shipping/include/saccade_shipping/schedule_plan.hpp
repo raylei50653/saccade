@@ -27,4 +27,13 @@ struct SchedulePlan {
 
 SchedulePlan plan_schedule(const ResolvedShippingConfig& cfg);
 
+enum class Schedule { Serial, DoubleBuffer };
+
+// The schedule an entrypoint runs. The config's plan is always validated
+// first (plan_schedule; a torn config throws ConfigError whatever is
+// requested); then the config's schedule, or Serial when a developer asks for
+// the PR-9 serial reference (`saccade_track --schedule serial`). The override
+// selects a runtime; it never skips validation.
+Schedule select_schedule(const ResolvedShippingConfig& cfg, bool serial_requested);
+
 }  // namespace saccade::shipping

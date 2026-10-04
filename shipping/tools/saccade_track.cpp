@@ -288,7 +288,9 @@ int run(const Options& opt) {
     }
     const sh::ResolvedShippingConfig cfg = sh::load_resolved_shipping_config_file(opt.config);
     const sh::DetectorInputs inputs{opt.lineage, opt.attestation};
-    if (opt.schedule == "serial" || !sh::plan_schedule(cfg).double_buffer) {
+    // Validates the config's schedule plan before the developer override is
+    // looked at: --schedule serial must not bypass the fail-closed checks.
+    if (sh::select_schedule(cfg, opt.schedule == "serial") == sh::Schedule::Serial) {
         const sh::RuntimeMutation m = sh::parse_runtime_mutation(opt.mutation);
         sh::SerialRuntime rt(cfg, inputs, opt.model_root);
         rt.set_mutation_for_measurement(m);

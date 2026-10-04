@@ -15,6 +15,7 @@
 | `test_math_model_doc_consistency.py` | eval,tracking | contract | active | Pin the LaTeX math-model document (``docs/latex``) to the code it describes. |
 | `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
 | `test_native_detector_oracle_pins.py` | system | contract | active | Oracle pins for the native detector (#465 Phase B PR-8, U3b-2). |
+| `test_native_double_buffer_oracle_pins.py` | system | contract | active | Oracle pins for the native double-buffer runtime (#465 Phase B PR-10, U5). |
 | `test_native_head_failure_localization_r2_runner.py` | system | contract | active | The #465 localization r2 runner implements its frozen declaration and nothing else. |
 | `test_native_head_failure_localization_runner.py` | system | contract | active | The #465 localization runner implements its frozen declaration and nothing else. |
 | `test_native_head_parity_libtorch_runner.py` | system | contract | active | The #465 PR-2L runner implements its frozen declaration and PR-2's policy verbatim. |

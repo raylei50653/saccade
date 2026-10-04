@@ -479,6 +479,33 @@ void test_schedule_plan(const sh::ResolvedShippingConfig& cfg) {
     serial.host_params.steps.schedule_double_buffer = false;
     serial.host_params.env.double_buffer.reset();
     CHECK(!sh::plan_schedule(serial).double_buffer);
+
+    // select_schedule: the override picks the runtime but never skips the
+    // validation (PR-10 review: `--schedule serial` bypassed plan_schedule).
+    CHECK(sh::select_schedule(cfg, false) == sh::Schedule::DoubleBuffer);
+    CHECK(sh::select_schedule(cfg, true) == sh::Schedule::Serial);
+    CHECK(sh::select_schedule(serial, false) == sh::Schedule::Serial);
+    CHECK(sh::select_schedule(serial, true) == sh::Schedule::Serial);
+    for (bool serial_requested : {false, true}) {
+        bool refused = false;
+        C torn = cfg;
+        torn.host_params.env.detect_barrier = std::string("full");
+        try {
+            sh::select_schedule(torn, serial_requested);
+        } catch (const ConfigError&) {
+            refused = true;
+        }
+        CHECK(refused);
+        refused = false;
+        C torn2 = cfg;
+        torn2.host_params.env.double_buffer.reset();  // disagrees with the recorded step
+        try {
+            sh::select_schedule(torn2, serial_requested);
+        } catch (const ConfigError&) {
+            refused = true;
+        }
+        CHECK(refused);
+    }
 }
 
 }  // namespace

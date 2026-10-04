@@ -50,4 +50,9 @@ SchedulePlan plan_schedule(const ResolvedShippingConfig& cfg) {
     return p;
 }
 
+Schedule select_schedule(const ResolvedShippingConfig& cfg, bool serial_requested) {
+    const SchedulePlan plan = plan_schedule(cfg);  // before the override is consulted
+    return serial_requested || !plan.double_buffer ? Schedule::Serial : Schedule::DoubleBuffer;
+}
+
 }  // namespace saccade::shipping

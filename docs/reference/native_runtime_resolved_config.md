@@ -681,7 +681,7 @@ PR-10 把 PR-9 的端到端 runtime 換成 oracle 本身的排程：boundary §2
 | graph 模式 | `DetectorHost::detect_graphed`（whole-detect graph）、`PostDetectorHost` 的 `GraphMode::Captured`（main NMS、GMC、tracker graph）、`IngestHost` 的兩個 pool（decode 與 normalize 分開） |
 | shipping entrypoint | `shipping/tools/saccade_track.cpp`：排程由 config 決定；`--schedule serial` 與新的 `--measurement-mutation` 值屬 `developer_build_debug` |
 | parity harness（`developer_build_debug`） | `scripts/eval/diagnostics/native_track_parity.py`（`--schedule double_buffer`，`--oracle-txt` 是 `native_detector_parity.py anchor` 的輸出；`--no-trace`） |
-| 測試 | `tests/native/test_shipping_double_buffer_runtime.cpp`（GPU；需要 model 與 MOT17，缺少時 SKIP）、`tests/unit/test_native_double_buffer_oracle_pins.py`（oracle 的排程與 graph 生命週期）、`tests/unit/test_native_track_parity.py`（新增 graph section、oracle log 解析、double-buffer oracle 的有效性） |
+| 測試 | `tests/native/test_shipping_double_buffer_runtime.cpp`（GPU；需要 model 與 MOT17，缺少時 SKIP）、`tests/unit/test_native_double_buffer_oracle_pins.py`（oracle 的排程與 graph 生命週期）、`tests/unit/test_native_track_parity.py`（新增 graph section、oracle log 解析、double-buffer oracle 的有效性）、`tests/unit/test_saccade_track_schedule_cli.py`（torn config 在 entrypoint 上 fail closed，含 `--schedule serial`；§14.7） |
 
 ### 14.1 照抄的 oracle 事實（排程與 graph）
 
@@ -787,6 +787,12 @@ PR-10 把 PR-9 的端到端 runtime 換成 oracle 本身的排程：boundary §2
 - FPS 只是同 session 的並列，不是效能主張：三者的時間定義不同，native 的 tracker 輸出仍每幀同步讀回（oracle 延後一幀），decode 在 host thread 上依序執行（oracle 預取）。
 - operator library 是 per-build 的：重新 configure／完整 build 可能重新編出不同位元組的 `.so`，之後必須依 §14.2 重新 attest（`anchor` 與 `A_L_1` 相同才可以）。
 - `saccade_track` 的 `DT_NEEDED` 仍含 OpenCV（經 `TRTEngine`）；拆掉是 PR-11。
+
+### 14.7 修訂 R1（owner review 之後）
+
+review 發現 `saccade_track` 以 `opt.schedule == "serial" || !plan_schedule(cfg).double_buffer` 選排程：`||` short-circuit，`--schedule serial` 時 `plan_schedule` 完全不執行，所以一份 torn config（`steps.schedule.double_buffer` 與 `SACCADE_DETECT_BARRIER`／`SACCADE_DOUBLE_BUFFER` 不一致）可以用 developer 選項繞過 §14.1 承諾的 fail-closed。修法：`select_schedule(cfg, serial_requested)` 先無條件執行 `plan_schedule`，override 只選 runtime、不跳過驗證；`saccade_track` 改用它。測試：`test_shipping_native_config.cpp` 釘住 `select_schedule`（兩種 torn config × 有無 override 都拒絕）；`test_saccade_track_schedule_cli.py` 直接跑 binary（不需 GPU：在載入任何模型之前就拒絕），torn config 加或不加 `--schedule serial` 都必須 exit 2 並給出 schedule 錯誤。修正前的 binary 剛好在兩個 `--schedule serial` case 失敗。
+
+預設路徑的選擇不變（headline config 仍是 double buffer），§14.4 的正式 run 不重做；修正 commit 上另跑一次確認（主 parity 與 PR-9 serial 回歸），結果記在 §14.4 之後的「確認」一行。
 
 ### 14.6 重現
 
