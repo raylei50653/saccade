@@ -36,7 +36,11 @@ Subcommands:
              entrypoint does not have (``strace -ff`` logs + its log): exit 2
              with ``saccade_track: unknown argument <option>``, the same exec
              chain, no open (even attempted) of anything under the model root,
-             of the operator library or of a GPU device node, and no output.
+             of the operator library or of a GPU device node, and no output
+             (including trace files and failed write attempts). Relative
+             opens require strace -yy dirfd/cwd annotations; unresolved or
+             incomplete opens fail closed. Historical absolute-path logs
+             remain usable.
 
 PR-C2 adds to ``static``: the entrypoint contains none of the byte strings in
 shipping/measurement_surface.json (no measurement hook, no developer option).
@@ -372,6 +376,26 @@ def _argv(line_strings: list[str]) -> list[str]:
     return line_strings[1:]
 
 
+def _open_path(call: str, argstr: str, path: str) -> str | None:
+    """Resolve an open path using strace -yy's dirfd/cwd annotation.
+
+    Plain absolute-path logs remain usable. Never infer a relative path's
+    base from an earlier fd: close/reuse/chdir may not have been traced.
+    """
+    if os.path.isabs(path):
+        return os.path.normpath(path)
+    if call == "openat" and path:
+        base = re.match(r'^(?:AT_FDCWD|\d+)<(/[^>]*)>,\s*"', argstr)
+        if base:
+            return os.path.normpath(os.path.join(base.group(1), path))
+    return None
+
+
+def _within(path: str, root: str) -> bool:
+    root = os.path.normpath(root)
+    return path == root or path.startswith(root + "/")
+
+
 def strace_records(
     prefix: Path,
 ) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]]]:
@@ -385,16 +409,43 @@ def strace_records(
         for line in log.read_text(errors="replace").splitlines():
             m = g2._SYSCALL.match(line.strip())
             if not m:
+                if re.match(r"^(?:\d+\s+)?(?:openat|open)\(", line.strip()):
+                    opens.append(
+                        {
+                            "path": "",
+                            "rc": -1,
+                            "unresolved": True,
+                            "raw": line.strip(),
+                            "write": False,
+                        }
+                    )
                 continue
             call, argstr, rc = m.group(1), m.group(2), int(m.group(3))
             strings = [
                 s.encode().decode("unicode_escape") for s in g2._STRING.findall(argstr)
             ]
-            rec = {"call": call, "path": strings[0] if strings else "", "rc": rc}
+            rec: dict[str, Any] = {
+                "call": call,
+                "path": strings[0] if strings else "",
+                "rc": rc,
+            }
             if call.startswith("exec"):
                 rec["argv"] = _argv(strings)
                 execs.append(rec)
             else:
+                resolved = _open_path(call, argstr, rec["path"])
+                rec["unresolved"] = resolved is None
+                rec["raw"] = line.strip()
+                if resolved is not None:
+                    rec["path"] = resolved
+                # Inspect the flags after the quoted path, not path text.
+                quoted = g2._STRING.search(argstr)
+                flags = argstr[quoted.end() :] if quoted else ""
+                rec["write"] = bool(
+                    re.search(
+                        r"\b(?:O_WRONLY|O_RDWR|O_CREAT|O_TRUNC|O_APPEND)\b", flags
+                    )
+                )
                 opens.append(rec)
     return len(logs), execs, opens
 
@@ -497,24 +548,53 @@ def cmd_rejected(args: argparse.Namespace) -> int:
         "log": log[-5:],
     }
     checks["exec_chain"] = exec_chain(execs, mount)
-    model_root = f"{mount}/{g2.MODEL_ROOT}/"
+    unresolved = [o["raw"] for o in opens if o["unresolved"]]
+    model_root = f"{mount}/{g2.MODEL_ROOT}"
     touched = sorted(
         {
             o["path"]
             for o in opens
-            if os.path.normpath(o["path"]).startswith(model_root)
+            if _within(o["path"], model_root)
             or os.path.basename(o["path"]) == "libsaccade_scan_torchop.so"
         }
     )
-    checks["no_model_root_open"] = {"pass": not touched, "attempted": touched}
+    checks["no_model_root_open"] = {
+        "pass": not touched and not unresolved,
+        "attempted": touched,
+        "unresolved": unresolved,
+    }
     devices = sorted({o["path"] for o in opens if _GPU_DEVICE.match(o["path"])})
-    checks["no_gpu_device_open"] = {"pass": not devices, "attempted": devices}
+    checks["no_gpu_device_open"] = {
+        "pass": not devices and not unresolved,
+        "attempted": devices,
+        "unresolved": unresolved,
+    }
+    # The container runner mounts out_dir at /out. Include paths named by
+    # the actual entrypoint arguments as well as the runner's defaults.
+    output_paths = {"/out/native", "/out/trace", "/out/track_report.json"}
+    for e in execs:
+        for i, arg in enumerate(e["argv"][:-1]):
+            if arg in ("--out", "--trace", "--report"):
+                output_paths.add(os.path.normpath(e["argv"][i + 1]))
     outputs = [
-        str(p)
-        for p in (args.out_dir / "native", args.out_dir / "track_report.json")
-        if p.exists()
+        str(args.out_dir / p.removeprefix("/out/"))
+        for p in sorted(output_paths)
+        if p.startswith("/out/")
+        and os.path.lexists(args.out_dir / p.removeprefix("/out/"))
     ]
-    checks["no_output"] = {"pass": not outputs, "found": outputs}
+    writes = sorted(
+        {
+            o["path"]
+            for o in opens
+            if o["write"] and any(_within(o["path"], p) for p in output_paths)
+        }
+    )
+    checks["no_output"] = {
+        "pass": not outputs and not writes and not unresolved,
+        "found": outputs,
+        "attempted": writes,
+        "unresolved": unresolved,
+    }
     report = {
         "schema": SCHEMA,
         "kind": "rejected",

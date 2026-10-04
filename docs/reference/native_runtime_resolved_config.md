@@ -1366,3 +1366,15 @@ bash results/465_prc2_cli/<label>/run.sh   # §18.4 gates 1-6, M1-M6, N1-N9
 .venv/bin/python scripts/eval/diagnostics/native_track_parity.py parity --entrypoint measurement \
     --out <out> --oracle-rows <oracle_rows> --oracle-txt <anchor> --mutation stale_gmc_input
 ```
+
+### 18.8 Review 修正：拒絕檢查的路徑與 trace 輸出
+
+Review 在 `60d66da7`／republish `2e0ae90c` 重現兩個 checker 漏檢：只有 `trace/` 輸出時 `no_output` 仍通過；model-root 本身與 directory-relative `openat` 也可能被漏掉。原始三次拒絕紀錄沒有這些存取或 trace 輸出；這是驗收工具的覆蓋缺口，沒有發現 shipping binary 違反拒絕契約。
+
+修正後 `rejected` 的五個 gate 名稱不變，判定收緊：
+
+- `no_model_root_open` 包含 model-root 本身。相對 `openat` 以 `strace -yy` 的 dirfd／`AT_FDCWD` cwd 註記解析；不推測未追蹤的 fd／cwd 狀態。相對路徑無法解析、或 open 紀錄不完整時，model／GPU／output 三項都 fail closed，報告列出 `unresolved`。
+- `no_output` 包含 `native/`、`track_report.json`、`trace/`，並從 exec argv 讀取實際的 `--out`／`--report`／`--trace` 路徑。即使檔案沒有留下，對這些路徑的寫入 open 嘗試（含失敗）也必須被抓到。
+- 回歸測試涵蓋存留 trace、directory-relative model open、cwd-relative model open、GPU 裝置、無法解析／不完整的 open、失敗的 trace 寫入、自訂 trace 路徑，以及能解析的無關唯讀 open。
+
+後續驗證保留 §18.5 的原始紀錄，另建新結果目錄：以更新的 checker 重驗三次歷史拒絕 log，再在同一乾淨容器以 `strace -yy` 新跑三次被移除的選項。這次只驗證拒絕 gate 與 checker，沒有重跑完整 detector／MOT parity；shipping 原始碼與 entrypoint／operator library pin 不變，§18.5 的正式 run 仍是原來的證據。

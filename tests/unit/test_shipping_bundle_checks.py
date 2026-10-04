@@ -457,6 +457,90 @@ def test_rejected_rejects(
     assert not r["pass"] and not r["checks"][check]["pass"]
 
 
+@pytest.mark.parametrize(
+    ("line", "check"),
+    [
+        (
+            'openat(AT_FDCWD, "/opt/saccade/share/saccade", O_RDONLY|O_DIRECTORY) = 7',
+            "no_model_root_open",
+        ),
+        (
+            'openat(7</opt/saccade/share/saccade>, "configs/shipping/x.json", O_RDONLY) = 8',
+            "no_model_root_open",
+        ),
+        (
+            'openat(AT_FDCWD</opt/saccade>, "share/saccade/models/x.engine", O_RDONLY) = -1 ENOENT',
+            "no_model_root_open",
+        ),
+        ('openat(7</dev>, "dxg", O_RDWR) = 8', "no_gpu_device_open"),
+        (
+            'openat(AT_FDCWD, "/dev/../dev/nvidiactl", O_RDWR) = -1 ENOENT',
+            "no_gpu_device_open",
+        ),
+        (
+            'openat(AT_FDCWD, "/out/trace/MOT17-05-SDP/detector.bin", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 8',
+            "no_output",
+        ),
+        (
+            'openat(7</out/trace>, "detector.bin", O_WRONLY|O_CREAT, 0666) = -1 EACCES',
+            "no_output",
+        ),
+    ],
+)
+def test_rejected_resolves_paths_and_detects_write_attempts(
+    tmp_path: Path, line: str, check: str
+) -> None:
+    # No output survives on disk: even a failed write must be detected.
+    r = _rejected(tmp_path, [LAUNCHER, LOADER, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    assert not r["pass"] and not r["checks"][check]["pass"]
+    assert r["checks"][check]["attempted"]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'openat(7, "configs/shipping/x.json", O_RDONLY) = 8',
+        'openat(AT_FDCWD, "share/saccade/configs/shipping/x.json", O_RDONLY) = 8',
+        'open("relative.engine", O_RDONLY) = -1 ENOENT',
+        'openat(7, "x.engine", O_RDONLY <unfinished ...>',
+    ],
+)
+def test_rejected_fails_closed_on_unresolved_open(tmp_path: Path, line: str) -> None:
+    r = _rejected(tmp_path, [LAUNCHER, LOADER, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    assert not r["pass"]
+    for check in ("no_model_root_open", "no_gpu_device_open", "no_output"):
+        assert not r["checks"][check]["pass"]
+        assert r["checks"][check]["unresolved"] == [line]
+
+
+def test_rejected_allows_resolved_unrelated_read(tmp_path: Path) -> None:
+    line = 'openat(AT_FDCWD</>, "etc/ld.so.cache", O_RDONLY) = 3</etc/ld.so.cache>'
+    r = _rejected(tmp_path, [LAUNCHER, LOADER, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    assert r["pass"]
+
+
+@pytest.mark.parametrize(
+    "name", ["trace/MOT17-05-SDP/detector.bin", "track_report.json"]
+)
+def test_rejected_detects_surviving_output(tmp_path: Path, name: str) -> None:
+    output = tmp_path / "out" / name
+    output.parent.mkdir(parents=True)
+    output.write_bytes(b"output")
+    r = _rejected(tmp_path, [LAUNCHER, LOADER, *_REJECTED_OPENS], _REJECTED_LOG)
+    assert not r["pass"] and not r["checks"]["no_output"]["pass"]
+
+
+def test_rejected_checks_output_paths_from_argv(tmp_path: Path) -> None:
+    loader = LOADER.replace(
+        '"--config", "c"', '"--config", "c", "--trace", "/out/custom_trace"'
+    )
+    line = (
+        'openat(AT_FDCWD, "/out/custom_trace/detector.bin", O_WRONLY|O_CREAT, 0666) = 8'
+    )
+    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    assert not r["pass"] and not r["checks"]["no_output"]["pass"]
+
+
 # ── launcher ───────────────────────────────────────────────────────────────────
 
 
