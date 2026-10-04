@@ -1206,3 +1206,53 @@ cmake --install build-release --component shipping --prefix <tree>
 bash scripts/native/run_shipping_container.sh bundle|bundle-strace <tree> <out>
 bash results/465_prc1_bundle/<label>/run.sh   # §17.4 gates 1-5 and the negative controls
 ```
+
+## 18. Shipping CLI：移除開發選項、measurement 邊界（Phase C PR-C2）
+
+PR-C2 是 Phase C 的第二個 PR（[Phase C scope](native_runtime_phase_c_scope.md) §6）：shipping 的 `saccade_track` 不再有任何開發／量測選項，也不含任何 mutation 程式碼；負控制注入只存在於一個明確、不安裝的 developer build。PR-C2 不改任何 stage 的計算，也不改 engine、operator library、27 個第三方物件的閉包、launcher／auditor、`sm_120` 與 Ubuntu 24.04 的契約。entrypoint 的原始碼改了，所以它的位元組改變，pin 換成新的一份（§18.4）。
+
+| 項目 | 位置 |
+|:--|:--|
+| shipping entrypoint | `shipping/tools/saccade_track.cpp`（只有 shipping 介面）；共用的 sequence loop／trace／report：`shipping/tools/track_driver.hpp` |
+| developer build | `shipping/tools/saccade_track_measurement.cpp` → `build*/shipping/saccade_track_measurement`（不安裝） |
+| measurement 邊界 | `SACCADE_SHIPPING_MEASUREMENT_HOOKS`；`shipping/CMakeLists.txt` 的 `saccade_shipping_variants()`：`saccade_shipping_{native,ingest,detector,runtime}` 與各自的 `_measurement` |
+| 禁止的位元組字串 | `shipping/measurement_surface.json`；POST_BUILD `shipping/cmake/check_no_measurement_surface.cmake`；`check_shipping_bundle.py static` 的 `entrypoint_no_measurement_surface` |
+| 被拒絕的選項 | `check_shipping_bundle.py rejected`（launcher 的 strace log） |
+| harness | `native_track_parity.py parity --entrypoint shipping|measurement` |
+| 測試 | `tests/unit/test_shipping_measurement_surface.py`、`tests/unit/test_shipping_bundle_checks.py`、`tests/unit/test_native_track_parity.py`；GPU：`tests/native/test_shipping_{serial,double_buffer}_runtime.cpp`、`test_shipping_post_detector_host.cpp`（改連 `_measurement`） |
+
+**owner 指示（2026-10-04，實作之前）**：`--measurement-mutation` 不再被 shipping `saccade_track` 接受，且在載入模型／GPU 之前 fail closed；盤點 CLI，只保留正式 shipping 選項，developer／test-only 功能移到明確的非 shipping 路徑；parity harness 不再依賴 production CLI 的 mutation flag，負控制仍要保留；不改 engine、operator library、27-lib closure、loader／auditor、`sm_120`、Ubuntu 24.04 contract；正式 run 之前凍結新的 CLI／harness 契約，確認 entrypoint／operator library 的 hash 不變；全量驗收仍需 detector 5316/5316 EXACT、MOT 7/7 byte-identical、graph captures 7/7 identical，並與 PR-12 正式 run 完全一致；runtime identity 有變更就照 C1 做 stacked republish。核心原則：不要把 `--measurement-mutation` 換成另一個 hidden flag，shipping path 必須完全沒有 mutation capability。
+
+§13／§14 的負控制寫的是 `saccade_track --measurement-mutation`：PR-C2 之後是 `saccade_track_measurement --measurement-mutation`（harness 的 `--entrypoint measurement`）；那兩節的內容是當時的紀錄，不改寫。
+
+### 18.1 CLI 盤點
+
+| 選項 | PR-C1 | PR-C2 | 理由 |
+|:--|:--|:--|:--|
+| `--config`、`--lineage`、`--attestation`、`--model-root`、`--out`、`SEQUENCE_DIR...` | shipping | shipping，不變 | entrypoint 的輸入與輸出位置（boundary §2） |
+| `--report JSON` | 「developer measurement」 | **shipping** | 只寫檔、不改計算；驗收讀它的 load report、graph 計數與 `python_libraries_mapped`（Phase C scope §2 的預設提案）。格式改為 `saccade.native_track_report/v2`：加 `entrypoint`，移除 `mutation` 與 `max_frames` |
+| `--trace DIR` | 「developer measurement」 | **shipping** | 只寫檔、不改計算；detector 5316/5316 的驗收要在 shipping binary 上讀它（scope §2）。每幀多一次 main stream 的 sync（§14 的限制，不變） |
+| `--max-frames N` | 開發選項 | **移到 developer build** | 只為了短跑測試：把輸入截成前 N 幀，截斷處的 sequence tail 不是 shipping 的語意；oracle 的 `--max-frames` 也是 eval 腳本的測試選項 |
+| `--schedule serial` | 開發選項 | **移到 developer build** | 覆寫 config 的排程。shipping 的排程只由 resolved config 決定（`select_schedule(cfg, false)`）；config 本身若指名 serial，shipping 仍走 `SerialRuntime` |
+| `--measurement-mutation M` | 開發選項（負控制） | **移到 developer build** | 負控制注入（owner 指示） |
+
+`--max-frames` 與 `--schedule serial` 的去留是本 PR 的決定（scope §2 只寫了 `--measurement-mutation`），owner review 時可以改。shipping binary 遇到這三個（或任何其他未列出的）選項，在 `parse_args` 就以 exit 2 結束（`saccade_track: unknown argument <option>`），之前不讀任何檔案；用法訊息只列 shipping 介面。
+
+### 18.2 改了什麼
+
+- **measurement 邊界**：四個帶有量測 hook 的 runtime library 各 build 兩次，同一份原始碼：`<name>`（shipping）與 `<name>_measurement`（PUBLIC `SACCADE_SHIPPING_MEASUREMENT_HOOKS=1`，所以使用端看到相同的宣告）。只在 `#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS` 之內宣告與實作的是：`DetectorMutation`（6 種）與 `DetectorHost::set_mutation_for_measurement`；`detect_graphed` 原本的 `refresh_input` 參數改成 `DetectorHost::set_stale_graph_input_for_measurement`（double-buffer runtime 每個 sequence 設一次，語意與原本逐呼叫傳入相同）；`JpegDecoder::force_decoupled_for_measurement`；`PostDetectorHost::set_pre_roll_for_measurement`、`set_stale_gmc_input_for_measurement`；`RuntimeMutation`（3 種）與 `DoubleBufferMutation`（3 種）以及它們的 `parse_*`／`*_name`、setter、成員與分支。shipping 物件裡這些全都不存在：shipping 的呼叫端無法指名它們（沒有宣告），mutation 為 `none` 時 measurement variant 執行的敘述與 shipping 相同。
+- **兩個 entrypoint**：`saccade_track.cpp` 只解析 shipping 介面（`track_driver.hpp` 的 `parse_interface_arg`），以 `#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS` `#error` 拒絕以 measurement variant 編譯；`saccade_track_measurement.cpp` 在同一個介面之外加 `--measurement-mutation`、`--schedule serial`、`--max-frames`，以 `#ifndef` `#error` 拒絕以 shipping variant 編譯，report 帶 `entrypoint: "saccade_track_measurement"` 與 `measurement`（`mutation`、`schedule_override`、`max_frames`）。兩者共用 `track_driver.hpp`（不含任何依賴巨集的程式碼）。`saccade_track_measurement` 不在任何 `install()` 裡。
+- **使用端**：`saccade_replay`、`saccade_ingest_probe`、`saccade_detector_probe` 與用到 hook 的 GPU 測試（serial／double-buffer runtime、post-detector host）改連 `_measurement`；其餘 GPU 測試連 shipping variant。沒有任何 target 同時連兩種 variant。
+- **建置時與安裝後的檢查**：`saccade_track` 的 POST_BUILD 在 link surface 之外再跑 `check_no_measurement_surface.cmake`：binary 含 `measurement_surface.json` 的任一字串就 build 失敗。字串是 mutation 的列舉、名稱與 setter 的片段（`Mutation`、`_mutation`、` mutation`、`mutation_`、`_for_measurement`）、developer build 的名字與三個選項、12 個 mutation 名稱、`stale_graph_input`、`force_decoupled`。`check_shipping_bundle.py static` 多一項 `entrypoint_no_measurement_surface`（共 12 項）。新的 `rejected` 子命令判讀 launcher 收到被移除的選項時的 strace log：exit 2 與 `unknown argument` 訊息、exec chain 仍是 launcher → loader、沒有開啟（含失敗的嘗試）model root 之下任何檔案或 operator library、沒有開啟 GPU 裝置節點（`/dev/dxg`、`/dev/nvidia*`）、沒有任何輸出。
+- **harness**：`--entrypoint shipping`（預設）只給 `saccade_track` 7 個介面選項；`--mutation`、`--schedule serial`、`--max-frames` 必須搭配 `--entrypoint measurement`，否則 argparse 拒絕。report 的 validity 檢查 `entrypoint` 是要求的那一個、shipping report 沒有 `measurement` 記錄、measurement report 的記錄等於要求。`--against` 除了 txt 與 trace 的 sha256，也比較每個 sequence 的 native graph capture／replay 計數。
+- **沒有動的**：engine、operator library（`aa84cccd…`）、model root、`third_party_set.json`（27 個）、launcher、auditor、安裝規則（除了 entrypoint 的 pin 值）、SM 清單、glibc baseline、容器映像與 `run_shipping_container.sh`。
+
+### 18.3 開發期間已經看到的（在本節 commit 之前）
+
+都是工作樹上的試做，不是正式 run（`results/465_prc2_dev/t1/`，oracle 借用 PR-C1 r2 的 `anchor`／`oracle_rows`，所以 harness 的 verdict 是 `UNRESOLVED`：oracle 不在這個 commit）：
+
+- **位元組字串**（`measurement_surface.json` 的 23 個）：`build-release` 與 `build/`（Debug）的新 shipping `saccade_track` 都是 0 個；PR-12 pin 的 `d7c6e0d4…` 有 20 個（例如 `_mutation` 10 次、`_for_measurement` 4 次、`--measurement-mutation`、`--max-frames` 與全部 12 個 mutation 名稱；`nm` 看得到 `DetectorHost::set_mutation_for_measurement`、`parse_detector_mutation` 等符號）；`saccade_track_measurement` 在 `build-release` 有 22 個、Debug 有 23 個。第一版清單用了 `measurement` 與 `mutation` 兩個泛用字，Debug 的 shipping `saccade_track` 因此被 POST_BUILD 誤判：tracker 的 Kalman filter 有 `measurement`、`output_measurement`，config 檢查有 `PermutationOf`（含 `mutation`）。改成上列的精確片段。
+- **parity**（gpu0 lease）：新 shipping binary `EXACT`（`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7），`--against` PR-12 正式 run 的 `parity_pristine`：txt、trace、graph 計數 7/7 相同；`--entrypoint measurement`（mutation `none`）與 shipping 7/7 相同；`stale_gmc_input` 的 `mot_txt` 是 `DIFFERS`。
+- **被拒絕的選項**（乾淨容器＋strace，dev tree）：`--measurement-mutation none`、`--schedule serial`、`--max-frames 5` 三者的 `rejected` 5 項都通過；對 PR-C1 r2 一次正常 run 的 strace log 跑 `rejected`，exit／model root／GPU 裝置／輸出 4 項失敗、exec chain 通過。`static` 在 dev tree 上除了 `entrypoint_pinned`（pin 仍是 PR-12 的）之外 11 項通過。
+- **GPU 測試**：`build/` 的 `ctest -R 'saccade_shipping|saccade_resolved'` 12/12 通過（含 serial／double-buffer runtime 的 mutation 測試，改連 `_measurement`）。`build/libsaccade_scan_torchop.so` 在 build 前後都是 `aa84cccd…`（只 build 具名 target）。
+- **「GPU 之前」的定義**：`LD_DEBUG=files` 顯示即使參數錯誤，`libcuda.so.1` 也在 `main` 之前被 `libcublasLt.so.13` 的初始化以 `dlopen` 載入，所以「在 GPU 之前 fail closed」不能以 `libcuda` 沒有載入來判定；改以「沒有開啟 GPU 裝置節點、沒有開啟 model root 與 operator library」判定（正常 run 會開啟 `/dev/dxg`、`/dev/nvidia-uvm`）。

@@ -32,6 +32,14 @@ Subcommands:
              compiler open, and every shared object it opened from the tree is
              the vendor set + the operator library + the auditor, with no
              bundled name opened from anywhere else.
+``rejected`` (PR-C2) a run of the launcher given an option the shipping
+             entrypoint does not have (``strace -ff`` logs + its log): exit 2
+             with ``saccade_track: unknown argument <option>``, the same exec
+             chain, no open (even attempted) of anything under the model root,
+             of the operator library or of a GPU device node, and no output.
+
+PR-C2 adds to ``static``: the entrypoint contains none of the byte strings in
+shipping/measurement_surface.json (no measurement hook, no developer option).
 
 Usage::
 
@@ -39,6 +47,9 @@ Usage::
     check_shipping_bundle.py sources --log-prefix DIR/ld --tree TREE --report sources.json
     check_shipping_bundle.py runtime --strace-prefix DIR/s --tree TREE \\
         --tree-mount /opt/saccade --report runtime.json
+    check_shipping_bundle.py rejected --strace-prefix DIR/s --log DIR/saccade_track.log \\
+        --out-dir DIR --option=--measurement-mutation --tree-mount /opt/saccade \\
+        --report rejected.json
 
 Exit 0: every check passes; 1: a check fails (named in the report); 2: error.
 """
@@ -49,6 +60,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -60,6 +72,7 @@ SCHEMA = "saccade.shipping_bundle/v1"
 REPO = Path(__file__).resolve().parents[2]
 THIRD_PARTY_SET = REPO / "shipping/third_party_set.json"
 ENTRYPOINT_PIN = REPO / "shipping/entrypoint_pin.json"
+MEASUREMENT_SURFACE = REPO / "shipping/measurement_surface.json"
 LAUNCHER_SOURCE = REPO / "shipping/launcher/saccade_track.sh"
 NOTICE_SOURCE = REPO / "shipping/THIRD_PARTY.md"
 LAUNCHER = "bin/saccade_track"
@@ -78,6 +91,22 @@ MODEL_ROOT_FILES = (
 # Search-path entries that do not expand inside the tree, each bound to the
 # bytes that carry it.
 _CUSPARSELT = "libcusparseLt.so.0"
+# GPU device nodes a CUDA context opens (WSL2: /dev/dxg; native: /dev/nvidia*).
+_GPU_DEVICE = re.compile(r"^/dev/(dxg$|nvidia)")
+
+
+def measurement_surface(binary: Path, surface: Path) -> dict[str, Any]:
+    """Occurrences in `binary` of each byte string the shipping entrypoint must
+    not contain (shipping/measurement_surface.json, PR-C2)."""
+    data = binary.read_bytes() if binary.is_file() else b""
+    tokens = _load(surface)["forbidden"]
+    found = {t: data.count(t.encode()) for t in tokens if t.encode() in data}
+    return {
+        "pass": bool(data) and not found,
+        "found": found,
+        "tokens": len(tokens),
+        "surface": str(surface),
+    }
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -301,6 +330,10 @@ def cmd_static(args: argparse.Namespace) -> int:
         "closure": clo,
     }
 
+    checks["entrypoint_no_measurement_surface"] = measurement_surface(
+        ep, args.measurement_surface
+    )
+
     cuda = g2.cuda_archs(ep) if ep.is_file() else {"sass": [], "ptx": []}
     checks["sm_ptx_entrypoint"] = {
         "pass": set(cuda["sass"]) == g2.SHIPPING_SASS
@@ -339,10 +372,13 @@ def _argv(line_strings: list[str]) -> list[str]:
     return line_strings[1:]
 
 
-def cmd_runtime(args: argparse.Namespace) -> int:
-    logs = sorted(args.strace_prefix.parent.glob(args.strace_prefix.name + ".*"))
+def strace_records(
+    prefix: Path,
+) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]]]:
+    """(log count, execve records, open records) of ``strace -ff -o prefix``."""
+    logs = sorted(prefix.parent.glob(prefix.name + ".*"))
     if not logs:
-        raise g2.CheckError(f"no strace logs {args.strace_prefix}.*")
+        raise g2.CheckError(f"no strace logs {prefix}.*")
     execs: list[dict[str, Any]] = []
     opens: list[dict[str, Any]] = []
     for log in logs:
@@ -360,8 +396,11 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                 execs.append(rec)
             else:
                 opens.append(rec)
-    mount = args.tree_mount.rstrip("/")
-    checks: dict[str, Any] = {}
+    return len(logs), execs, opens
+
+
+def exec_chain(execs: list[dict[str, Any]], mount: str) -> dict[str, Any]:
+    """Exactly the launcher, then the system loader with its arguments."""
     want_loader_args = [
         "--library-path",
         f"{mount}/{VENDOR}",
@@ -376,7 +415,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
         and execs[1]["argv"][1:5] == want_loader_args
         and f"{mount}/{ENTRYPOINT}" in execs[1]["argv"]
     )
-    checks["g2_2_g2_4_exec_chain"] = {
+    return {
         "pass": exec_ok,
         "expected": [
             f"{mount}/{LAUNCHER}",
@@ -384,6 +423,13 @@ def cmd_runtime(args: argparse.Namespace) -> int:
         ],
         "execs": execs,
     }
+
+
+def cmd_runtime(args: argparse.Namespace) -> int:
+    n_logs, execs, opens = strace_records(args.strace_prefix)
+    mount = args.tree_mount.rstrip("/")
+    checks: dict[str, Any] = {}
+    checks["g2_2_g2_4_exec_chain"] = exec_chain(execs, mount)
     forbidden = sorted(
         {o["path"] for o in opens if g2._FORBIDDEN_OPEN.search(o["path"])}
     )
@@ -429,7 +475,51 @@ def cmd_runtime(args: argparse.Namespace) -> int:
     report = {
         "schema": SCHEMA,
         "kind": "runtime",
-        "logs": len(logs),
+        "logs": n_logs,
+        "checks": checks,
+        "pass": all(c["pass"] for c in checks.values()),
+    }
+    g2._write(args.report, report)
+    for name, c in checks.items():
+        print(f"{name}: {'PASS' if c['pass'] else 'FAIL'}")
+    return 0 if report["pass"] else 1
+
+
+def cmd_rejected(args: argparse.Namespace) -> int:
+    n_logs, execs, opens = strace_records(args.strace_prefix)
+    mount = args.tree_mount.rstrip("/")
+    log = args.log.read_text(errors="replace").splitlines()
+    want = f"saccade_track: unknown argument {args.option}"
+    checks: dict[str, Any] = {}
+    checks["exit_2_unknown_argument"] = {
+        "pass": bool(log) and log[-1] == "exit=2" and want in log,
+        "expected": [want, "exit=2"],
+        "log": log[-5:],
+    }
+    checks["exec_chain"] = exec_chain(execs, mount)
+    model_root = f"{mount}/{g2.MODEL_ROOT}/"
+    touched = sorted(
+        {
+            o["path"]
+            for o in opens
+            if os.path.normpath(o["path"]).startswith(model_root)
+            or os.path.basename(o["path"]) == "libsaccade_scan_torchop.so"
+        }
+    )
+    checks["no_model_root_open"] = {"pass": not touched, "attempted": touched}
+    devices = sorted({o["path"] for o in opens if _GPU_DEVICE.match(o["path"])})
+    checks["no_gpu_device_open"] = {"pass": not devices, "attempted": devices}
+    outputs = [
+        str(p)
+        for p in (args.out_dir / "native", args.out_dir / "track_report.json")
+        if p.exists()
+    ]
+    checks["no_output"] = {"pass": not outputs, "found": outputs}
+    report = {
+        "schema": SCHEMA,
+        "kind": "rejected",
+        "option": args.option,
+        "logs": n_logs,
         "checks": checks,
         "pass": all(c["pass"] for c in checks.values()),
     }
@@ -527,12 +617,20 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--third-party-set", type=Path, default=THIRD_PARTY_SET)
     s.add_argument("--entrypoint-pin", type=Path, default=ENTRYPOINT_PIN)
     s.add_argument("--launcher-source", type=Path, default=LAUNCHER_SOURCE)
+    s.add_argument("--measurement-surface", type=Path, default=MEASUREMENT_SURFACE)
     r = sub.add_parser("runtime")
     r.add_argument("--strace-prefix", type=Path, required=True)
     r.add_argument("--tree", type=Path, required=True)
     r.add_argument("--tree-mount", required=True)
     r.add_argument("--report", type=Path, required=True)
     r.add_argument("--third-party-set", type=Path, default=THIRD_PARTY_SET)
+    j = sub.add_parser("rejected")
+    j.add_argument("--strace-prefix", type=Path, required=True)
+    j.add_argument("--log", type=Path, required=True)
+    j.add_argument("--out-dir", type=Path, required=True)
+    j.add_argument("--option", required=True)
+    j.add_argument("--tree-mount", required=True)
+    j.add_argument("--report", type=Path, required=True)
     o = sub.add_parser("sources")
     o.add_argument("--log-prefix", type=Path, required=True)
     o.add_argument("--tree", type=Path, required=True)
@@ -540,9 +638,12 @@ def main(argv: list[str] | None = None) -> int:
     o.add_argument("--third-party-set", type=Path, default=THIRD_PARTY_SET)
     args = ap.parse_args(argv)
     try:
-        return {"static": cmd_static, "runtime": cmd_runtime, "sources": cmd_sources}[
-            args.cmd
-        ](args)
+        return {
+            "static": cmd_static,
+            "runtime": cmd_runtime,
+            "rejected": cmd_rejected,
+            "sources": cmd_sources,
+        }[args.cmd](args)
     except g2.CheckError as exc:
         print(f"check_shipping_bundle: {exc}", file=sys.stderr)
         return 2

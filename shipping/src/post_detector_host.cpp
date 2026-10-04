@@ -160,12 +160,14 @@ PostDetectorHost::~PostDetectorHost() {
     cudaStreamSynchronize(stream_);
 }
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
 void PostDetectorHost::set_pre_roll_for_measurement(int updates) {
     if (pre_rolled_ || updates < 0) {
         throw std::logic_error("set_pre_roll_for_measurement: before the first update, >= 0");
     }
     plan_.tracker_pre_roll = updates;
 }
+#endif
 
 void PostDetectorHost::tracker_update(int num_dets) {
     auto& b = *buf_;
@@ -229,7 +231,10 @@ void PostDetectorHost::gmc(const float* frame_chw, int w, int h) {
         ++graph_stats_.gmc_captures;
         return;  // the capture branch does not replay
     }
-    if (!stale_gmc_input_) {
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
+    if (!stale_gmc_input_)
+#endif
+    {
         cuda_check(cudaMemcpyAsync(b.gmc_frame, frame_chw, bytes, cudaMemcpyDeviceToDevice, stream_),
                    "gmc frame");
     }

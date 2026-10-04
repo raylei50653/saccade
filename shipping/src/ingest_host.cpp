@@ -117,7 +117,11 @@ DecodePath JpegDecoder::decode_rgb(const std::vector<std::uint8_t>& bitstream,
     cuda_check(cudaStreamSynchronize(s.stream), "decoder stream sync");
 
     DecodePath path = DecodePath::Decoupled;
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     if (library_.hardware_decode && !force_decoupled_) {
+#else
+    if (library_.hardware_decode) {
+#endif
         // Statuses unchecked, as in torchvision: a failed probe leaves
         // is_supported at -1 and sends the bitstream down the decoupled path.
         nvjpegJpegStreamParseHeader(s.handle, bitstream.data(), bitstream.size(), s.streams[0]);

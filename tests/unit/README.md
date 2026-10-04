@@ -31,8 +31,12 @@
 | `test_resctl.py` | system | contract | active | Fail-closed contracts for tools/resctl.py, the cross-worktree resource lease CLI. |
 | `test_resolved_bridge_policy_config.py` | system | contract | active | Pin the resolved-config fingerprints the H0 declaration freezes. |
 | `test_resolved_shipping_config.py` | system | contract | active | The headline resolved shipping config equals what the Python oracle uses. |
+| `test_saccade_track_schedule_cli.py` | system | contract | active | ``saccade_track`` refuses a torn schedule config at the CLI (#465 PR-10 review). |
 | `test_safe_reject_audit.py` | eval | behavior | active | Tests for constrained FP pruning / safe-reject metrics. |
+| `test_shipping_bundle_checks.py` | system | contract | active | The bundled shipping tree's checks, launcher, auditor and install (#465 PR-C1). |
 | `test_shipping_config_loader_sources.py` | system | contract | active | Source-level guards for the native shipping config (#465 PR-4a, PR-4b). |
+| `test_shipping_g2_checks.py` | system | contract | active | The shipping tree's G2 checks and model-root install (#465 PR-12). |
+| `test_shipping_link_surface.py` | system | contract | active | The shipping link surface: tracking without perception, no OpenCV (#465 PR-11). |
 | `test_shipping_mot_output_oracle_pins.py` | system | contract | active | Oracle pins for the native MOT output path (#465 Phase B PR-6, U4). |
 | `test_signal_tables.py` | eval | contract | active | Unit tests for signal_tables schema helpers. |
 | `test_slim_release_manifest.py` | system | contract | active | Integrity checks for the slim release manifest. |

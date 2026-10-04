@@ -17,6 +17,12 @@ pytest job:
   auditor) and the auditor exits 127 instead (skips without ``cc``);
 * ``shipping/cmake/install_third_party.cmake`` copies the pinned objects and
   licenses and refuses one whose sha256 is not pinned (skips without ``cmake``).
+
+PR-C2 (§18): the entrypoint's measurement-surface check (``static``, and the
+``check_no_measurement_surface.cmake`` POST_BUILD step) sees one forbidden byte
+string, and ``rejected`` (a launcher run given a removed option) fails on a
+wrong exit or message, a model-root or operator-library open, a GPU device
+open, or any output.
 """
 
 # scope: system
@@ -313,6 +319,142 @@ def test_runtime_rejects(tmp_path: Path, mutate: Any, check: str) -> None:
         (tmp_path / "tree/nvidia/cu13/lib/libx.so.1").write_bytes(b"y")
     r = _runtime(tmp_path, mutate([LAUNCHER, LOADER, *opens]))
     assert not r["checks"][check]["pass"]
+
+
+# ── measurement surface (PR-C2) ────────────────────────────────────────────────
+
+SURFACE = REPO / "shipping" / "measurement_surface.json"
+
+
+def test_measurement_surface_sees_one_token(tmp_path: Path) -> None:
+    clean = tmp_path / "clean"
+    clean.write_bytes(b"\x7fELF\0saccade_track: unknown argument \0double_buffer\0")
+    assert bundle.measurement_surface(clean, SURFACE)["pass"]
+    assert not bundle.measurement_surface(tmp_path / "missing", SURFACE)["pass"]
+    for token in json.loads(SURFACE.read_text())["forbidden"]:
+        dirty = tmp_path / "dirty"
+        dirty.write_bytes(clean.read_bytes() + token.encode() + b"\0")
+        r = bundle.measurement_surface(dirty, SURFACE)
+        assert not r["pass"] and token in r["found"]
+
+
+@pytest.mark.skipif(not shutil.which("cmake"), reason="needs cmake")
+def test_post_build_surface_check(tmp_path: Path) -> None:
+    def check(data: bytes) -> int:
+        b = tmp_path / "bin"
+        b.write_bytes(data)
+        return subprocess.run(
+            [
+                "cmake",
+                f"-DBINARY={b}",
+                f"-DSURFACE={SURFACE}",
+                "-P",
+                str(REPO / "shipping/cmake/check_no_measurement_surface.cmake"),
+            ],
+            capture_output=True,
+        ).returncode
+
+    assert check(b"\x7fELF\0saccade_track: unknown argument \0") == 0
+    assert check(b"\x7fELF\0unknown double-buffer mutation \0") != 0
+    assert check(b"\x7fELF\0--max-frames\0") != 0
+
+
+def _rejected(
+    tmp_path: Path, lines: list[str], log: list[str], outputs: bool = False
+) -> dict[str, Any]:
+    st = tmp_path / "st"
+    st.mkdir(exist_ok=True)
+    (st / "s.1").write_text("\n".join(lines) + "\n")
+    (tmp_path / "saccade_track.log").write_text("\n".join(log) + "\n")
+    out = tmp_path / "out"
+    out.mkdir(exist_ok=True)
+    if outputs:
+        (out / "native").mkdir()
+    report = tmp_path / "rejected.json"
+    bundle.main(
+        [
+            "rejected",
+            "--strace-prefix",
+            str(st / "s"),
+            "--log",
+            str(tmp_path / "saccade_track.log"),
+            "--out-dir",
+            str(out),
+            "--option=--measurement-mutation",
+            "--tree-mount",
+            "/opt/saccade",
+            "--report",
+            str(report),
+        ]
+    )
+    return json.loads(report.read_text())
+
+
+_REJECTED_LOG = ["saccade_track: unknown argument --measurement-mutation", "exit=2"]
+_REJECTED_OPENS = [
+    'openat(AT_FDCWD, "/opt/saccade/lib/saccade_loader_audit.so", O_RDONLY|O_CLOEXEC) = 3',
+    'openat(AT_FDCWD, "/opt/saccade/lib/vendor/libx.so.1", O_RDONLY|O_CLOEXEC) = 3',
+    'openat(AT_FDCWD, "/usr/lib/wsl/lib/libcuda.so.1", O_RDONLY|O_CLOEXEC) = 3',
+]
+
+
+def test_rejected_pass(tmp_path: Path) -> None:
+    r = _rejected(tmp_path, [LAUNCHER, LOADER, *_REJECTED_OPENS], _REJECTED_LOG)
+    assert r["pass"], r["checks"]
+
+
+@pytest.mark.parametrize(
+    ("extra", "log", "outputs", "check"),
+    [
+        (
+            [],
+            ["saccade_track: unknown argument --schedule", "exit=2"],
+            False,
+            "exit_2_unknown_argument",
+        ),
+        ([], [_REJECTED_LOG[0], "exit=0"], False, "exit_2_unknown_argument"),
+        (
+            [
+                'openat(AT_FDCWD, "/opt/saccade/share/saccade/configs/shipping/x.json", O_RDONLY) = 3'
+            ],
+            _REJECTED_LOG,
+            False,
+            "no_model_root_open",
+        ),
+        (
+            [
+                'openat(AT_FDCWD, "/opt/saccade/share/saccade/models/yolo/x.engine", O_RDONLY) = -1 ENOENT'
+            ],
+            _REJECTED_LOG,
+            False,
+            "no_model_root_open",
+        ),
+        (
+            ['openat(AT_FDCWD, "/elsewhere/libsaccade_scan_torchop.so", O_RDONLY) = 3'],
+            _REJECTED_LOG,
+            False,
+            "no_model_root_open",
+        ),
+        (
+            ['openat(AT_FDCWD, "/dev/dxg", O_RDWR) = 4'],
+            _REJECTED_LOG,
+            False,
+            "no_gpu_device_open",
+        ),
+        (
+            ['openat(AT_FDCWD, "/dev/nvidiactl", O_RDWR) = -1 ENOENT'],
+            _REJECTED_LOG,
+            False,
+            "no_gpu_device_open",
+        ),
+        ([], _REJECTED_LOG, True, "no_output"),
+    ],
+)
+def test_rejected_rejects(
+    tmp_path: Path, extra: list[str], log: list[str], outputs: bool, check: str
+) -> None:
+    r = _rejected(tmp_path, [LAUNCHER, LOADER, *_REJECTED_OPENS, *extra], log, outputs)
+    assert not r["pass"] and not r["checks"][check]["pass"]
 
 
 # ── launcher ───────────────────────────────────────────────────────────────────

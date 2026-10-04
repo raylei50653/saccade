@@ -24,7 +24,8 @@
 //
 // Serial and eager. The oracle's double-buffer schedule with its CUDA graphs
 // is DoubleBufferRuntime (double_buffer_runtime.hpp, PR-10); this runtime stays
-// the PR-9-measured serial reference (`saccade_track --schedule serial`). Track
+// the PR-9-measured serial reference (`saccade_track_measurement --schedule
+// serial`). Track
 // ids are per sequence (boundary §5 B3: no run-global ids in shipping). Reads
 // no environment; every value comes from the plans.
 #pragma once
@@ -53,9 +54,10 @@ class PerceptionPipeline;
 
 namespace saccade::shipping {
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
 // Developer measurement only (the parity harness's wiring negative controls):
-// each breaks one ownership / lifetime rule above on purpose; never set by a
-// shipping caller.
+// each breaks one ownership / lifetime rule above on purpose. Measurement
+// variant only (SACCADE_SHIPPING_MEASUREMENT_HOOKS, #465 PR-C2).
 enum class RuntimeMutation {
     None,
     SharedPostHost,    // the previous sequence's PostDetectorHost (tracker, GMC, pre-roll) is
@@ -67,6 +69,7 @@ enum class RuntimeMutation {
 };
 const char* runtime_mutation_name(RuntimeMutation m);
 RuntimeMutation parse_runtime_mutation(const std::string& name);
+#endif
 
 // Per-frame view for a developer observer (trace); valid during the call.
 struct FrameTrace {
@@ -132,7 +135,9 @@ public:
     const NvjpegLibraryInfo& nvjpeg() const;
     int sequences_run() const { return sequences_run_; }
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     void set_mutation_for_measurement(RuntimeMutation m) { mutation_ = m; }
+#endif
 
 private:
     struct Stream {
@@ -153,9 +158,11 @@ private:
     std::unique_ptr<DetectorHost> detector_;
     std::unique_ptr<PerceptionPipeline> pipeline_;
     std::unique_ptr<DeviceDetections> det_;
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     std::unique_ptr<PostDetectorHost> shared_post_;  // RuntimeMutation::SharedPostHost only
     SequenceGeometry shared_geometry_{};
     RuntimeMutation mutation_ = RuntimeMutation::None;
+#endif
     int sequences_run_ = 0;
 };
 
