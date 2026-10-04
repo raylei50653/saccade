@@ -907,3 +907,85 @@ cmake -S . -B build-noopencv -DSACCADE_WITH_OPENCV=OFF && cmake --build build-no
 cmake -DREADELF=readelf -DBINARY=build/shipping/saccade_track -P shipping/cmake/check_link_surface.cmake
 bash results/465_pr11_cmake/<label>/run.sh   # §15.3 gates 1-8 and the negative controls
 ```
+
+## 16. Shipping tree：`$ORIGIN` RUNPATH、SM＋PTX、glibc baseline、G2 四項（PR-12／U6b）
+
+PR-12 是 boundary §6 的 U6b，Phase B 的最後一個 PR：把 shipping entrypoint 做成一個可安裝的目錄（shipping tree），驗收 boundary §0 的 G2 定義 1–4，以及 `$ORIGIN` RUNPATH、明確的 SM 清單＋PTX、glibc baseline，並在乾淨容器裡跑起來。PR-12 不改任何 stage 的計算，也不改 shipping 的 C++ 原始碼：只加安裝規則、檢查工具與 harness 選項。
+
+| 項目 | 位置 |
+|:--|:--|
+| 安裝規則 | `shipping/CMakeLists.txt`：`cmake --install <build> --component shipping --prefix <tree>`；`SACCADE_SHIPPING_TORCH_CUDA_ARCH_LIST`；`SACCADE_ATTESTED_OP_LIBRARY` |
+| model root 安裝 | `shipping/cmake/install_model_root.cmake`（安裝時逐檔比對 sha256） |
+| G2 檢查工具 | `scripts/native/check_shipping_tree.py`（`loaded`／`deps`／`static`／`runtime`） |
+| 乾淨容器 | `scripts/native/run_shipping_container.sh`（`pristine`／`strace`） |
+| parity harness | `native_track_parity.py parity --model-root`、`--track-library-path`、`--native-from` |
+| 測試 | `tests/unit/test_shipping_g2_checks.py`；CI `cpp_build.yml` 的 OFF build 改用 shipping 的 SM 清單 |
+
+**owner 決策（2026-10-04，契約之前）**：
+
+1. operator library 不重新 build、不重新 attest：shipping tree 帶的是 attestation 綁定的 `aa84cccd…`，位元組不變。
+2. **RUNPATH 規則**：PR-12 產出的每個 shipping ELF 都只能有 `$ORIGIN`-relative 的 RUNPATH。凍結且已 attest 的 operator library `aa84cccd` 是唯一列舉的例外：它保留既有的絕對 build RUNPATH，記為 named limitation，並以 hash 驗證。
+3. **SM＋PTX**：明確的多 SM＋PTX 要求只適用於新 build 的 `saccade_track` device code。凍結且已 attest 的 operator library 仍只有 sm_120；因此本 PR 不主張超出「所有載入的 CUDA artifact 都支援的硬體」之外的端到端 GPU 可攜性。
+4. **glibc baseline＝Ubuntu 24.04**：每個 ELF 需要的 symbol version 不超過 `GLIBC_2.39`、`GLIBCXX_3.4.33`、`CXXABI_1.3.15`；frozen toolchain（#214）不變。
+5. **第三方 runtime 函式庫不 bundle**：tree 只放 Saccade 的檔案；CUDA runtime、nvJPEG、TensorRT、LibTorch 由 tree 外的目錄經 `LD_LIBRARY_PATH` 提供，manifest 記錄 SONAME 與 sha256。是否 bundle、怎麼 bundle 留給 Phase C。
+6. **乾淨容器驗收＝完整 7-seq parity**。
+
+### 16.1 改了什麼
+
+- **SM 清單**：`find_package(Torch)` 會把 `CMAKE_CUDA_ARCHITECTURES` 設成 OFF，所有 CUDA target 改用 `TORCH_CUDA_ARCH_LIST` 產生的 `-gencode`（未設定時是本機 GPU，所以開發 build 只有 `sm_120`；CI 設 `7.5`）。shipping tree 的 build 用 `TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;9.0;10.0;12.0+PTX"`，也就是 LibTorch 自己的清單（torch 2.11.0+cu130：`sm_75/80/86/90/100/120`），加上最新一代的 PTX。安裝步驟在其他設定下拒絕執行。開發 build（`build/`）不變。
+- **RUNPATH**：`saccade_track` 的 install RPATH 是 `$ORIGIN/../lib`，不帶 link path（`INSTALL_RPATH_USE_LINK_PATH OFF`）。`lib/` 是 Phase C bundle 要用的位置，這裡是空的。build 樹裡的 `saccade_track` 保留原本的絕對 RUNPATH，所以 harness 與開發流程不變。
+- **model root**：`share/saccade/` 放 resolved config、frozen head lineage、realization attestation，以及它們綁定的三個檔案（TorchScript head、backbone engine、operator library），每個檔案都放在 **repository 的相對路徑**上：lineage 與 attestation 都以這些路徑命名而且是凍結的，所以 tree 照抄路徑而不改寫它們（例如 operator library 在 `share/saccade/build/libsaccade_scan_torchop.so`）。安裝時從 lineage／attestation 讀出 sha256 逐一比對；operator library 從 `SACCADE_ATTESTED_OP_LIBRARY`（預設 `build/`）複製，不是 shipping build 樹自己編的那一份。
+- **沒有動的**：shipping 與 tracking 的 C++ 原始碼、frozen 的 `tracker_gpu.{hpp,cu}`、Python 程式碼（eval harness 只多了上表的選項）、`build/` 的任何產物（PR-12 不在 `build/` build 任何 target）。
+
+### 16.2 開發期間已經看到的（在本節 commit 之前）
+
+都是用工作樹的試做，不是正式 run，也沒有 oracle 端：
+
+- `build-release/`（OpenCV OFF、上述 SM 清單）的 `saccade_track` 6 個 CUDA TU 各帶 6 個 SASS 與 `sm_120` PTX；POST_BUILD link 檢查通過；安裝後 RUNPATH 是 `$ORIGIN/../lib`。
+- 在 host 上以 `LD_LIBRARY_PATH`（開發版 `saccade_track` 的 RUNPATH 目錄，同樣順序）跑 tree 的 binary，7 sequence 的 txt 與 trace 和開發版同一 session 的 run 相同，txt 的 sha256 也與 PR-11 正式 run 相同。兩者載入的第三方函式庫（28 個）sha256 集合相同。
+- 其中 `libz.so.1` 來自 host OS（Arch 的 `/usr/lib/libz.so.1.3.2`，cuDNN 的 graph 函式庫需要它），不是 venv。乾淨映像本身有 zlib（`zlib1g`，`Priority: required`），所以檢查工具把它和 glibc、GCC runtime 一起歸為 base system，不放進第三方目錄。`libnvcuvid.so.1`（nvJPEG 的硬體解碼）是 driver 的函式庫，所以容器要開 `video` driver capability。
+- 系統的 CDI spec（`/etc/cdi/nvidia.yaml`，04-18）還指向 Windows driver 更新前的 WSL driver 目錄，所以 `docker run --gpus all` 會失敗；改為手動掛載 `/dev/dxg` 與 `/usr/lib/wsl` 的 smoke run（MOT17-05 前 30 幀）在 `ubuntu:24.04` 裡跑得起來，strace 版本只有一次 `execve`。正式 run 用重新產生的 CDI spec 與 `--gpus all`。
+
+### 16.3 測量契約（正式 run 之前寫定）
+
+**組態**：同一台機器。`build-release/`：`-DSACCADE_WITH_OPENCV=OFF -DENABLE_NATIVE_TESTS=OFF -DTORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;9.0;10.0;12.0+PTX"`，只 build `saccade_track`，安裝到 `$R/tree`。`build/` 不 build 任何 target；oracle（`anchor`、`oracle-rows`）用 `build/` 既有的 extensions。第三方目錄 `$R/deps` 由 `check_shipping_tree.py deps` 從 gate 3 的 host run 產生（hard link）。容器：`ubuntu@sha256:786a8b55…`（`pristine`），以及它加上 `strace` 的映像（`strace`）；無網路，以非 root 使用者執行，`--gpus all`，`NVIDIA_DRIVER_CAPABILITIES=compute,utility,video`，tree、第三方目錄與 MOT17 train 以唯讀掛載。全部 GPU 步驟在 gpu0 lease 下依序執行。
+
+**有效性**（任一不成立 ⇒ 受影響的 gate 為 `UNRESOLVED`）：正式 run 在乾淨的 commit 上；`build/libsaccade_scan_torchop.so` 的 sha256 在整個 run 前後都等於 attestation 的值；`anchor` 與 PR-2L `A_L_1` 7/7 相同、`oracle-rows` 有效（§13.3）；`container.txt` 顯示 Ubuntu 24.04、glibc 2.39，且 `python3`、`python`、`cc`、`gcc`、`c++`、`g++`、`clang`、`nvcc`、`ptxas` 都不存在。
+
+**PASS 驗收規則**：PR-12 的 verdict 是 `PASS` 若且唯若下列全部成立，否則是 `FAIL`（照 gate 分開報告）：
+
+1. **build 與安裝**：`build-release/` configure 與 build 成功，`saccade_track` POST_BUILD 通過；`cmake --install --component shipping` 成功（SM 清單檢查，以及 lineage、TorchScript head、backbone engine、operator library 四個檔案的 sha256 比對都通過）；tree 裡只有 `bin/saccade_track` 與 `share/saccade/` 的 6 個檔案（另兩個是 resolved config 與 attestation）。
+2. **靜態檢查**（`check_shipping_tree.py static`，五項都 PASS）：
+   - **G2-1**：從 `saccade_track` 與 operator library 出發的 NEEDED 閉包，依 `$ORIGIN` RUNPATH、第三方目錄、base system（glibc、GCC runtime、zlib）與 driver 解析，完整，而且沒有 `libpython*`、`libtorch_python*`；
+   - **G2-3**：tree 裡沒有 `.py`／`.pyc`／`.pyo`／`.pth`、`__pycache__`、`site-packages`、`dist-packages`；
+   - **RUNPATH**：PR-12 產出的每個 ELF（`bin/saccade_track`）只有 `$ORIGIN`-relative 的 RUNPATH、沒有 DT_RPATH；operator library 是唯一列舉的例外，它的 sha256 必須是 attestation 的 `aa84cccd…`（記錄它的絕對 RUNPATH）；
+   - **SM＋PTX**：`saccade_track` 的 SASS 恰為 `sm_75/80/86/90/100/120`、PTX 恰為 `sm_120`（記錄 operator library 的 SASS／PTX）；
+   - **glibc baseline**：tree 與第三方目錄裡每個 ELF 需要的 `GLIBC`／`GLIBCXX`／`CXXABI` 版本都不超過 2.39／3.4.33／1.3.15。
+3. **第三方集合**：host 上以 `LD_DEBUG=files` 分別跑開發版 `build/shipping/saccade_track` 與 tree 的 `saccade_track`（後者的 `LD_LIBRARY_PATH`＝前者 RUNPATH 中存在的目錄，同樣順序），7 sequence。`check_shipping_tree.py deps --reference` 通過：兩者載入的第三方物件（以 sha256 比）相同、載入的 operator library 相同（tree 的那一份＝attestation 的那一份），且沒有載入 Python 函式庫。
+4. **host 上的 tree binary**：`native_track_parity.py parity --track-binary $R/tree/bin/saccade_track --model-root $R/tree/share/saccade --track-library-path $R/deps`（double buffer、trace）`EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7，且 `--against` PR-11 正式 run（`results/465_pr11_cmake/full_6502fbeb/parity/report.json`）：txt 與 trace 的 sha256 7/7 相同。
+5. **乾淨容器**（`run_shipping_container.sh pristine`）：7 sequence 在同一個 process 中跑完、exit 0；`parity --native-from` `EXACT`（三個 section 同第 4 條），且 `--against` 第 4 條的 report：txt 與 trace 7/7 相同。
+6. **G2-2／G2-4**（`run_shipping_container.sh strace`，7 sequence，exit 0）：`check_shipping_tree.py runtime` 三項都 PASS：
+   - 恰好一次 `execve`／`execveat`，就是 entrypoint 本身且成功（任何其他 exec，包括失敗的嘗試，都算違反）；
+   - 沒有任何對 `libpython*`、`libtorch_python*`、`libtriton*`、`.py`／`.pyc`、`site-packages`、`dist-packages`、`__pycache__`、`.triton`、`torchinductor*` 的 open（包括失敗的嘗試）；
+   - 成功 open 的共享物件中，第三方目錄與 tree 裡的那些（以 sha256 比）恰好等於第 3 條開發版 run 載入的第三方物件與 operator library，而且沒有其他來源的第三方共享物件。
+   
+   另外 `parity --native-from` 對這次 run `EXACT`，且 txt 與 trace 與第 5 條 7/7 相同。第 4–6 條的 harness 也檢查 `track_report.json` 的 `python_libraries_mapped` 為空（`/proc/self/maps`）。
+
+沒有容差。第 4–6 條的比較是逐位元組；任一不同就照 gate 報告第一個不同的檔案或項目，停在 PR-12。
+
+**負控制**（記錄在結果目錄；每一個都必須被抓到）：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N1 | 以未設定 SM 清單的 `build-noopencv/` 安裝 | 安裝失敗（SM 清單檢查） |
+| N2 | `SACCADE_ATTESTED_OP_LIBRARY` 指向多一個位元組的副本 | 安裝失敗（sha256） |
+| N3 | tree 副本的 `bin/saccade_track` 換成開發版 binary | `static`：RUNPATH 與 SM＋PTX 失敗 |
+| N4 | tree 副本多一個 `share/saccade/helper.py` | `static`：G2-3 失敗 |
+| N5 | tree 副本的 operator library 多一個位元組 | `static`：RUNPATH 規則失敗（例外的 hash 不符） |
+| N6 | 第三方目錄副本少 `libnvjpeg.so.13` | `static`：G2-1 失敗；`pristine` 容器 run exit 非 0 |
+| N7 | tree 副本多一個需要 `GLIBC_2.44` 的 ELF（host 的 `libzvbi.so.0`） | `static`：glibc baseline 失敗 |
+| N8 | `strace` 容器以 `/bin/sh -c` 包住 entrypoint（MOT17-05 前 5 幀） | `runtime`：exec 檢查失敗 |
+
+另有 `tests/unit/test_shipping_g2_checks.py` 以假的 `readelf`／`cuobjdump`／strace 輸入驅動的拒絕案例。
+
+**不做的**：FPS 或任何效能比較；`sm_120` 以外的 SASS／PTX 只檢查有編進去，沒有在其他 GPU 上執行（這台機器只有 `sm_120`）；bundle 第三方函式庫、改用較舊的 glibc／toolchain、shipping CLI 的開發選項（`--trace`／`--report`／`--measurement-mutation`）去留，都屬 Phase C。

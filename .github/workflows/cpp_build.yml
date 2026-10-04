@@ -7,6 +7,7 @@ on:
       - 'src/**'
       - 'include/**'
       - 'CMakeLists.txt'
+      - 'shipping/**'
       - '.github/workflows/cpp_build.yml'
   pull_request:
     branches: [ main ]
@@ -125,7 +126,9 @@ jobs:
 
       # #465 PR-11: OpenCV is optional. Configure without it (OpenCV must not
       # even be searched) and build the shipping entrypoint; its POST_BUILD
-      # step fails if saccade_track needs OpenCV or Python.
+      # step fails if saccade_track needs OpenCV or Python. #465 PR-12: with
+      # the shipping tree's SM list + PTX (shipping/CMakeLists.txt), so every
+      # listed architecture compiles here, not only the local GPU's.
       - name: Build shipping entrypoint without OpenCV
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -137,7 +140,7 @@ jobs:
             -DPYTHON_EXECUTABLE=$PYTHON_EXE \
             -Dpybind11_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())") \
             -DCMAKE_BUILD_TYPE=Release \
-            -DTORCH_CUDA_ARCH_LIST=7.5 \
+            "-DTORCH_CUDA_ARCH_LIST=7.5;8.0;8.6;9.0;10.0;12.0+PTX" \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache
