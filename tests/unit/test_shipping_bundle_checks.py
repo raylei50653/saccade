@@ -388,6 +388,36 @@ def test_runtime_fails_closed_on_unresolved_open(tmp_path: Path, line: str) -> N
             assert r["checks"][check]["unresolved"] == [line]
 
 
+@pytest.mark.parametrize(
+    ("line", "ok"),
+    [
+        # a SONAME symlink to its versioned file: still the base system
+        (
+            'openat(AT_FDCWD</>, "/usr/lib/x86_64-linux-gnu/libstdc++.so.6", '
+            "O_RDONLY|O_CLOEXEC) = 3</usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33>",
+            True,
+        ),
+        # an alias named like the base system, to a third-party object
+        (
+            'openat(AT_FDCWD</>, "/usr/lib/x86_64-linux-gnu/libstdc++.so.6", '
+            "O_RDONLY|O_CLOEXEC) = 3</usr/lib/libnccl.so.2.21.5>",
+            False,
+        ),
+        (
+            'openat(AT_FDCWD</>, "/tmp/payload.so", O_RDONLY|O_CLOEXEC) = '
+            "3</usr/lib/x86_64-linux-gnu/libz.so.1.3>",
+            False,  # the requested name is not the base system's
+        ),
+    ],
+)
+def test_runtime_classifies_fd_targets_by_soname_family(
+    tmp_path: Path, line: str, ok: bool
+) -> None:
+    _, _, opens = _runtime_tree(tmp_path)
+    r = _runtime(tmp_path, [LAUNCHER, LOADER, *opens, line])
+    assert r["checks"]["opened_set_is_the_bundle"]["pass"] is ok, r["checks"]
+
+
 def test_runtime_accepts_a_non_path_fd_target(tmp_path: Path) -> None:
     _, _, opens = _runtime_tree(tmp_path)
     line = 'openat(AT_FDCWD</>, "/proc/self/fd/0", O_RDONLY) = 9<pipe:[123]>'

@@ -434,6 +434,23 @@ def _argv_paths(
     return paths, unresolved
 
 
+def _object_class(path: str) -> str:
+    """``classify_name`` by SONAME family. An fd target is the real file
+    behind a SONAME symlink (libstdc++.so.6 -> libstdc++.so.6.0.33), so
+    trailing version components are dropped one at a time until a name
+    classifies; like the SONAME itself, this is a name, not a byte check."""
+    base = os.path.basename(path)
+    m = re.match(r"^(.*\.so)((?:\.\d+)*)$", base)
+    if m:
+        parts = m.group(2).split(".")[1:]
+        for k in range(len(parts), -1, -1):
+            name = m.group(1) + "".join("." + x for x in parts[:k])
+            kind = g2.classify_name(name, path)
+            if kind != "third_party":
+                return kind
+    return g2.classify_name(base, path)
+
+
 def _within(path: str, root: str) -> bool:
     root = os.path.normpath(root)
     return path == root or path.startswith(root + "/")
@@ -599,10 +616,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                 and os.path.dirname(norm) != f"{mount}/{VENDOR}"
             ):
                 foreign.append(norm)
-        elif (
-            os.path.basename(norm) in bundled
-            or g2.classify_name(os.path.basename(norm), norm) == "third_party"
-        ):
+        elif os.path.basename(norm) in bundled or _object_class(norm) == "third_party":
             foreign.append(norm)
     cur = set(opened.values())
     want = vendor_shas | {op_sha, auditor_sha}
