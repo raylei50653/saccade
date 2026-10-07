@@ -1380,3 +1380,20 @@ Review 在 `60d66da7`／republish `2e0ae90c` 重現兩個 checker 漏檢：只�
 後續驗證保留 §18.5 的原始紀錄，另建新結果目錄：以更新的 checker 重驗三次歷史拒絕 log，再在同一乾淨容器以 `strace -yy` 新跑三次被移除的選項。這次只驗證拒絕 gate 與 checker，沒有重跑完整 detector／MOT parity；shipping 原始碼與 entrypoint／operator library pin 不變，§18.5 的正式 run 仍是原來的證據。
 
 **驗證結果**：乾淨 commit `2a3cce80`，`results/465_prc2_cli/review_fix_2a3cce80/`（`run.py`、`summary.json`、`historical_*.json`、`rejected_*/`）。歷史重驗 3/3 PASS；新容器拒絕 3/3 PASS，每次五項 gate 全通過。checker 回歸測試 47/47 PASS；shipping sources 與 `04f6f135` 相同，pin／operator hash 在新 run 前後均相同。`summary.json` sha256：`8c2b8d824774e09a5ae20169c5cd27e188257a372302c13e5a5968fe59a0c9e0`。這是 §18.8 的後續驗證，不取代 §18.5 的正式 parity。
+
+### 18.9 Review 修正：alias 目標與相對輸出參數
+
+Review 在 `2e74f3ee`（#530 合入後的 #529 head）用合成 trace 重現兩個 checker 漏檢，都是 `rejected` 的覆蓋缺口，沒有觀察到 shipping binary 違反拒絕契約：
+
+- 相對的 `--out`／`--trace`／`--report` 保持相對路徑，但 open 紀錄已解析成絕對路徑，兩者無法比對。例：`--trace custom_trace` 配 `openat(AT_FDCWD</out>, "custom_trace/detector.bin", O_WRONLY|O_CREAT, 0666) = -1 EACCES`，五項 gate 全過。
+- 只分類請求的路徑，忽略 `strace -yy` 對回傳 fd 的目標註記。經 symlink／裝置別名的成功 open（`/tmp/config-alias` → model-root 內的 config、`/dev/char/195:0` → `/dev/nvidia0`）能通過 `no_model_root_open`／`no_gpu_device_open`。
+
+修正後五個 gate 名稱不變，判定收緊：
+
+- model-root、GPU 裝置與輸出寫入三項同時檢查請求路徑與回傳 fd 的目標（含裝置的巢狀 `<char M:N>` 註記）。帶 dirfd 註記（即 `-yy` 格式）的成功 open 若缺少目標註記，視為不完整紀錄，三項都 fail closed。
+- 相對輸出參數以所有 `AT_FDCWD` 註記出現過的 cwd 解析；一個 cwd 都沒有時（例如非 `-yy` 的 log），`no_output` fail closed，報告的 `unresolved_outputs` 列出該參數。存留檔案檢查也套用解析後落在 `/out/` 下的路徑。
+- 非 `-yy` 的 log 沒有目標註記，無法排除經別名的存取；這是舊格式證據的 named limit，不是 PASS 的依據擴大。§18.5 的三次拒絕 run 只用預設的絕對輸出路徑。
+
+回歸測試新增 10 項：三種相對輸出參數的失敗寫入、相對 `--report` 的存留檔、無 cwd 時 fail closed、四種別名目標（config、operator library、GPU 裝置、trace 寫入）、缺目標註記的 `-yy` 紀錄。這 10 項在 `2e74f3ee` 的 checker 上全部失敗，修正後全部通過；checker 回歸測試 57/57 PASS。
+
+**驗證結果**：乾淨 commit `2c6fceae`，`results/465_prc2_cli/review_fix_2c6fceae/`（`run.py`、`summary.json`、`historical_*.json`、`yy_2a3cce80_*.json`、`m4_replay.json`、`runtime_replay.json`）。只重播既有 log，不新跑容器：shipping binary 未變，`2a3cce80` 的三次 `-yy` run 已帶目標與 cwd 註記。§18.5 歷史拒絕 log 3/3 PASS；`-yy` 拒絕 log 3/3 PASS；M4 負控制失敗的 gate 與原本逐項相同；正式 run 的 runtime 重播 PASS。shipping sources 與 `04f6f135` 相同，pin／operator hash 前後相同；runtime identity `--mode attested` exit 0，checker 不在 identity 輸入內，不需 republish。`summary.json` sha256：`38abaa0dc3d8dff979383870bd4b8ad60937a3b7dd85578894d804d1746d4f41`。不取代 §18.5 的正式 parity。
