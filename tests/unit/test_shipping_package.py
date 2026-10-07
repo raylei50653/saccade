@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import io
+import json
 import os
 import re
 import shutil
@@ -495,3 +496,117 @@ def test_installer_has_no_test_hook() -> None:
     text = INSTALLER.read_text()
     used = set(re.findall(r"\$\{?([A-Z][A-Z0-9_]*)", text))
     assert used <= {"SCHEMA", "TMPDIR", "LC_ALL"}, used
+
+
+# ---------------------------------------------------------------------------
+# install-trace (strace -ff -yy of an installation)
+
+_STG = "/install/.saccade-install.AbC123"
+_GOOD = [
+    f'mkdir("{_STG}", 0700) = 0',
+    f'mkdir("{_STG}/x", 0777) = 0',
+    f'openat(4</{_STG[1:]}/x>, "{NAME}/bin/saccade_track", O_WRONLY|O_CREAT|O_EXCL, 0755) = 5<{_STG}/x/{NAME}/bin/saccade_track>',
+    f'fchmodat(AT_FDCWD</>, "{_STG}/x/{NAME}/bin/saccade_track", 0755) = 0',
+    'openat(AT_FDCWD</>, "/dev/null", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3</dev/null<char 1:3>>',
+    'newfstatat(AT_FDCWD</>, "/install/saccade", 0x7ffd, 0) = -1 ENOENT (No such file or directory)',
+    f'renameat2(AT_FDCWD</>, "{_STG}/x/{NAME}", AT_FDCWD</>, "/install/saccade", RENAME_NOREPLACE) = 0',
+    f'unlinkat(4<{_STG}>, "x", AT_REMOVEDIR) = 0',
+    f'unlinkat(AT_FDCWD</>, "{_STG}", AT_REMOVEDIR) = 0',
+]
+
+
+def _trace(tmp_path: Path, lines: list[str]) -> dict:
+    d = tmp_path / "strace"
+    d.mkdir(exist_ok=True)
+    for p in d.iterdir():
+        p.unlink()
+    (d / "i.1").write_text("\n".join(lines) + "\n+++ exited with 0 +++\n")
+    report = tmp_path / "trace.json"
+    rc = pkg.main(
+        [
+            "install-trace",
+            "--strace-prefix",
+            str(d / "i"),
+            "--target",
+            "/install/saccade",
+            "--package",
+            NAME,
+            "--report",
+            str(report),
+        ]
+    )
+    r = json.loads(report.read_text())
+    assert rc == (0 if r["pass"] else 1)
+    return {k: c["pass"] for k, c in r["checks"].items()}
+
+
+def test_install_trace_accepts_the_staged_install(tmp_path: Path) -> None:
+    assert all(_trace(tmp_path, _GOOD).values())
+
+
+@pytest.mark.parametrize(
+    "edit, failing",
+    [
+        # A write into the target before the rename (the PR-12 install shape).
+        (
+            lambda ls: [
+                *ls[:2],
+                'openat(AT_FDCWD</>, "/install/saccade/bin/x", O_WRONLY|O_CREAT, 0644) = 3</install/saccade/bin/x>',
+                *ls[2:],
+            ],
+            "target_only_by_one_noreplace_rename",
+        ),
+        # A failed attempt counts too.
+        (
+            lambda ls: [
+                *ls,
+                'mkdir("/install/saccade", 0755) = -1 EEXIST (File exists)',
+            ],
+            "target_only_by_one_noreplace_rename",
+        ),
+        # A rename that may replace.
+        (
+            lambda ls: [x.replace("RENAME_NOREPLACE", "0") for x in ls],
+            "target_only_by_one_noreplace_rename",
+        ),
+        (
+            lambda ls: [x for x in ls if not x.startswith("renameat2")],
+            "target_only_by_one_noreplace_rename",
+        ),
+        (
+            lambda ls: [
+                *ls,
+                'openat(AT_FDCWD</>, "/etc/passwd", O_WRONLY) = 3</etc/passwd>',
+            ],
+            "other_mutations_in_staging",
+        ),
+        (
+            lambda ls: [x for x in ls if f'"{_STG}", AT_REMOVEDIR' not in x],
+            "staging_removed",
+        ),
+        (lambda ls: [*ls, 'mkdir("relative", 0755) = 0'], "trace_complete"),
+        (lambda ls: [*ls, 'unlinkat(4, "y", 0) = 0'], "trace_complete"),
+        (
+            lambda ls: [*ls, 'mkdir("/install/.saccade-install.ZzZ999", 0700) = 0'],
+            "one_staging_directory",
+        ),
+    ],
+)
+def test_install_trace_rejects(tmp_path: Path, edit, failing: str) -> None:
+    got = _trace(tmp_path, edit(list(_GOOD)))
+    assert got[failing] is False, got
+
+
+@needs_sh
+def test_leftover_staging_is_reported_not_removed(tmp_path: Path) -> None:
+    dist = _package(tmp_path)
+    parent = tmp_path / "opt"
+    parent.mkdir()
+    left = parent / ".saccade-install.Left01"
+    left.mkdir()
+    (left / "partial").write_text("x")
+    r = _install(dist, parent / "saccade")
+    assert r.returncode == 0, r.stderr
+    assert f"note: {left} is left from another installation" in r.stderr
+    assert (left / "partial").read_text() == "x"
+    assert _staging_left(parent) == [left.name]

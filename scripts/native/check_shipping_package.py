@@ -33,9 +33,20 @@ Subcommand:
              whose runtime-identity publication was current
              (``check_runtime_identity_staleness.py --mode attested``).
 
+``install-trace`` an installation recorded with ``strace -ff -yy``
+             (``run_package_container.sh install-strace``): the target is
+             touched by exactly one successful ``renameat2(<staging>/x/<name>,
+             TARGET, RENAME_NOREPLACE)`` and by no other mutating call, even a
+             failed one; every other mutating call (open for writing, mkdir,
+             unlink, rename, link, chmod, chown, utimens, truncate) is inside
+             the one staging directory (or /dev/null); the staging directory is
+             removed. A mutating call whose path cannot be resolved fails.
+
 Usage::
 
     check_shipping_package.py tarball --dist DIST --report package.json
+    check_shipping_package.py install-trace --strace-prefix DIR/i \
+        --target /install/saccade --report trace.json
 
 Exit 0: every check passes; 1: a check fails (named in the report); 2: error.
 """
@@ -676,6 +687,263 @@ def manifest_head(
     }
 
 
+# ---------------------------------------------------------------------------
+# install-trace
+
+_LINE = re.compile(r"^(\w+)\((.*)\)\s+=\s+(-?\d+|\?)(.*)$")
+_ANNOT = re.compile(r"^(AT_FDCWD|-?\d+)<(.*)>$")
+_WRITE_FLAGS = re.compile(r"O_WRONLY|O_RDWR|O_CREAT|O_TRUNC|O_APPEND")
+_STAGING = re.compile(r"^(.*)/\.saccade-install\.[A-Za-z0-9]{6}$")
+# syscall -> how to read the paths it mutates: ("path", i) a path argument,
+# ("at", i, j) dirfd i + path j, ("fd", i) the file a descriptor names.
+_MUTATING: dict[str, list[tuple[Any, ...]]] = {
+    "mkdir": [("path", 0)],
+    "mkdirat": [("at", 0, 1)],
+    "unlink": [("path", 0)],
+    "rmdir": [("path", 0)],
+    "unlinkat": [("at", 0, 1)],
+    "rename": [("path", 0), ("path", 1)],
+    "renameat": [("at", 0, 1), ("at", 2, 3)],
+    "renameat2": [("at", 0, 1), ("at", 2, 3)],
+    "link": [("path", 1)],
+    "linkat": [("at", 2, 3)],
+    "symlink": [("path", 1)],
+    "symlinkat": [("at", 1, 2)],
+    "chmod": [("path", 0)],
+    "fchmodat": [("at", 0, 1)],
+    "fchmodat2": [("at", 0, 1)],
+    "chown": [("path", 0)],
+    "lchown": [("path", 0)],
+    "fchownat": [("at", 0, 1)],
+    "truncate": [("path", 0)],
+    "creat": [("path", 0)],
+    "fchmod": [("fd", 0)],
+    "fchown": [("fd", 0)],
+    "ftruncate": [("fd", 0)],
+    "fallocate": [("fd", 0)],
+    "utimensat": [("at", 0, 1)],
+    "utimes": [("path", 0)],
+    "utime": [("path", 0)],
+}
+
+
+def split_args(text: str) -> list[str]:
+    """strace's top-level comma-separated arguments (strings, <annotations>,
+    {structs}, [arrays] kept whole)."""
+    out: list[str] = []
+    depth = 0
+    cur = ""
+    in_str = False
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if in_str:
+            cur += c
+            if c == "\\" and i + 1 < len(text):
+                cur += text[i + 1]
+                i += 1
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+            cur += c
+        elif c in "([{<":
+            depth += 1
+            cur += c
+        elif c in ")]}>":
+            depth -= 1
+            cur += c
+        elif c == "," and depth == 0:
+            out.append(cur.strip())
+            cur = ""
+        else:
+            cur += c
+        i += 1
+    if cur.strip():
+        out.append(cur.strip())
+    return out
+
+
+def _unquote(arg: str) -> str | None:
+    if len(arg) >= 2 and arg[0] == '"' and arg.endswith('"'):
+        body = arg[1:-1]
+        return body.encode().decode("unicode_escape") if "\\" in body else body
+    return None
+
+
+def _join(base: str, rel: str) -> str:
+    import posixpath
+
+    return posixpath.normpath(rel if rel.startswith("/") else f"{base}/{rel}")
+
+
+def mutated_paths(name: str, args: list[str]) -> tuple[list[str], list[str]]:
+    """The absolute paths a call mutates, and why any could not be resolved."""
+    if name in ("open", "openat"):
+        flags = args[1] if name == "open" else (args[2] if len(args) > 2 else "")
+        if not _WRITE_FLAGS.search(flags):
+            return [], []
+        spec = [("path", 0)] if name == "open" else [("at", 0, 1)]
+    elif name in _MUTATING:
+        spec = _MUTATING[name]
+    else:
+        return [], []
+    paths: list[str] = []
+    unresolved: list[str] = []
+    for kind, *idx in spec:
+        try:
+            if kind == "fd":
+                m = _ANNOT.match(args[idx[0]])
+                if m is None:
+                    unresolved.append(f"{name}: fd {args[idx[0]]} has no target")
+                else:
+                    paths.append(m.group(2))
+                continue
+            raw = args[idx[-1]]
+            if raw == "NULL" and kind == "at":
+                m = _ANNOT.match(args[idx[0]])
+                if m is None:
+                    unresolved.append(f"{name}: fd {args[idx[0]]} has no target")
+                else:
+                    paths.append(m.group(2))
+                continue
+            rel = _unquote(raw)
+            if rel is None:
+                unresolved.append(f"{name}: path argument {raw!r}")
+                continue
+            if rel.startswith("/"):
+                paths.append(_join("/", rel))
+                continue
+            if kind == "at":
+                m = _ANNOT.match(args[idx[0]])
+                if m is None:
+                    unresolved.append(
+                        f"{name}: dirfd {args[idx[0]]} has no target for {rel!r}"
+                    )
+                    continue
+                paths.append(_join(m.group(2), rel))
+            else:
+                unresolved.append(f"{name}: relative path {rel!r} without a dirfd")
+        except IndexError:
+            unresolved.append(f"{name}: too few arguments {args}")
+    return paths, unresolved
+
+
+def _under(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip("/") + "/")
+
+
+def cmd_install_trace(args: argparse.Namespace) -> int:
+    prefix: Path = args.strace_prefix
+    logs = sorted(prefix.parent.glob(prefix.name + ".*"))
+    if not logs:
+        raise PackageError(f"no strace logs {prefix}.*")
+    target = args.target.rstrip("/")
+    calls: list[dict[str, Any]] = []
+    incomplete: list[str] = []
+    for log in logs:
+        for line in log.read_text(errors="replace").splitlines():
+            if line.startswith(("+++", "---")) or not line.strip():
+                continue
+            if "<unfinished ...>" in line or "resumed>" in line:
+                incomplete.append(f"{log.name}: {line[:200]}")
+                continue
+            m = _LINE.match(line)
+            if m is None:
+                incomplete.append(f"{log.name}: {line[:200]}")
+                continue
+            name, argtext, ret, rest = m.groups()
+            argv = split_args(argtext)
+            paths, unresolved = mutated_paths(name, argv)
+            if unresolved:
+                incomplete.extend(f"{log.name}: {u}" for u in unresolved)
+            if paths:
+                calls.append(
+                    {
+                        "log": log.name,
+                        "call": name,
+                        "paths": paths,
+                        "ok": ret != "?" and not ret.startswith("-"),
+                        "flags": argv[4]
+                        if name == "renameat2" and len(argv) > 4
+                        else "",
+                        "line": line[:300],
+                    }
+                )
+    checks: dict[str, Any] = {}
+    stagings = sorted(
+        {
+            p
+            for c in calls
+            for p in c["paths"]
+            if _STAGING.match(p) and c["call"] in ("mkdir", "mkdirat")
+        }
+    )
+    staging = stagings[0] if len(stagings) == 1 else None
+    s_bad = [] if staging else [f"expected one staging directory, found {stagings}"]
+    if staging and _STAGING.match(staging).group(1) != target.rsplit("/", 1)[0]:  # type: ignore[union-attr]
+        s_bad.append(f"staging {staging} is not next to {target}")
+    _check(checks, "one_staging_directory", s_bad, staging=staging)
+
+    on_target = [c for c in calls if any(_under(p, target) for p in c["paths"])]
+    t_bad: list[str] = []
+    want_src = f"{staging}/x/{args.package}" if staging else None
+    ok_renames = [
+        c
+        for c in on_target
+        if c["call"] == "renameat2"
+        and c["ok"]
+        and c["paths"] == [want_src, target]
+        and "RENAME_NOREPLACE" in c["flags"]
+    ]
+    if len(ok_renames) != 1:
+        t_bad.append(
+            f"{len(ok_renames)} renameat2({want_src}, {target}, RENAME_NOREPLACE) = 0"
+        )
+    for c in on_target:
+        if c not in ok_renames:
+            t_bad.append(f"another call on the target: {c['line']}")
+    _check(checks, "target_only_by_one_noreplace_rename", t_bad, calls=len(on_target))
+
+    o_bad = [
+        c["line"]
+        for c in calls
+        if c not in on_target
+        and not all(
+            (staging and _under(p, staging)) or p == "/dev/null" for p in c["paths"]
+        )
+    ]
+    _check(
+        checks, "other_mutations_in_staging", o_bad, calls=len(calls) - len(on_target)
+    )
+
+    removed = any(
+        c["ok"]
+        and c["paths"] == [staging]
+        and (
+            c["call"] == "rmdir"
+            or (c["call"] == "unlinkat" and "AT_REMOVEDIR" in c["line"])
+        )
+        for c in calls
+    )
+    _check(checks, "staging_removed", [] if removed else [f"{staging} was not removed"])
+    _check(checks, "trace_complete", incomplete[:50], incomplete=len(incomplete))
+
+    report = {
+        "schema": SCHEMA,
+        "kind": "install-trace",
+        "strace_prefix": str(prefix),
+        "logs": len(logs),
+        "target": target,
+        "checks": checks,
+        "pass": all(c["pass"] for c in checks.values()),
+    }
+    g2._write(args.report, report)
+    for key, c in checks.items():
+        print(f"{key}: {'PASS' if c['pass'] else 'FAIL'}")
+    return 0 if report["pass"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     import check_shipping_bundle as bundle
 
@@ -688,9 +956,16 @@ def main(argv: list[str] | None = None) -> int:
     t.add_argument("--entrypoint-pin", type=Path, default=bundle.ENTRYPOINT_PIN)
     t.add_argument("--launcher-source", type=Path, default=bundle.LAUNCHER_SOURCE)
     t.add_argument("--installer-source", type=Path, default=INSTALLER_SOURCE)
+    it = sub.add_parser("install-trace")
+    it.add_argument("--strace-prefix", type=Path, required=True)
+    it.add_argument("--target", required=True, help="TARGET as the installer saw it")
+    it.add_argument("--package", required=True, help="the package name <name>")
+    it.add_argument("--report", type=Path, required=True)
     args = ap.parse_args(argv)
     try:
-        return {"tarball": cmd_tarball}[args.cmd](args)
+        return {"tarball": cmd_tarball, "install-trace": cmd_install_trace}[args.cmd](
+            args
+        )
     except (PackageError, g2.CheckError, OSError, tarfile.TarError) as exc:
         print(f"check_shipping_package: {exc}", file=sys.stderr)
         return 2

@@ -10,7 +10,8 @@
 # host. No network, no GPU. OUT gets install.log (with exit=<rc>),
 # container.txt (image, OS, glibc, coreutils, tar, the absent tools) and
 # after.txt (the parent's entries after the run, as the container sees them).
-# install-strace records strace -ff -yy of every file-system call into
+# install-strace records strace -ff -yy of every file-system call (%file plus
+# fchmod, fchown, ftruncate, fallocate) into
 # OUT/strace/i.<pid> (check_shipping_package.py install-trace reads it).
 #
 # Harness knobs for the negative controls (the installer has none):
@@ -67,7 +68,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends strace && rm -r
 EOF
     RUN_IMAGE=$STRACE_IMAGE
     mkdir -p "$OUT/strace"
-    CMD=(strace -ff -qq -yy -s 4096 -e trace=%file,%desc -e signal=none -o /out/strace/i "${CMD[@]}")
+    CMD=(strace -ff -qq -yy -s 4096 -e trace=%file,fchmod,fchown,ftruncate,fallocate -e signal=none -o /out/strace/i "${CMD[@]}")
 fi
 DOCKER=(docker run --rm --network none --user "$(id -u):$(id -g)"
         -v "$DIST:/dist:ro" -v "$OUT:/out")

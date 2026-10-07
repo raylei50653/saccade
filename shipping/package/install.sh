@@ -166,6 +166,13 @@ esac
 got=$(sha256sum < "$tarball")
 [ "${got%% *}" = "$sums" ] || fail "$name.tar.gz: sha256 is not the one in $digest"
 
+# A staging directory survives only SIGKILL or a crash; it may also belong to
+# an installation still running, so it is reported, not removed.
+for d in "$parent"/.saccade-install.*; do
+    if [ -d "$d" ]; then
+        say "note: $d is left from another installation (remove it once none is running)"
+    fi
+done
 staging=$(mktemp -d "$parent/.saccade-install.XXXXXX") || { say "cannot create a staging directory in $parent"; exit 2; }
 mkdir "$staging/x"
 say "extracting $name.tar.gz into $staging"
@@ -175,6 +182,7 @@ tar -x -z -f "$tarball" -C "$staging/x" --no-same-owner --no-same-permissions \
     fail "the tarball does not hold exactly one directory $name"
 [ -d "$staging/x/$name" ] && [ ! -L "$staging/x/$name" ] || fail "$name is not a directory"
 manifest_list "$staging/x/$name" "$name" "$staging/list"
+say "checking $count files against MANIFEST.json"
 check_tree "$staging/x/$name" "$staging/list" "$staging" set
 
 # One rename, no replacement: mv -n -T is renameat2(RENAME_NOREPLACE). Some
