@@ -27,8 +27,10 @@ Subcommands:
              name from the tree's lib/vendor with the pinned bytes, the
              operator library and the auditor from the tree, nothing else.
 ``runtime``  G2-2 / G2-4 from ``strace -ff`` logs of a run started through
-             the launcher: exactly three ``execve`` (in one process the
-             launcher, then the system loader with the launcher's arguments;
+             the launcher: exactly three ``execve``, each recorded complete
+             (in one process the launcher, then the system loader whose argv
+             is exactly the loader options, the entrypoint and the launcher's
+             arguments;
              in a child of it the auditor readiness probe, A2), no Python / Triton /
              compiler open, and every shared object it opened from the tree is
              the vendor set + the operator library + the auditor, with no
@@ -36,7 +38,8 @@ Subcommands:
 ``rejected`` (PR-C2) a run of the launcher given an option the shipping
              entrypoint does not have (``strace -ff`` logs + its log): exit 2
              with ``saccade_track: unknown argument <option>``, the same exec
-             chain, no open (even attempted) of anything under the model root,
+             chain, no open (even attempted) of anything under the model root
+             (the default one, the cwd, when the arguments name none),
              of the operator library or of a GPU device node, and no output
              (including trace files and failed write attempts). Relative
              opens require strace -yy dirfd/cwd annotations; unresolved or
@@ -431,7 +434,59 @@ def _argv_paths(
                 paths.update(os.path.normpath(os.path.join(c, value)) for c in cwds)
             else:
                 unresolved.append(f"{arg} {value}")
-    return paths, unresolved
+    return paths, list(dict.fromkeys(unresolved))
+
+
+# The entrypoint's options that take a value (shipping/tools/track_driver.hpp
+# parse_interface_arg); any other "--" argument stops its parse.
+_ENTRYPOINT_VALUE_OPTIONS = (
+    "--config",
+    "--lineage",
+    "--attestation",
+    "--model-root",
+    "--out",
+    "--report",
+    "--trace",
+)
+
+
+def _sets_model_root(args: list[str]) -> bool:
+    """Whether the entrypoint's parse of ``args`` consumes a ``--model-root``
+    before it stops (an unknown option or a missing value)."""
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in _ENTRYPOINT_VALUE_OPTIONS:
+            if i + 1 >= len(args):
+                return False
+            if a == "--model-root":
+                return True
+            i += 2
+        elif a.startswith("--"):
+            return False
+        else:
+            i += 1
+    return False
+
+
+def _default_model_root(
+    execs: list[dict[str, Any]], mount: str, cwds: list[str]
+) -> tuple[set[str], list[str]]:
+    """The entrypoint's default model root ("." = its cwd, track::Options)
+    unless every exec of the entrypoint sets --model-root (A4). Resolved
+    against every evidenced cwd; with none it is unresolved. With no exec of
+    the entrypoint recorded, the default is assumed."""
+    entry = f"{mount}/{ENTRYPOINT}"
+    runs = [
+        e["argv"][e["argv"].index(entry) + 1 :] if e["path"] != entry else e["argv"][1:]
+        for e in execs
+        if e["path"] == entry or entry in e["argv"]
+    ]
+    if runs and all(_sets_model_root(a) for a in runs):
+        return set(), []
+    if not cwds:
+        return set(), ["default --model-root ."]
+    return set(cwds), []
 
 
 def _object_class(path: str) -> str:
@@ -453,7 +508,7 @@ def _object_class(path: str) -> str:
 
 def _within(path: str, root: str) -> bool:
     root = os.path.normpath(root)
-    return path == root or path.startswith(root + "/")
+    return path == root or path.startswith(root.rstrip("/") + "/")
 
 
 def strace_records(
@@ -473,7 +528,21 @@ def strace_records(
         for line in log.read_text(errors="replace").splitlines():
             m = g2._SYSCALL.match(line.strip())
             if not m:
-                if re.match(r"^(?:\d+\s+)?(?:openat|open)\(", line.strip()):
+                # An exec that strace did not record to completion (unfinished,
+                # truncated) is kept as a failed exec, so the chain fails (A4).
+                if re.match(r"^(?:\d+\s+)?(?:execveat|execve)\(", line.strip()):
+                    execs.append(
+                        {
+                            "call": "execve",
+                            "path": "",
+                            "rc": -1,
+                            "argv": [],
+                            "incomplete": True,
+                            "raw": line.strip(),
+                            "log": log.name,
+                        }
+                    )
+                elif re.match(r"^(?:\d+\s+)?(?:openat|open)\(", line.strip()):
                     opens.append(
                         {
                             "path": "",
@@ -534,7 +603,10 @@ def exec_chain(execs: list[dict[str, Any]], mount: str) -> dict[str, Any]:
     """Exactly three execs: in one process the launcher, then the system loader
     with its arguments; in another (the launcher's command substitution) the
     auditor readiness probe (A2). ``strace -ff`` writes one log per process,
-    so order is checked within a log, not across logs."""
+    so order is checked within a log, not across logs. The loader's argv is
+    checked whole (A4): the loader options, ``--argv0`` the launcher's argv[0],
+    the entrypoint in the program slot, then the launcher's own arguments
+    unchanged."""
     loader_args = [
         "--library-path",
         f"{mount}/{VENDOR}",
@@ -547,14 +619,23 @@ def exec_chain(execs: list[dict[str, Any]], mount: str) -> dict[str, Any]:
         by_log.setdefault(e.get("log", ""), []).append(e)
     main = [es for es in by_log.values() if es[0]["path"] == f"{mount}/{LAUNCHER}"]
     probe = [es for es in by_log.values() if es[0]["path"] != f"{mount}/{LAUNCHER}"]
+    launcher_argv = main[0][0]["argv"] if len(main) == 1 else []
     exec_ok = (
         len(execs) == 3
         and all(e["rc"] == 0 for e in execs)
         and len(main) == 1
         and len(main[0]) == 2
+        and len(launcher_argv) >= 1
         and main[0][1]["path"] == SYSTEM_LOADER
-        and main[0][1]["argv"][1:5] == loader_args
-        and f"{mount}/{ENTRYPOINT}" in main[0][1]["argv"]
+        and main[0][1]["argv"]
+        == [
+            SYSTEM_LOADER,
+            *loader_args,
+            "--argv0",
+            launcher_argv[0],
+            f"{mount}/{ENTRYPOINT}",
+            *launcher_argv[1:],
+        ]
         and len(probe) == 1
         and len(probe[0]) == 1
         and probe[0][0]["path"] == SYSTEM_LOADER
@@ -565,7 +646,8 @@ def exec_chain(execs: list[dict[str, Any]], mount: str) -> dict[str, Any]:
         "expected": [
             f"{mount}/{LAUNCHER}",
             f"(child) {' '.join(probe_argv)}",
-            f"{SYSTEM_LOADER} {' '.join(loader_args)} ... {mount}/{ENTRYPOINT}",
+            f"{SYSTEM_LOADER} {' '.join(loader_args)} --argv0 <launcher argv[0]> "
+            f"{mount}/{ENTRYPOINT} <launcher arguments>",
         ],
         "execs": execs,
     }
@@ -656,10 +738,14 @@ def cmd_rejected(args: argparse.Namespace) -> int:
     unresolved = [o["raw"] for o in opens if o["unresolved"]]
     cwds = sorted({o["cwd"] for o in opens if o.get("cwd")})
     # The mounted tree's model root, plus the model root and model inputs the
-    # run's own arguments name: a rejected run reads none of them.
+    # run's own arguments name (or the default model root, the cwd, when they
+    # name none): a rejected run reads none of them.
     model_inputs, unresolved_inputs = _argv_paths(
         execs, ("--model-root", "--config", "--lineage", "--attestation"), cwds
     )
+    default_root, unresolved_default = _default_model_root(execs, mount, cwds)
+    model_inputs |= default_root
+    unresolved_inputs += unresolved_default
     model_inputs.add(f"{mount}/{g2.MODEL_ROOT}")
     touched = sorted(
         {

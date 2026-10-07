@@ -21,8 +21,9 @@ case $0 in
     *) bin_dir=. ;;
 esac
 prefix=$(cd -P "$bin_dir/.." && pwd -P)
+# The loader splits --library-path on ':' and ';' whatever the quoting (A4).
 case $prefix in
-    *:*) echo "saccade_track: the install prefix must not contain ':' ($prefix)" >&2; exit 2 ;;
+    *:* | *\;*) echo "saccade_track: the install prefix must not contain ':' or ';' ($prefix)" >&2; exit 2 ;;
 esac
 unset LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH SACCADE_AUDIT_PROBE
 ready=$(SACCADE_AUDIT_PROBE=1 /lib64/ld-linux-x86-64.so.2 \

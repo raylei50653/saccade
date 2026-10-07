@@ -16,7 +16,10 @@
  *   la_objopen    every mapped object is resolved (realpath) before it is
  *                 classified, by its mapped name and by its real name, so a
  *                 symlink alias (payload -> libfoo.so) is classified as
- *                 libfoo.so (A3). A bundled name must come from
+ *                 libfoo.so (A3). Names are compared by SONAME family
+ *                 (trailing numeric version components dropped), so an alias
+ *                 to libfoo.so.13.1.0 is in the family of a bundled
+ *                 libfoo.so.13 (A4). A bundled family must come from
  *                 <prefix>/lib/vendor/, the operator library from its model
  *                 root path; nothing named libpython* / libtorch_python*. An
  *                 object that cannot be resolved (the vDSO) passes only when
@@ -66,6 +69,32 @@ static const char *base_name(const char *p) {
 static int is_bundled(const char *name) {
     for (int i = 0; kBundled[i] != NULL; ++i)
         if (strcmp(kBundled[i], name) == 0) return 1;
+    return 0;
+}
+
+/* Length of `name` without its trailing numeric version components
+ * (libfoo.so.13.1.0 -> libfoo.so); 0 when what remains does not end in ".so". */
+static size_t family_len(const char *name) {
+    size_t n = strlen(name);
+    for (;;) {
+        size_t k = n;
+        while (k > 0 && name[k - 1] >= '0' && name[k - 1] <= '9') --k;
+        if (k == n || k == 0 || name[k - 1] != '.') break;
+        n = k - 1;
+    }
+    return n >= 3 && memcmp(name + n - 3, ".so", 3) == 0 ? n : 0;
+}
+
+static int same_family(const char *a, const char *b) {
+    size_t n = family_len(a);
+    return n != 0 && n == family_len(b) && memcmp(a, b, n) == 0;
+}
+
+/* In the SONAME family of a bundled name (exact names first). */
+static int is_bundled_family(const char *name) {
+    if (is_bundled(name)) return 1;
+    for (int i = 0; kBundled[i] != NULL; ++i)
+        if (same_family(kBundled[i], name)) return 1;
     return 0;
 }
 
@@ -155,8 +184,9 @@ unsigned int la_objopen(struct link_map *map, Lmid_t lmid, uintptr_t *cookie) {
     const char *real_base = resolved ? base_name(real) : base;
     if (is_python(base) || is_python(real_base)) fail("Python library mapped", path);
     const char *op_base = base_name(g_op_library);
-    int bundled = is_bundled(base) || is_bundled(real_base);
-    int op = strcmp(base, op_base) == 0 || strcmp(real_base, op_base) == 0;
+    int bundled = is_bundled_family(base) || is_bundled_family(real_base);
+    int op = strcmp(base, op_base) == 0 || strcmp(real_base, op_base) == 0 || same_family(base, op_base) ||
+             same_family(real_base, op_base);
     if (!bundled && !op) return 0;
     if (!resolved) fail("cannot resolve a mapped object", path);
     if (bundled && !in_vendor(real)) fail("bundled library mapped from outside lib/vendor", path);

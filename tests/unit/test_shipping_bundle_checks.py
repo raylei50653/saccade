@@ -215,12 +215,14 @@ def test_closure_reports_a_missing_vendor_object(tmp_path: Path) -> None:
 
 # ── runtime ────────────────────────────────────────────────────────────────────
 
+# The entrypoint arguments, as the formal runs name them (--model-root given).
+_ARGS = '"--config", "/cfg/c.json", "--model-root", "/opt/saccade/share/saccade"'
 LOADER = (
     'execve("/lib64/ld-linux-x86-64.so.2", ["/lib64/ld-linux-x86-64.so.2", "--library-path", '
     '"/opt/saccade/lib/vendor", "--audit", "/opt/saccade/lib/saccade_loader_audit.so", "--argv0", '
-    '"/opt/saccade/bin/saccade_track", "/opt/saccade/libexec/saccade_track", "--config", "/cfg/c.json"], 0x0 /* 3 vars */) = 0'
+    f'"/opt/saccade/bin/saccade_track", "/opt/saccade/libexec/saccade_track", {_ARGS}], 0x0 /* 3 vars */) = 0'
 )
-LAUNCHER = 'execve("/opt/saccade/bin/saccade_track", ["/opt/saccade/bin/saccade_track", "--config", "/cfg/c.json"], 0x0 /* 3 vars */) = 0'
+LAUNCHER = f'execve("/opt/saccade/bin/saccade_track", ["/opt/saccade/bin/saccade_track", {_ARGS}], 0x0 /* 3 vars */) = 0'
 # The auditor readiness probe (A2), exec'd by the launcher's command
 # substitution: a child process, so strace -ff logs it in a file of its own.
 PROBE = (
@@ -455,6 +457,55 @@ def test_runtime_exec_chain_needs_the_readiness_probe(
     _, _, opens = _runtime_tree(tmp_path)
     r = _runtime(tmp_path, [*lines, *opens], probe)
     assert not r["checks"]["g2_2_g2_4_exec_chain"]["pass"]
+
+
+_LOADER_PREFIX = (
+    'execve("/lib64/ld-linux-x86-64.so.2", ["/lib64/ld-linux-x86-64.so.2", "--library-path", '
+    '"/opt/saccade/lib/vendor", "--audit", "/opt/saccade/lib/saccade_loader_audit.so", '
+)
+
+
+@pytest.mark.parametrize(
+    "loader",
+    [
+        # the entrypoint named, but /bin/true in the program slot (A4)
+        _LOADER_PREFIX
+        + '"--argv0", "/opt/saccade/libexec/saccade_track", "/bin/true"], 0x0) = 0',
+        # the entrypoint after the program
+        _LOADER_PREFIX + '"--argv0", "/opt/saccade/bin/saccade_track", "/bin/true", '
+        f'"/opt/saccade/libexec/saccade_track", {_ARGS}], 0x0) = 0',
+        # arguments the launcher was not given
+        LOADER.replace(_ARGS, f'{_ARGS}, "--trace", "/tmp/t"'),
+        # arguments the launcher was given, dropped
+        LOADER.replace(_ARGS, '"--config", "/cfg/c.json"'),
+        # another argv0
+        LOADER.replace('"--argv0", "/opt/saccade/bin/saccade_track"', '"--argv0", "x"'),
+        # an extra loader option
+        LOADER.replace('"--argv0"', '"--preload", "/tmp/p.so", "--argv0"'),
+    ],
+)
+def test_runtime_exec_chain_checks_the_whole_loader_argv(
+    tmp_path: Path, loader: str
+) -> None:
+    _, _, opens = _runtime_tree(tmp_path)
+    r = _runtime(tmp_path, [LAUNCHER, loader, *opens])
+    assert not r["pass"] and not r["checks"]["g2_2_g2_4_exec_chain"]["pass"]
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        'execve("/usr/bin/python3", ["/usr/bin/python3"], 0x0 /* 3 vars */ <unfinished ...>',
+        'execve("/usr/bin/python3", ["/usr/bin/python3"], 0x0 /* 3 vars */',
+        'execveat(3, "", ["x"], 0x0, AT_EMPTY_PATH <unfinished ...>',
+    ],
+)
+def test_runtime_fails_closed_on_an_incomplete_exec(tmp_path: Path, extra: str) -> None:
+    _, _, opens = _runtime_tree(tmp_path)
+    r = _runtime(tmp_path, [LAUNCHER, LOADER, *opens, extra])
+    c = r["checks"]["g2_2_g2_4_exec_chain"]
+    assert not r["pass"] and not c["pass"]
+    assert [e["raw"] for e in c["execs"] if e.get("incomplete")] == [extra]
 
 
 # ── measurement surface (PR-C2) ────────────────────────────────────────────────
@@ -700,22 +751,23 @@ def test_rejected_detects_surviving_output(tmp_path: Path, name: str) -> None:
 
 
 def test_rejected_checks_output_paths_from_argv(tmp_path: Path) -> None:
-    loader = LOADER.replace(
-        '"--config", "/cfg/c.json"',
-        '"--config", "/cfg/c.json", "--trace", "/out/custom_trace"',
-    )
+    loader = _with_args("--trace", "/out/custom_trace")
     line = (
         'openat(AT_FDCWD, "/out/custom_trace/detector.bin", O_WRONLY|O_CREAT, 0666) = 8'
     )
-    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    r = _rejected(tmp_path, [*loader, *_REJECTED_OPENS, line], _REJECTED_LOG)
     assert not r["pass"] and not r["checks"]["no_output"]["pass"]
 
 
-def _with_args(*args: str) -> str:
-    extra = ", ".join(f'"{a}"' for a in args)
-    return LOADER.replace(
-        '"--config", "/cfg/c.json"', f'"--config", "/cfg/c.json", {extra}'
+def _with_args(*args: str, base: str = _ARGS) -> list[str]:
+    """The launcher and loader execs with the entrypoint arguments ``base``
+    followed by ``args``."""
+    extra = (
+        ", ".join([base, *(f'"{a}"' for a in args)])
+        if base
+        else ", ".join(f'"{a}"' for a in args)
     )
+    return [x.replace(_ARGS, extra) for x in (LAUNCHER, LOADER)]
 
 
 @pytest.mark.parametrize("option", ["--out", "--trace", "--report"])
@@ -727,7 +779,7 @@ def test_rejected_resolves_relative_output_args_against_the_cwd(
         'openat(AT_FDCWD</out>, "custom_trace/detector.bin", '
         "O_WRONLY|O_CREAT, 0666) = -1 EACCES"
     )
-    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    r = _rejected(tmp_path, [*loader, *_REJECTED_OPENS, line], _REJECTED_LOG)
     assert not r["pass"] and not r["checks"]["no_output"]["pass"]
     assert r["checks"]["no_output"]["attempted"] == ["/out/custom_trace/detector.bin"]
 
@@ -737,7 +789,7 @@ def test_rejected_finds_relative_output_surviving_under_the_cwd(tmp_path: Path) 
     (tmp_path / "out" / "custom_report.json").write_bytes(b"{}")
     loader = _with_args("--report", "custom_report.json")
     cwd = 'openat(AT_FDCWD</out>, "/etc/ld.so.cache", O_RDONLY) = 3</etc/ld.so.cache>'
-    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS, cwd], _REJECTED_LOG)
+    r = _rejected(tmp_path, [*loader, *_REJECTED_OPENS, cwd], _REJECTED_LOG)
     assert not r["pass"] and r["checks"]["no_output"]["found"]
 
 
@@ -746,9 +798,7 @@ def test_rejected_fails_closed_on_relative_output_without_a_cwd(
 ) -> None:
     # Plain (non -yy) records carry no cwd: the argument's base is unknown.
     loader = _with_args("--trace", "custom_trace")
-    r = _rejected(
-        tmp_path, [LAUNCHER, loader, *_REJECTED_PLAIN], _REJECTED_LOG, plain=True
-    )
+    r = _rejected(tmp_path, [*loader, *_REJECTED_PLAIN], _REJECTED_LOG, plain=True)
     assert not r["pass"] and not r["checks"]["no_output"]["pass"]
     assert r["checks"]["no_output"]["unresolved_outputs"] == ["--trace custom_trace"]
 
@@ -822,8 +872,8 @@ def test_rejected_fails_closed_on_a_yy_open_without_its_target(
 def test_rejected_checks_the_model_inputs_named_by_argv(
     tmp_path: Path, args: tuple[str, ...], line: str
 ) -> None:
-    loader = _with_args(*args) if args else LOADER
-    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    loader = _with_args(*args) if args else [LAUNCHER, LOADER]
+    r = _rejected(tmp_path, [*loader, *_REJECTED_OPENS, line], _REJECTED_LOG)
     assert not r["pass"] and not r["checks"]["no_model_root_open"]["pass"]
     assert r["checks"]["no_model_root_open"]["attempted"]
 
@@ -832,12 +882,63 @@ def test_rejected_fails_closed_on_relative_model_root_without_a_cwd(
     tmp_path: Path,
 ) -> None:
     loader = _with_args("--model-root", "models")
-    r = _rejected(
-        tmp_path, [LAUNCHER, loader, *_REJECTED_PLAIN], _REJECTED_LOG, plain=True
-    )
+    r = _rejected(tmp_path, [*loader, *_REJECTED_PLAIN], _REJECTED_LOG, plain=True)
     c = r["checks"]["no_model_root_open"]
     assert not r["pass"] and not c["pass"]
     assert c["unresolved_inputs"] == ["--model-root models"]
+
+
+_ENGINE = "models/yolo/yolo26s_backbone_640_best.engine"
+
+
+def test_rejected_checks_the_default_model_root(tmp_path: Path) -> None:
+    # no --model-root: the entrypoint's model root is its cwd (A4)
+    lines = _with_args(base='"--config", "/cfg/c.json"')
+    opens = [x.replace("AT_FDCWD</>", "AT_FDCWD</work>") for x in _REJECTED_OPENS]
+    line = f'openat(AT_FDCWD</work>, "/work/{_ENGINE}", O_RDONLY) = 3</work/{_ENGINE}>'
+    for d in ("clean", "read"):
+        (tmp_path / d).mkdir()
+    clean = _rejected(tmp_path / "clean", [*lines, *opens], _REJECTED_LOG)
+    assert clean["pass"], clean["checks"]
+    assert "/work" in clean["checks"]["no_model_root_open"]["model_inputs"]
+    r = _rejected(tmp_path / "read", [*lines, *opens, line], _REJECTED_LOG)
+    c = r["checks"]["no_model_root_open"]
+    assert not r["pass"] and not c["pass"]
+    assert c["attempted"] == [f"/work/{_ENGINE}"]
+
+
+def test_rejected_default_model_root_at_the_filesystem_root(tmp_path: Path) -> None:
+    # cwd "/": every path is under the default model root
+    lines = _with_args(base='"--config", "/cfg/c.json"')
+    r = _rejected(tmp_path, [*lines, *_REJECTED_OPENS], _REJECTED_LOG)
+    c = r["checks"]["no_model_root_open"]
+    assert not c["pass"] and "/opt/saccade/lib/vendor/libx.so.1" in c["attempted"]
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("--measurement-mutation", "--model-root", "/opt/saccade/share/saccade"),
+        ("--model-root",),
+    ],
+)
+def test_rejected_model_root_the_parse_does_not_reach_is_not_set(
+    tmp_path: Path, args: tuple[str, ...]
+) -> None:
+    lines = _with_args(*args, base='"--config", "/cfg/c.json"')
+    opens = [x.replace("AT_FDCWD</>", "AT_FDCWD</work>") for x in _REJECTED_OPENS]
+    r = _rejected(tmp_path, [*lines, *opens], _REJECTED_LOG)
+    assert "/work" in r["checks"]["no_model_root_open"]["model_inputs"]
+
+
+def test_rejected_fails_closed_on_the_default_model_root_without_a_cwd(
+    tmp_path: Path,
+) -> None:
+    lines = _with_args(base='"--config", "/cfg/c.json"')
+    r = _rejected(tmp_path, [*lines, *_REJECTED_PLAIN], _REJECTED_LOG, plain=True)
+    c = r["checks"]["no_model_root_open"]
+    assert not r["pass"] and not c["pass"]
+    assert c["unresolved_inputs"] == ["default --model-root ."]
 
 
 # ── launcher ───────────────────────────────────────────────────────────────────
@@ -1008,6 +1109,49 @@ def test_auditor_classifies_a_symlink_alias_by_its_real_name(tmp_path: Path) -> 
     assert "bundled library mapped from outside lib/vendor" in alias.stderr
 
 
+@_NEEDS_LOADER
+@pytest.mark.parametrize(
+    ("target", "refused"),
+    [
+        ("libfoo.so.1.0.0", True),  # the bundled family libfoo.so (A4)
+        ("libfoo.so.13", True),
+        ("libfoobar.so.1.0", False),  # another family: not the auditor's to refuse
+    ],
+)
+def test_auditor_classifies_a_versioned_alias_by_its_soname_family(
+    tmp_path: Path, target: str, refused: bool
+) -> None:
+    p = _audit_prefix(tmp_path)
+    _cc("-shared", "-fPIC", "-o", str(p / "nvidia" / target), str(p / "src/foo2.c"))
+    (p / "nvidia/payload").symlink_to(target)
+    _cc(
+        "-o",
+        str(p / "libexec/alias"),
+        str(p / "src/main.c"),
+        f"-L{p / 'nvidia'}",
+        "-l:payload",
+        "-Wl,--disable-new-dtags,-rpath,$ORIGIN/../nvidia",
+    )
+    r = subprocess.run(
+        [
+            str(LDSO),
+            "--library-path",
+            str(p / "lib/vendor"),
+            "--audit",
+            str(p / "lib/saccade_loader_audit.so"),
+            str(p / "libexec/alias"),
+        ],
+        capture_output=True,
+        text=True,
+        env={},
+    )
+    if refused:
+        assert r.returncode == 127 and r.stdout == "", (r.stdout, r.stderr)
+        assert "bundled library mapped from outside lib/vendor" in r.stderr
+    else:
+        assert r.returncode == 0 and r.stdout == "2\n", r.stderr
+
+
 def _launch(
     p: Path, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
@@ -1055,6 +1199,21 @@ def test_launcher_fails_closed_when_the_auditor_does_not_initialize(
     # the loader alone would ignore the auditor and run the planted copy ("2")
     assert r.returncode == 127 and r.stdout == "", (r.stdout, r.stderr)
     assert "the loader provenance auditor did not initialize" in r.stderr
+
+
+@_NEEDS_LOADER
+@pytest.mark.parametrize("delimiter", [":", ";"])
+def test_launcher_refuses_a_library_path_delimiter_in_the_prefix(
+    tmp_path: Path, delimiter: str
+) -> None:
+    # the loader splits --library-path on both, whatever the quoting (A4)
+    p = _audit_prefix(tmp_path)
+    moved = tmp_path / f"a{delimiter}b" / "prefix"
+    moved.parent.mkdir()
+    p.rename(moved)
+    r = _launch(moved)
+    assert r.returncode == 2 and r.stdout == "", (r.stdout, r.stderr)
+    assert "must not contain ':' or ';'" in r.stderr
 
 
 # ── install ────────────────────────────────────────────────────────────────────
