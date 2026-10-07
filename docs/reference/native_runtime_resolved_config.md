@@ -1567,3 +1567,57 @@ symlink alias 的控制只在 CPU 上的真實 loader 測試裡做（上面的�
 - symlink alias 的控制只在 CPU 上的真實 loader 測試裡做（§18.12）。
 
 結果目錄：`results/465_prc2_cli/full_276659a8/`；開發試做在 `results/465_prc1_dev/a3_f1d98b93/`。不納入版本控制。§18.11 的 A2 結果保留，作為沒有 `-yy` 的紀錄。
+
+### 18.14 修正 A4：版本號 alias、完整的 loader argv、不完整的 exec、預設 model root
+
+Review 在 `ff7359d4`（#532 合入後的 #527 head）提出五點，四個 P2、一個 P3。同樣都不是在正式 shipping run 裡觀察到的 parity 違反，是保護與 checker 的覆蓋缺口：
+
+- **auditor 可被指向帶版本號檔名的 alias 繞過**：`payload → libcudart.so.13.1.0`，請求名與真實名都不等於 bundle 的 SONAME `libcudart.so.13`，所以被當成非 bundle 物件放行。真實 loader 重現：exit 0，執行了外來的函式。
+- **exec chain 沒有檢查 loader 實際執行的程式**：只比對 loader argv 的前四個參數，以及 entrypoint 有沒有出現在 argv 裡。把 loader 的參數換成 `--argv0 /opt/saccade/libexec/saccade_track /bin/true`，`runtime` 的每一項仍然 PASS，但程式位置上是 `/bin/true`。
+- **不完整的 exec 紀錄被丟掉**：parser 的 fallback 只認得 open。在一份 PASS 的 trace 後面接一筆 unfinished 的 Python `execve`，結果仍然 PASS，checker 照樣認證「恰好三次 exec」。
+- **`rejected` 沒有保護預設的 model root**：沒給 `--model-root` 時，`track::Options` 預設 `.`。這項檢查只保護 argv 明確給的輸入與安裝的 model root；cwd 為 `/work`、open `/work/models/yolo/yolo26s_backbone_640_best.engine` 的 trace，五項都 PASS。
+- **launcher 只拒絕 `:`**（P3）：glibc 切 `--library-path` 時 `;` 也算分隔符，跟 shell 的引號無關。tree 放在含 `;` 的目錄下時，會通過 launcher 的檢查與 readiness probe，然後 loader 找不到 bundle 的函式庫，exit 127。
+
+**改了什麼**（`e6b57ac8`）：
+
+- **auditor**：`la_objopen` 用 SONAME 家族比對請求名與真實名。家族指去掉尾端數字版本段之後、以 `.so` 結尾的名字，跟 checker 的 `_object_class` 同一個規則，所以 `libcudart.so.13.1.0` 屬於 bundle 家族 `libcudart.so`，必須來自 `lib/vendor`。operator library 也按家族比對。`la_objsearch` 不變，因為搜尋候選的 basename 就是請求的 NEEDED 名。
+- **launcher**：前綴含 `:` 或 `;` 時 exit 2。
+- **exec chain**：loader 的 argv 必須**完整等於** `[ld.so, --library-path, <mount>/lib/vendor, --audit, <mount>/lib/saccade_loader_audit.so, --argv0, <launcher 的 argv[0]>, <mount>/libexec/saccade_track, <launcher 的 argv[1:]>]`。
+- **不完整的 exec**：`execve`／`execveat` 開頭、但 strace 沒有記錄完整（unfinished、截斷）的行，會留下成一筆失敗的 exec（`incomplete: true`），所以 exec chain 失敗。
+- **預設 model root**：照 `track_driver.hpp` 的 `parse_interface_arg` 模擬 entrypoint 的 argv parse。只要有一次 entrypoint exec 的 parse 在停下來（遇到未知選項或缺值）之前沒有取到 `--model-root`，就把每一個有證據的 cwd 都當成 model root 保護。沒有 cwd 證據時算 unresolved，檢查失敗。另外修正 `_within` 在 root 為 `/` 時不涵蓋任何路徑的問題。
+- **測試**：
+  - 真實 loader：經 `payload` 指到 `libfoo.so.1.0.0`、`libfoo.so.13`（bundle 家族 `libfoo.so`）都 exit 127；指到其他家族（`libfoobar.so.1.0`）照常執行。
+  - exec chain：`/bin/true` 放在程式位置、entrypoint 排在程式之後、轉送的參數多了或少了、`--argv0` 不同、多一個 loader 選項，都會失敗。
+  - 三種不完整的 exec 都會失敗。
+  - 預設 model root：cwd `/work`、cwd `/`、parse 沒走到 `--model-root`、沒有 cwd 證據。
+  - launcher 前綴含 `:` 或 `;`。
+  - 新加的測試在 `ff7359d4` 的原始碼上全部失敗，修正後全部通過，共 104 項。
+  - fixture 的 launcher／loader argv 改成跟正式 run 一樣帶 `--model-root`。
+- **沒有動的**：entrypoint pin、operator library、engine、model root、`third_party_set.json`、安裝規則、`run_shipping_container.sh`。
+
+**開發期間已經看到的**（`results/465_prc1_dev/a4_e6b57ac8/`，不是正式 run）：
+
+- `static` 12 項通過。
+- `bundle-strace`（MOT17-05）exit 0，`runtime` 三項 PASS，MOT17-05 txt 與 A3 的第 4 條相同。
+- `rejected`（`--measurement-mutation`）5 項 PASS。
+- 新 checker 重新評估 A3 正式 run 的 `runtime` 與三次 `rejected`：全部 PASS。預設 model root 沒有被加入，因為 argv 有給 `--model-root`。
+- 下面 N15–N17 的合成控制，在開發 trace 上：新 checker 都在對應的那一項失敗；A3 的 checker（`ff7359d4`）全部 PASS。
+- `;` 前綴：A4 launcher exit 2；A3 launcher 通過 probe 之後，loader 找不到 `libnvinfer.so.10`。
+
+**契約修正**（正式 run 之前寫定）：正式 run＝§18.12 修正後的整個 run，在 A4 的乾淨 commit 上重跑，以下不同：
+
+- `runtime`、`rejected` 用 A4 的 checker。第 5 條與第 6a 條的 exec chain 以完整的 loader argv 判定。
+- N9 仍然必須失敗（四次 exec）。N14 帶 `--legacy-plain-trace` 時三項仍然必須 PASS（A2 plain trace 的 loader argv 也要通過完整比對）。
+- **新的負控制**：N15–N17 是合成的，在這次 run 的真實 `-yy` trace 複本上做一處修改（修改腳本寫在 `run.sh` 裡）。每一個也用 A3 的 checker（`ff7359d4` 的版本）評估一次，作為重現紀錄，不列入判準。
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N15 | 第 5 條 `container_strace` 的複本：loader exec 改成 `--argv0 /opt/saccade/libexec/saccade_track /bin/true` | `runtime`：exec chain 失敗，其他兩項 PASS |
+| N16 | 第 5 條 `container_strace` 的複本：launcher 的 log 後面加一筆 `execve("/usr/bin/python3", …) <unfinished ...>` | `runtime`：exec chain 失敗，報告的 `incomplete` 紀錄就是那一筆；其他兩項 PASS |
+| N17a | 第 6a 條 `rejected_measurement_mutation` 的複本：launcher 與 loader 的 argv 去掉 `--model-root <值>` | `rejected`：`no_model_root_open` 失敗，`model_inputs` 含 cwd `/`；其他四項 PASS |
+| N17b | N17a，另外把每一個 `AT_FDCWD</>` 改成 `AT_FDCWD</work>`，再接一筆 open `/work/models/yolo/yolo26s_backbone_640_best.engine` | `rejected`：`no_model_root_open` 失敗，`attempted` 正好是那個 engine 路徑；其他四項 PASS |
+| N18 | 乾淨 image（不給 GPU），tree 掛在 `/opt/sac;cade`，執行 `/opt/sac;cade/bin/saccade_track` | A4 tree：exit 2，訊息是 `must not contain ':' or ';'`。A3 tree（`full_276659a8`）exit 127，只作重現紀錄 |
+
+版本號 alias 的控制只在 CPU 上的真實 loader 測試裡做（上面的測試），理由與 §18.12 相同：要在 shipping tree 上做，必須改 pin 的 ELF。
+
+其他 gate、負控制、判準與「不做的」不變。結果放在 `results/465_prc2_cli/full_<A4 commit>/`；§18.13 的 A3 結果保留。
