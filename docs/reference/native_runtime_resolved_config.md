@@ -1404,7 +1404,7 @@ Review 在 `2e74f3ee`（#530 合入後的 #529 head）用合成 trace 重現兩�
 
 ### 18.10 修正 A2：auditor 必須初始化成功（PR-C1 launcher）
 
-Review 在 `b73d0a65`（#527 合入 C1＋C2 的 head）重現：auditor 不存在或無法載入時，loader 印出 `cannot be loaded as audit interface … ignored` 後照樣執行。以真的 loader 與原本的 launcher，刪除或截斷 auditor 後，被放在 DT_RPATH 位置的那一份會被載入，process exit 0，不是 127。§17 的 provenance 保護因此不是 fail-closed：只有 auditor 確實載入時才成立，§17.5 的 r2 與 §18.5 的 run 都是在 auditor 完整時量的。同一次 review 另有兩個 checker 漏檢（`runtime` 不看 alias 目標；`rejected` 的 model root 寫死），在 `0f26d08a` 修正，13 份既有報告重播後逐項結果不變。
+Review 在 `b73d0a65`（#527 合入 C1＋C2 的 head）重現：auditor 不存在或無法載入時，loader 印出 `cannot be loaded as audit interface … ignored` 後照樣執行。以真的 loader 與原本的 launcher，刪除或截斷 auditor 後，被放在 DT_RPATH 位置的那一份會被載入，process exit 0，不是 127。§17 的 provenance 保護因此不是 fail-closed：只有 auditor 確實載入時才成立，§17.5 的 r2 與 §18.5 的 run 都是在 auditor 完整時量的。同一次 review 另有兩個 checker 漏檢（`runtime` 不看 alias 目標；`rejected` 的 model root 寫死），在 `0f26d08a` 修正。在乾淨的 `0f26d08a` 上，用修正後的 checker 重播 C1 與 C2 的 13 份既有報告（runtime、N5、N9 各兩份；6 份拒絕；M4），每份的逐項結果都與原本相同（`results/465_prc1_bundle/review_fix_0f26d08a/`，`summary.json` sha256 `8c767f2e…`）。A2 改了 exec chain 之後，舊 launcher 的 log 不會再通過 exec chain；那些是舊 launcher 的紀錄，不重播。
 
 **改了什麼**（`71acc415`）：
 
