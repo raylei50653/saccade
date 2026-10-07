@@ -79,16 +79,20 @@ public:
     DecodePath decode_rgb(const std::vector<std::uint8_t>& bitstream, const JpegImageInfo& info,
                           std::uint8_t* rgb_planar);
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     // Send every bitstream down the decoupled path (developer measurement
     // only: the parity harness's negative control; the shipping choice is
-    // torchvision's, above).
+    // torchvision's, above). Measurement variant only (#465 PR-C2).
     void force_decoupled_for_measurement(bool on) { force_decoupled_ = on; }
+#endif
 
 private:
     struct State;
     std::unique_ptr<State> s_;
     NvjpegLibraryInfo library_;
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     bool force_decoupled_ = false;
+#endif
 };
 
 // out[i] = float(in[i]) * scale (round to nearest) for i < count, on `stream`.

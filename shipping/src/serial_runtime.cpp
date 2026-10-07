@@ -23,6 +23,7 @@ void cuda_check(cudaError_t e, const char* what) {
 
 }  // namespace
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
 const char* runtime_mutation_name(RuntimeMutation m) {
     switch (m) {
         case RuntimeMutation::None: return "none";
@@ -40,6 +41,7 @@ RuntimeMutation parse_runtime_mutation(const std::string& name) {
     }
     throw std::invalid_argument("unknown runtime mutation " + name);
 }
+#endif
 
 SerialRuntime::Stream::Stream() {
     cuda_check(cudaStreamCreateWithFlags(&s, cudaStreamNonBlocking), "stream");
@@ -117,13 +119,17 @@ SequenceRunResult SerialRuntime::run_sequence(const std::filesystem::path& seque
     const SequenceInput input = read_sequence_input(sequence_dir, max_frames);
     const cudaStream_t stream = stream_.s;
 
-    if (mutation_ != RuntimeMutation::StaleImageDims || sequences_run_ == 0) {
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
+    if (mutation_ != RuntimeMutation::StaleImageDims || sequences_run_ == 0)
+#endif
+    {
         detector_->set_image_dims(input.im_height, input.im_width);
     }
     IngestHost ingest(ingest_plan_, input, *decoder_, stream);
     std::unique_ptr<PostDetectorHost> own_post;
     PostDetectorHost* post = nullptr;
     const SequenceGeometry geometry{input.im_width, input.im_height};
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     if (mutation_ == RuntimeMutation::SharedPostHost) {
         if (!shared_post_ || shared_geometry_.im_width != geometry.im_width ||
             shared_geometry_.im_height != geometry.im_height) {
@@ -131,12 +137,15 @@ SequenceRunResult SerialRuntime::run_sequence(const std::filesystem::path& seque
             shared_geometry_ = geometry;
         }
         post = shared_post_.get();
-    } else {
+    } else
+#endif
+    {
         own_post = std::make_unique<PostDetectorHost>(cfg_, geometry, *pipeline_, stream);
         post = own_post.get();
     }
     SequenceOutput output(output_plan_);
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     // GmcPreviousFrame only: a copy of the previous frame buffer.
     float* previous = nullptr;
     const std::size_t frame_floats =
@@ -144,6 +153,7 @@ SequenceRunResult SerialRuntime::run_sequence(const std::filesystem::path& seque
     if (mutation_ == RuntimeMutation::GmcPreviousFrame) {
         cuda_check(cudaMalloc(&previous, frame_floats * sizeof(float)), "previous frame");
     }
+#endif
 
     SequenceRunResult out;
     SequenceRunStats& st = out.stats;
@@ -160,6 +170,7 @@ SequenceRunResult SerialRuntime::run_sequence(const std::filesystem::path& seque
             (f.path == DecodePath::HardwareBatched ? st.hardware_decodes : st.decoupled_decodes)++;
             const DetectionRows rows = detector_->detect(ingest.frame_chw(), ingest.height(), ingest.width());
             const float* gmc_frame = ingest.frame_chw();
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
             if (previous != nullptr) {
                 if (k == 1) {
                     cuda_check(cudaMemcpyAsync(previous, ingest.frame_chw(), frame_floats * sizeof(float),
@@ -167,12 +178,15 @@ SequenceRunResult SerialRuntime::run_sequence(const std::filesystem::path& seque
                 }
                 gmc_frame = previous;
             }
+#endif
             const FrameResult r = post->process(det_->upload(rows, stream), gmc_frame);
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
             if (previous != nullptr) {
                 cuda_check(cudaMemcpyAsync(previous, ingest.frame_chw(), frame_floats * sizeof(float),
                                            cudaMemcpyDeviceToDevice, stream), "previous frame");
                 cuda_check(cudaStreamSynchronize(stream), "previous frame");
             }
+#endif
             if (r.updated) {
                 ++st.tracker_updates;
                 output.add_frame(k, r.tracker_output.boxes.data(), r.tracker_output.scores.data(),
@@ -184,10 +198,14 @@ SequenceRunResult SerialRuntime::run_sequence(const std::filesystem::path& seque
             ++st.frames;
         }
     } catch (...) {
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
         cudaFree(previous);
+#endif
         throw;
     }
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     cudaFree(previous);
+#endif
     st.schedule.loop_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - loop_start).count();
 

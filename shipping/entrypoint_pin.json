@@ -1,0 +1,8 @@
+{
+  "schema": "saccade.shipping_entrypoint_pin/v1",
+  "reading": "The entrypoint bytes the shipping package carries at libexec/saccade_track (#465 PR-C2, docs §18.4): saccade_track built at commit 04f6f135 (clean tree, a fresh build-prc2-pin/ with the §17.4 configure arguments) and installed with cmake --install (RUNPATH $ORIGIN/../lib), kept at results/465_prc2_cli/entrypoint_04f6f135/saccade_track. Its sources have no measurement hook or developer option (shipping/measurement_surface.json). Two builds of the same entrypoint sources with the same flags were observed to differ (relocation and symbol-version tables, nvcc tmpxft names, build-id; §17.2), so a rebuild is not these bytes; the install takes the file named by SACCADE_SHIPPING_ENTRYPOINT and refuses any other sha256. Before PR-C2: d7c6e0d46e99185154c15b9721e6857bd88fd67f0f5a4401445f1d4abd3b27a8, the PR-12 formal run r2's (§16.4, §17).",
+  "sha256": "92f74ef4724ff5e4cb5e7d4c7ce7e799563cec59b7b1ad806e682a9a95ceff34",
+  "bytes": 8736640,
+  "built_at_commit": "04f6f1356028",
+  "evidence": "docs/reference/native_runtime_resolved_config.md §18.4 (contract) and §18.5 (PR-C2 formal run)"
+}

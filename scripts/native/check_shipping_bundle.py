@@ -1,0 +1,947 @@
+#!/usr/bin/env python3
+"""Checks of the bundled shipping tree (#465 Phase C PR-C1).
+
+The tree is what ``cmake --install <build> --component shipping`` writes after
+PR-C1 (docs/reference/native_runtime_resolved_config.md §17): the launcher
+``bin/saccade_track``, the entrypoint ``libexec/saccade_track`` (the pinned
+bytes, shipping/entrypoint_pin.json), the loader provenance check ``lib/saccade_loader_audit.so``, the
+bundled third-party set ``lib/vendor/`` (shipping/third_party_set.json),
+``licenses/`` and the model root ``share/saccade/``. Developer tooling only
+(``developer_build_debug``); the ELF and log readers are
+``check_shipping_tree.py``'s (PR-12).
+
+Subcommands:
+
+``static``   layout (exactly the expected files), the vendor set's sha256, the
+             entrypoint pin, the launcher's bytes, the auditor (libc only, no
+             RUNPATH), licenses, G2-3, G2-1 (NEEDED closure resolved the way
+             the launcher's loader invocation resolves it: complete inside the
+             tree + base system + driver, no Python), search-path containment
+             (every relative DT_RPATH / DT_RUNPATH entry of every ELF in the
+             tree expands inside the tree; the operator library's absolute
+             RUNPATH and libcusparseLt's empty entry are the enumerated
+             exceptions), the SM list + PTX of the entrypoint, and the glibc
+             baseline of every ELF in the tree.
+``sources``  where a host run's loaded objects came from (its
+             ``LD_DEBUG=files`` logs, 'calling init' paths): every bundled
+             name from the tree's lib/vendor with the pinned bytes, the
+             operator library and the auditor from the tree, nothing else.
+``runtime``  G2-2 / G2-4 from ``strace -ff`` logs of a run started through
+             the launcher: exactly three ``execve``, each recorded complete
+             (in one process the launcher, then the system loader whose argv
+             is exactly the loader options, the entrypoint and the launcher's
+             arguments;
+             in a child of it the auditor readiness probe, A2), no Python / Triton /
+             compiler open, and every shared object it opened from the tree is
+             the vendor set + the operator library + the auditor, with no
+             bundled name opened from anywhere else.
+``rejected`` (PR-C2) a run of the launcher given an option the shipping
+             entrypoint does not have (``strace -ff`` logs + its log): exit 2
+             with ``saccade_track: unknown argument <option>``, the same exec
+             chain, no open (even attempted) of anything under the model root
+             (the default one, the cwd, when the arguments name none),
+             of the operator library or of a GPU device node, and no output
+             (including trace files and failed write attempts). Relative
+             opens require strace -yy dirfd/cwd annotations; unresolved or
+             incomplete opens fail closed.
+
+``runtime`` and ``rejected`` expect ``strace -yy`` logs (A3): a successful
+open without its returned-fd target is unresolved, since an alias cannot be
+ruled out. ``--legacy-plain-trace`` evaluates a historical plain log; the
+report records that alias targets were not checked.
+
+PR-C2 adds to ``static``: the entrypoint contains none of the byte strings in
+shipping/measurement_surface.json (no measurement hook, no developer option).
+
+Usage::
+
+    check_shipping_bundle.py static --tree TREE --report static.json
+    check_shipping_bundle.py sources --log-prefix DIR/ld --tree TREE --report sources.json
+    check_shipping_bundle.py runtime --strace-prefix DIR/s --tree TREE \\
+        --tree-mount /opt/saccade --report runtime.json
+    check_shipping_bundle.py rejected --strace-prefix DIR/s --log DIR/saccade_track.log \\
+        --out-dir DIR --option=--measurement-mutation --tree-mount /opt/saccade \\
+        --report rejected.json
+
+Exit 0: every check passes; 1: a check fails (named in the report); 2: error.
+"""
+# status: diagnostic
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import check_shipping_tree as g2  # noqa: E402
+
+SCHEMA = "saccade.shipping_bundle/v1"
+REPO = Path(__file__).resolve().parents[2]
+THIRD_PARTY_SET = REPO / "shipping/third_party_set.json"
+ENTRYPOINT_PIN = REPO / "shipping/entrypoint_pin.json"
+MEASUREMENT_SURFACE = REPO / "shipping/measurement_surface.json"
+LAUNCHER_SOURCE = REPO / "shipping/launcher/saccade_track.sh"
+NOTICE_SOURCE = REPO / "shipping/THIRD_PARTY.md"
+LAUNCHER = "bin/saccade_track"
+ENTRYPOINT = "libexec/saccade_track"
+AUDITOR = "lib/saccade_loader_audit.so"
+VENDOR = "lib/vendor"
+SYSTEM_LOADER = "/lib64/ld-linux-x86-64.so.2"
+MODEL_ROOT_FILES = (
+    "configs/shipping/mamba_whole_graph.resolved.json",
+    "configs/shipping/mamba_head_realization.attestation.json",
+    "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+    "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+    "models/yolo/yolo26s_backbone_640_best.engine",
+    "build/libsaccade_scan_torchop.so",
+)
+# Search-path entries that do not expand inside the tree, each bound to the
+# bytes that carry it.
+_CUSPARSELT = "libcusparseLt.so.0"
+# GPU device nodes a CUDA context opens (WSL2: /dev/dxg; native: /dev/nvidia*).
+_GPU_DEVICE = re.compile(r"^/dev/(dxg$|nvidia)")
+
+
+def measurement_surface(binary: Path, surface: Path) -> dict[str, Any]:
+    """Occurrences in `binary` of each byte string the shipping entrypoint must
+    not contain (shipping/measurement_surface.json, PR-C2)."""
+    data = binary.read_bytes() if binary.is_file() else b""
+    tokens = _load(surface)["forbidden"]
+    found = {t: data.count(t.encode()) for t in tokens if t.encode() in data}
+    return {
+        "pass": bool(data) and not found,
+        "found": found,
+        "tokens": len(tokens),
+        "surface": str(surface),
+    }
+
+
+def _load(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text())
+
+
+def expected_files(set_: dict[str, Any]) -> set[str]:
+    files = {LAUNCHER, ENTRYPOINT, AUDITOR}
+    files |= {f"{g2.MODEL_ROOT}/{f}" for f in MODEL_ROOT_FILES}
+    files |= {f"{VENDOR}/{e['soname']}" for e in set_["entries"]}
+    files |= {
+        "licenses/THIRD_PARTY.md",
+        "licenses/saccade/LICENSE",
+        "licenses/saccade/NOTICE",
+    }
+    for e in set_["entries"]:
+        for lic in e["license_files"]:
+            files.add(f"licenses/{e['wheel']}/{lic['path'].rsplit('/', 1)[-1]}")
+    return files
+
+
+def search_entries(dyn: dict[str, Any]) -> list[tuple[str, str]]:
+    return [("RPATH", e) for e in dyn["rpath"]] + [
+        ("RUNPATH", e) for e in dyn["runpath"]
+    ]
+
+
+def containment(
+    tree: Path,
+    elves: dict[str, dict[str, Any]],
+    op_rel: str,
+    op_sha: str,
+    cusparselt_sha: str,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Every relative search-path entry must expand inside the tree; entries
+    that cannot are allowed only on the enumerated objects (by sha256)."""
+    problems: list[str] = []
+    exceptions: list[dict[str, Any]] = []
+    for rel, info in elves.items():
+        elf_dir = (tree / rel).parent
+        for tag, entry in search_entries(info["dyn"]):
+            target = g2._expand_origin(entry, elf_dir)
+            if target is not None:
+                if target != tree and tree not in target.parents:
+                    problems.append(
+                        f"{rel}: {tag} {entry} -> {target} is outside the tree"
+                    )
+                continue
+            if rel == op_rel and info["sha256"] == op_sha and tag == "RUNPATH":
+                exceptions.append(
+                    {
+                        "elf": rel,
+                        "tag": tag,
+                        "entry": entry,
+                        "why": "attested operator library (frozen bytes)",
+                    }
+                )
+            elif (
+                rel == f"{VENDOR}/{_CUSPARSELT}"
+                and info["sha256"] == cusparselt_sha
+                and entry == ""
+            ):
+                exceptions.append(
+                    {
+                        "elf": rel,
+                        "tag": tag,
+                        "entry": entry,
+                        "why": "empty entry (working directory); the auditor refuses relative candidates",
+                    }
+                )
+            else:
+                problems.append(f"{rel}: {tag} entry {entry!r} is not $ORIGIN-relative")
+    return problems, exceptions
+
+
+def bundle_closure(
+    tree: Path, roots: list[str], vendor_names: set[str], run: g2.Runner = g2._run
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """NEEDED closure as the launcher's loader resolves it: a third-party name
+    must be in lib/vendor (--library-path; containment guarantees no other
+    in-tree candidate exists), base system / driver come from the host."""
+    problems: list[str] = []
+    resolved: dict[str, dict[str, Any]] = {}
+    queue = list(roots)
+    seen: set[str] = set()
+    while queue:
+        rel = queue.pop()
+        if rel in seen:
+            continue
+        seen.add(rel)
+        for name in g2.dynamic_section(tree / rel, run)["needed"]:
+            if g2._PYTHON_LIB.match(name):
+                problems.append(f"{rel} needs {name}")
+            if name in vendor_names:
+                if not (tree / VENDOR / name).is_file():
+                    problems.append(f"{rel}: NEEDED {name} is missing from {VENDOR}")
+                    resolved.setdefault(
+                        name, {"name": name, "path": None, "class": "vendor"}
+                    )
+                    continue
+                resolved.setdefault(
+                    name, {"name": name, "path": f"{VENDOR}/{name}", "class": "vendor"}
+                )
+                queue.append(f"{VENDOR}/{name}")
+                continue
+            cls = g2.classify_name(name)
+            if cls == "third_party":
+                problems.append(f"{rel}: NEEDED {name} is not in {VENDOR}")
+            resolved.setdefault(name, {"name": name, "path": None, "class": cls})
+    return sorted(resolved.values(), key=lambda x: x["name"]), problems
+
+
+def cmd_static(args: argparse.Namespace) -> int:
+    tree: Path = args.tree.resolve()
+    set_ = _load(args.third_party_set)
+    pin = _load(args.entrypoint_pin)
+    att = _load(tree / g2.MODEL_ROOT / g2.ATTESTATION)
+    op_rel = f"{g2.MODEL_ROOT}/{att['op_library']['path']}"
+    op_sha = att["op_library"]["sha256"]
+    by_soname = {e["soname"]: e for e in set_["entries"]}
+    checks: dict[str, Any] = {}
+
+    present = {
+        p.relative_to(tree).as_posix()
+        for p in tree.rglob("*")
+        if p.is_file() or p.is_symlink()
+    }
+    want = expected_files(set_)
+    checks["layout_exact"] = {
+        "pass": present == want,
+        "missing": sorted(want - present),
+        "extra": sorted(present - want),
+    }
+
+    vendor_bad = []
+    for soname, e in by_soname.items():
+        p = tree / VENDOR / soname
+        if not p.is_file() or p.is_symlink():
+            vendor_bad.append(f"{soname}: missing or not a regular file")
+        elif g2.sha256_file(p) != e["sha256"]:
+            vendor_bad.append(f"{soname}: sha256 is not the pinned {e['sha256']}")
+    checks["vendor_set_pinned"] = {
+        "pass": not vendor_bad,
+        "problems": vendor_bad,
+        "objects": len(by_soname),
+    }
+
+    ep = tree / ENTRYPOINT
+    ep_sha = g2.sha256_file(ep) if ep.is_file() else None
+    checks["entrypoint_pinned"] = {
+        "pass": ep_sha == pin["sha256"],
+        "observed": ep_sha,
+        "pinned": pin["sha256"],
+    }
+
+    la = tree / LAUNCHER
+    la_ok = (
+        la.is_file()
+        and la.read_bytes() == args.launcher_source.read_bytes()
+        and os.access(la, os.X_OK)
+    )
+    checks["launcher_exact"] = {"pass": la_ok, "source": str(args.launcher_source)}
+
+    lic_bad = []
+    for e in set_["entries"]:
+        for lic in e["license_files"]:
+            p = tree / "licenses" / e["wheel"] / lic["path"].rsplit("/", 1)[-1]
+            if not p.is_file() or g2.sha256_file(p) != lic["sha256"]:
+                lic_bad.append(str(p.relative_to(tree)))
+    notice = tree / "licenses/THIRD_PARTY.md"
+    if not notice.is_file() or notice.read_bytes() != NOTICE_SOURCE.read_bytes():
+        lic_bad.append("licenses/THIRD_PARTY.md")
+    checks["licenses"] = {"pass": not lic_bad, "problems": lic_bad}
+
+    py = g2.python_files(tree)
+    checks["g2_3_no_python_files"] = {"pass": not py, "found": py}
+
+    elves: dict[str, dict[str, Any]] = {}
+    for rel in sorted(present):
+        p = tree / rel
+        if p.is_file() and g2.is_elf(p):
+            elves[rel] = {
+                "sha256": g2.sha256_file(p),
+                "dyn": g2.dynamic_section(p),
+                "version_needs": g2.version_needs(p),
+            }
+
+    rp_bad = []
+    ep_dyn = elves.get(ENTRYPOINT, {}).get("dyn")
+    if ep_dyn is None or ep_dyn["rpath"] or ep_dyn["runpath"] != ["$ORIGIN/../lib"]:
+        rp_bad.append(
+            f"{ENTRYPOINT}: search path {ep_dyn and search_entries(ep_dyn)} is not RUNPATH $ORIGIN/../lib only"
+        )
+    au = elves.get(AUDITOR)
+    if (
+        au is None
+        or au["dyn"]["rpath"]
+        or au["dyn"]["runpath"]
+        or au["dyn"]["needed"] != ["libc.so.6"]
+    ):
+        rp_bad.append(
+            f"{AUDITOR}: must need libc.so.6 only and carry no search path ({au and au['dyn']})"
+        )
+    if elves.get(op_rel, {}).get("sha256") != op_sha:
+        rp_bad.append(f"{op_rel}: not the attested operator library {op_sha}")
+    checks["produced_elves"] = {"pass": not rp_bad, "problems": rp_bad}
+
+    cont_bad, cont_exc = containment(
+        tree, elves, op_rel, op_sha, by_soname.get(_CUSPARSELT, {}).get("sha256", "")
+    )
+    checks["search_path_containment"] = {
+        "pass": not cont_bad,
+        "problems": cont_bad,
+        "exceptions": cont_exc,
+    }
+
+    clo, clo_bad = bundle_closure(tree, [ENTRYPOINT, op_rel], set(by_soname))
+    checks["g2_1_needed_closure"] = {
+        "pass": not clo_bad,
+        "problems": clo_bad,
+        "closure": clo,
+    }
+
+    checks["entrypoint_no_measurement_surface"] = measurement_surface(
+        ep, args.measurement_surface
+    )
+
+    cuda = g2.cuda_archs(ep) if ep.is_file() else {"sass": [], "ptx": []}
+    checks["sm_ptx_entrypoint"] = {
+        "pass": set(cuda["sass"]) == g2.SHIPPING_SASS
+        and set(cuda["ptx"]) == g2.SHIPPING_PTX,
+        "observed": cuda,
+        "named_limit": {op_rel: g2.cuda_archs(tree / op_rel)},
+    }
+
+    over = {
+        rel: o
+        for rel, info in elves.items()
+        if (o := g2.over_baseline(info["version_needs"]))
+    }
+    checks["glibc_baseline"] = {
+        "pass": not over,
+        "baseline": {k: ".".join(map(str, v)) for k, v in g2.VERSION_BASELINE.items()},
+        "over": over,
+    }
+
+    report = {
+        "schema": SCHEMA,
+        "kind": "static",
+        "tree": str(tree),
+        "elves": {rel: {k: v for k, v in info.items()} for rel, info in elves.items()},
+        "checks": checks,
+        "pass": all(c["pass"] for c in checks.values()),
+    }
+    g2._write(args.report, report)
+    for name, c in checks.items():
+        print(f"{name}: {'PASS' if c['pass'] else 'FAIL'}")
+    return 0 if report["pass"] else 1
+
+
+def _argv(line_strings: list[str]) -> list[str]:
+    """execve("path", ["argv0", ...], ...): strace prints the path, then argv."""
+    return line_strings[1:]
+
+
+def _open_path(call: str, argstr: str, path: str) -> str | None:
+    """Resolve an open path using strace -yy's dirfd/cwd annotation.
+
+    Plain absolute-path logs remain usable. Never infer a relative path's
+    base from an earlier fd: close/reuse/chdir may not have been traced.
+    """
+    if os.path.isabs(path):
+        return os.path.normpath(path)
+    if call == "openat" and path:
+        base = re.match(r'^(?:AT_FDCWD|\d+)<(/[^>]*)>,\s*"', argstr)
+        if base:
+            return os.path.normpath(os.path.join(base.group(1), path))
+    return None
+
+
+# strace -yy annotates a successful open's returned fd with the opened
+# object: a path (a device adds a nested "<char M:N>"), or a non-path object
+# such as "pipe:[N]" when /proc/self/fd/N is reopened.
+_FD_TARGET = re.compile(r"^<([^<>]*)(?:<[^<>]*>)?>")
+_DIRFD_ANNOTATED = re.compile(r"^(?:AT_FDCWD|\d+)<")
+_CWD = re.compile(r"^AT_FDCWD<(/[^>]*)>,")
+
+
+def _accessed(o: dict[str, Any]) -> list[str]:
+    """The attempted path and, through a symlink or alias, the opened one."""
+    return [p for p in (o["path"], o.get("target")) if p]
+
+
+def _argv_paths(
+    execs: list[dict[str, Any]], options: tuple[str, ...], cwds: list[str]
+) -> tuple[set[str], list[str]]:
+    """Paths named by ``options`` in any exec's argv, as absolute paths.
+
+    A relative value names a path under the process cwd: it is resolved
+    against every cwd an AT_FDCWD annotation evidences. With none, its base
+    cannot be established and it is returned as unresolved.
+    """
+    paths: set[str] = set()
+    unresolved: list[str] = []
+    for e in execs:
+        for i, arg in enumerate(e["argv"][:-1]):
+            if arg not in options:
+                continue
+            value = e["argv"][i + 1]
+            if os.path.isabs(value):
+                paths.add(os.path.normpath(value))
+            elif cwds:
+                paths.update(os.path.normpath(os.path.join(c, value)) for c in cwds)
+            else:
+                unresolved.append(f"{arg} {value}")
+    return paths, list(dict.fromkeys(unresolved))
+
+
+# The entrypoint's options that take a value (shipping/tools/track_driver.hpp
+# parse_interface_arg); any other "--" argument stops its parse.
+_ENTRYPOINT_VALUE_OPTIONS = (
+    "--config",
+    "--lineage",
+    "--attestation",
+    "--model-root",
+    "--out",
+    "--report",
+    "--trace",
+)
+
+
+def _sets_model_root(args: list[str]) -> bool:
+    """Whether the entrypoint's parse of ``args`` consumes a ``--model-root``
+    before it stops (an unknown option or a missing value)."""
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in _ENTRYPOINT_VALUE_OPTIONS:
+            if i + 1 >= len(args):
+                return False
+            if a == "--model-root":
+                return True
+            i += 2
+        elif a.startswith("--"):
+            return False
+        else:
+            i += 1
+    return False
+
+
+def _default_model_root(
+    execs: list[dict[str, Any]], mount: str, cwds: list[str]
+) -> tuple[set[str], list[str]]:
+    """The entrypoint's default model root ("." = its cwd, track::Options)
+    unless every exec of the entrypoint sets --model-root (A4). Resolved
+    against every evidenced cwd; with none it is unresolved. With no exec of
+    the entrypoint recorded, the default is assumed."""
+    entry = f"{mount}/{ENTRYPOINT}"
+    runs = [
+        e["argv"][e["argv"].index(entry) + 1 :] if e["path"] != entry else e["argv"][1:]
+        for e in execs
+        if e["path"] == entry or entry in e["argv"]
+    ]
+    if runs and all(_sets_model_root(a) for a in runs):
+        return set(), []
+    if not cwds:
+        return set(), ["default --model-root ."]
+    return set(cwds), []
+
+
+def _object_class(path: str) -> str:
+    """``classify_name`` by SONAME family. An fd target is the real file
+    behind a SONAME symlink (libstdc++.so.6 -> libstdc++.so.6.0.33), so
+    trailing version components are dropped one at a time until a name
+    classifies; like the SONAME itself, this is a name, not a byte check."""
+    base = os.path.basename(path)
+    m = re.match(r"^(.*\.so)((?:\.\d+)*)$", base)
+    if m:
+        parts = m.group(2).split(".")[1:]
+        for k in range(len(parts), -1, -1):
+            name = m.group(1) + "".join("." + x for x in parts[:k])
+            kind = g2.classify_name(name, path)
+            if kind != "third_party":
+                return kind
+    return g2.classify_name(base, path)
+
+
+def _within(path: str, root: str) -> bool:
+    root = os.path.normpath(root)
+    return path == root or path.startswith(root.rstrip("/") + "/")
+
+
+def strace_records(
+    prefix: Path, plain: bool = False
+) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]]]:
+    """(log count, execve records, open records) of ``strace -ff -o prefix``.
+
+    A successful open without a returned-fd target is unresolved unless
+    ``plain`` (a historical log without -yy) and its dirfd is not annotated.
+    """
+    logs = sorted(prefix.parent.glob(prefix.name + ".*"))
+    if not logs:
+        raise g2.CheckError(f"no strace logs {prefix}.*")
+    execs: list[dict[str, Any]] = []
+    opens: list[dict[str, Any]] = []
+    for log in logs:
+        for line in log.read_text(errors="replace").splitlines():
+            m = g2._SYSCALL.match(line.strip())
+            if not m:
+                # An exec that strace did not record to completion (unfinished,
+                # truncated) is kept as a failed exec, so the chain fails (A4).
+                if re.match(r"^(?:\d+\s+)?(?:execveat|execve)\(", line.strip()):
+                    execs.append(
+                        {
+                            "call": "execve",
+                            "path": "",
+                            "rc": -1,
+                            "argv": [],
+                            "incomplete": True,
+                            "raw": line.strip(),
+                            "log": log.name,
+                        }
+                    )
+                elif re.match(r"^(?:\d+\s+)?(?:openat|open)\(", line.strip()):
+                    opens.append(
+                        {
+                            "path": "",
+                            "rc": -1,
+                            "unresolved": True,
+                            "raw": line.strip(),
+                            "write": False,
+                        }
+                    )
+                continue
+            call, argstr, rc = m.group(1), m.group(2), int(m.group(3))
+            rest = line.strip()[m.end() :]
+            strings = [
+                s.encode().decode("unicode_escape") for s in g2._STRING.findall(argstr)
+            ]
+            rec: dict[str, Any] = {
+                "call": call,
+                "path": strings[0] if strings else "",
+                "rc": rc,
+            }
+            if call.startswith("exec"):
+                rec["argv"] = _argv(strings)
+                rec["log"] = log.name
+                execs.append(rec)
+            else:
+                resolved = _open_path(call, argstr, rec["path"])
+                target = _FD_TARGET.match(rest) if rc >= 0 else None
+                obj = target.group(1) if target else None
+                rec["target"] = (
+                    os.path.normpath(obj) if obj and obj.startswith("/") else None
+                )
+                rec["target_object"] = obj
+                cwd = _CWD.match(argstr)
+                rec["cwd"] = os.path.normpath(cwd.group(1)) if cwd else None
+                # A successful open must name what it opened; without it an
+                # alias cannot be ruled out.
+                rec["unresolved"] = resolved is None or (
+                    rc >= 0
+                    and target is None
+                    and (not plain or bool(_DIRFD_ANNOTATED.match(argstr)))
+                )
+                rec["raw"] = line.strip()
+                if resolved is not None:
+                    rec["path"] = resolved
+                # Inspect the flags after the quoted path, not path text.
+                quoted = g2._STRING.search(argstr)
+                flags = argstr[quoted.end() :] if quoted else ""
+                rec["write"] = bool(
+                    re.search(
+                        r"\b(?:O_WRONLY|O_RDWR|O_CREAT|O_TRUNC|O_APPEND)\b", flags
+                    )
+                )
+                opens.append(rec)
+    return len(logs), execs, opens
+
+
+def exec_chain(execs: list[dict[str, Any]], mount: str) -> dict[str, Any]:
+    """Exactly three execs: in one process the launcher, then the system loader
+    with its arguments; in another (the launcher's command substitution) the
+    auditor readiness probe (A2). ``strace -ff`` writes one log per process,
+    so order is checked within a log, not across logs. The loader's argv is
+    checked whole (A4): the loader options, ``--argv0`` the launcher's argv[0],
+    the entrypoint in the program slot, then the launcher's own arguments
+    unchanged."""
+    loader_args = [
+        "--library-path",
+        f"{mount}/{VENDOR}",
+        "--audit",
+        f"{mount}/{AUDITOR}",
+    ]
+    probe_argv = [SYSTEM_LOADER, *loader_args, "/bin/sh", "-c", ":"]
+    by_log: dict[str, list[dict[str, Any]]] = {}
+    for e in execs:
+        by_log.setdefault(e.get("log", ""), []).append(e)
+    main = [es for es in by_log.values() if es[0]["path"] == f"{mount}/{LAUNCHER}"]
+    probe = [es for es in by_log.values() if es[0]["path"] != f"{mount}/{LAUNCHER}"]
+    launcher_argv = main[0][0]["argv"] if len(main) == 1 else []
+    exec_ok = (
+        len(execs) == 3
+        and all(e["rc"] == 0 for e in execs)
+        and len(main) == 1
+        and len(main[0]) == 2
+        and len(launcher_argv) >= 1
+        and main[0][1]["path"] == SYSTEM_LOADER
+        and main[0][1]["argv"]
+        == [
+            SYSTEM_LOADER,
+            *loader_args,
+            "--argv0",
+            launcher_argv[0],
+            f"{mount}/{ENTRYPOINT}",
+            *launcher_argv[1:],
+        ]
+        and len(probe) == 1
+        and len(probe[0]) == 1
+        and probe[0][0]["path"] == SYSTEM_LOADER
+        and probe[0][0]["argv"] == probe_argv
+    )
+    return {
+        "pass": exec_ok,
+        "expected": [
+            f"{mount}/{LAUNCHER}",
+            f"(child) {' '.join(probe_argv)}",
+            f"{SYSTEM_LOADER} {' '.join(loader_args)} --argv0 <launcher argv[0]> "
+            f"{mount}/{ENTRYPOINT} <launcher arguments>",
+        ],
+        "execs": execs,
+    }
+
+
+def cmd_runtime(args: argparse.Namespace) -> int:
+    n_logs, execs, opens = strace_records(args.strace_prefix, args.legacy_plain_trace)
+    mount = args.tree_mount.rstrip("/")
+    checks: dict[str, Any] = {}
+    checks["g2_2_g2_4_exec_chain"] = exec_chain(execs, mount)
+    unresolved = [o["raw"] for o in opens if o["unresolved"]]
+    forbidden = sorted(
+        {p for o in opens for p in _accessed(o) if g2._FORBIDDEN_OPEN.search(p)}
+    )
+    checks["g2_2_g2_4_no_python_triton_open"] = {
+        "pass": not forbidden and not unresolved,
+        "attempted": forbidden,
+        "unresolved": unresolved,
+    }
+
+    tree = args.tree.resolve()
+    set_ = _load(args.third_party_set)
+    vendor_shas = {e["sha256"] for e in set_["entries"]}
+    bundled = {e["soname"] for e in set_["entries"]}
+    att = _load(tree / g2.MODEL_ROOT / g2.ATTESTATION)
+    op_sha = att["op_library"]["sha256"]
+    auditor_sha = g2.sha256_file(tree / AUDITOR)
+    opened: dict[str, str] = {}
+    foreign: list[str] = []
+    for norm in sorted(
+        {
+            os.path.normpath(p)
+            for o in opens
+            if o["rc"] >= 0
+            for p in _accessed(o)
+            if g2._SHARED_OBJECT.search(os.path.basename(p))
+        }
+    ):
+        if norm.startswith(mount + "/"):
+            local = tree / norm[len(mount) + 1 :]
+            if not local.is_file():
+                # Opened inside the mount but not in the inspected tree.
+                foreign.append(norm)
+                continue
+            opened[norm] = g2.sha256_file(local)
+            if (
+                os.path.basename(norm) in bundled
+                and os.path.dirname(norm) != f"{mount}/{VENDOR}"
+            ):
+                foreign.append(norm)
+        elif os.path.basename(norm) in bundled or _object_class(norm) == "third_party":
+            foreign.append(norm)
+    cur = set(opened.values())
+    want = vendor_shas | {op_sha, auditor_sha}
+    checks["opened_set_is_the_bundle"] = {
+        "pass": cur == want and not foreign and not unresolved,
+        "missing": sorted(want - cur),
+        "extra": sorted(cur - want),
+        "foreign_opens": sorted(set(foreign)),
+        "unresolved": unresolved,
+    }
+    report = {
+        "schema": SCHEMA,
+        "kind": "runtime",
+        "logs": n_logs,
+        "legacy_plain_trace": args.legacy_plain_trace,
+        "checks": checks,
+        "pass": all(c["pass"] for c in checks.values()),
+    }
+    g2._write(args.report, report)
+    for name, c in checks.items():
+        print(f"{name}: {'PASS' if c['pass'] else 'FAIL'}")
+    return 0 if report["pass"] else 1
+
+
+def cmd_rejected(args: argparse.Namespace) -> int:
+    n_logs, execs, opens = strace_records(args.strace_prefix, args.legacy_plain_trace)
+    mount = args.tree_mount.rstrip("/")
+    log = args.log.read_text(errors="replace").splitlines()
+    want = f"saccade_track: unknown argument {args.option}"
+    checks: dict[str, Any] = {}
+    checks["exit_2_unknown_argument"] = {
+        "pass": bool(log) and log[-1] == "exit=2" and want in log,
+        "expected": [want, "exit=2"],
+        "log": log[-5:],
+    }
+    checks["exec_chain"] = exec_chain(execs, mount)
+    unresolved = [o["raw"] for o in opens if o["unresolved"]]
+    cwds = sorted({o["cwd"] for o in opens if o.get("cwd")})
+    # The mounted tree's model root, plus the model root and model inputs the
+    # run's own arguments name (or the default model root, the cwd, when they
+    # name none): a rejected run reads none of them.
+    model_inputs, unresolved_inputs = _argv_paths(
+        execs, ("--model-root", "--config", "--lineage", "--attestation"), cwds
+    )
+    default_root, unresolved_default = _default_model_root(execs, mount, cwds)
+    model_inputs |= default_root
+    unresolved_inputs += unresolved_default
+    model_inputs.add(f"{mount}/{g2.MODEL_ROOT}")
+    touched = sorted(
+        {
+            p
+            for o in opens
+            for p in _accessed(o)
+            if any(_within(p, m) for m in model_inputs)
+            or os.path.basename(p) == "libsaccade_scan_torchop.so"
+        }
+    )
+    checks["no_model_root_open"] = {
+        "pass": not touched and not unresolved and not unresolved_inputs,
+        "model_inputs": sorted(model_inputs),
+        "attempted": touched,
+        "unresolved": unresolved,
+        "unresolved_inputs": unresolved_inputs,
+    }
+    devices = sorted({p for o in opens for p in _accessed(o) if _GPU_DEVICE.match(p)})
+    checks["no_gpu_device_open"] = {
+        "pass": not devices and not unresolved,
+        "attempted": devices,
+        "unresolved": unresolved,
+    }
+    # The container runner mounts out_dir at /out. Include paths named by
+    # the actual entrypoint arguments as well as the runner's defaults.
+    output_paths, unresolved_outputs = _argv_paths(
+        execs, ("--out", "--trace", "--report"), cwds
+    )
+    output_paths |= {"/out/native", "/out/trace", "/out/track_report.json"}
+    outputs = [
+        str(args.out_dir / p.removeprefix("/out/"))
+        for p in sorted(output_paths)
+        if p.startswith("/out/")
+        and os.path.lexists(args.out_dir / p.removeprefix("/out/"))
+    ]
+    writes = sorted(
+        {
+            p
+            for o in opens
+            if o["write"]
+            for p in _accessed(o)
+            if any(_within(p, q) for q in output_paths)
+        }
+    )
+    checks["no_output"] = {
+        "pass": not outputs
+        and not writes
+        and not unresolved
+        and not unresolved_outputs,
+        "found": outputs,
+        "attempted": writes,
+        "unresolved": unresolved,
+        "unresolved_outputs": unresolved_outputs,
+    }
+    report = {
+        "schema": SCHEMA,
+        "kind": "rejected",
+        "legacy_plain_trace": args.legacy_plain_trace,
+        "option": args.option,
+        "logs": n_logs,
+        "checks": checks,
+        "pass": all(c["pass"] for c in checks.values()),
+    }
+    g2._write(args.report, report)
+    for name, c in checks.items():
+        print(f"{name}: {'PASS' if c['pass'] else 'FAIL'}")
+    return 0 if report["pass"] else 1
+
+
+def init_paths(text: str) -> list[str]:
+    """Objects the loader initialized ('calling init', any namespace) once the
+    auditor is loaded. The launcher's sh and the loader it execs share a pid,
+    so one log file holds both processes; the auditor is the first object the
+    loader maps, so what precedes it is the sh's."""
+    out: list[str] = []
+    started = False
+    for line in text.splitlines():
+        if not started:
+            started = os.path.basename(AUDITOR) in line
+            if not started:
+                continue
+        m = g2._LD_INIT.match(line)
+        if m:
+            out.append(m.group(1))
+    return out
+
+
+def cmd_sources(args: argparse.Namespace) -> int:
+    """Where a run's loaded objects came from (its ``LD_DEBUG=files`` logs):
+    every bundled name from the tree's lib/vendor with the pinned bytes, the
+    operator library and the auditor from the tree, nothing else from the
+    tree, no third-party object from outside it, no Python library."""
+    tree = args.tree.resolve()
+    set_ = _load(args.third_party_set)
+    pinned = {e["soname"]: e["sha256"] for e in set_["entries"]}
+    att = _load(tree / g2.MODEL_ROOT / g2.ATTESTATION)
+    op_real = str((tree / g2.MODEL_ROOT / att["op_library"]["path"]).resolve())
+    auditor = str((tree / AUDITOR).resolve())
+    vendor = str((tree / VENDOR).resolve())
+    logs = sorted(args.log_prefix.parent.glob(args.log_prefix.name + ".*"))
+    if not logs:
+        raise g2.CheckError(f"no LD_DEBUG logs {args.log_prefix}.*")
+    reals = sorted(
+        {
+            os.path.realpath(p)
+            for log in logs
+            for p in init_paths(log.read_text(errors="replace"))
+        }
+    )
+    problems: list[str] = []
+    seen: set[str] = set()
+    for real in reals:
+        base = os.path.basename(real)
+        if g2._PYTHON_LIB.match(base):
+            problems.append(f"Python library loaded: {real}")
+        if base in pinned:
+            seen.add(base)
+            if os.path.dirname(real) != vendor:
+                problems.append(f"{base} loaded from {real}, not {vendor}")
+            elif g2.sha256_file(Path(real)) != pinned[base]:
+                problems.append(f"{real}: sha256 is not the pinned one")
+        elif real.startswith(str(tree) + "/"):
+            if real not in (op_real, auditor):
+                problems.append(f"unexpected tree object loaded: {real}")
+        elif (
+            g2.classify_name(g2.dynamic_section(Path(real))["soname"] or base, real)
+            == "third_party"
+        ):
+            problems.append(f"third-party object from outside the tree: {real}")
+    for must in (op_real, auditor):
+        if must not in reals:
+            problems.append(f"not loaded: {must}")
+    missing = sorted(set(pinned) - seen)
+    if missing:
+        problems.append(f"bundled objects not loaded: {missing}")
+    report = {
+        "schema": SCHEMA,
+        "kind": "sources",
+        "logs": [str(p) for p in logs],
+        "loaded": reals,
+        "problems": problems,
+        "pass": not problems,
+    }
+    g2._write(args.report, report)
+    print(f"sources: {'PASS' if not problems else 'FAIL'} {problems}")
+    return 0 if not problems else 1
+
+
+_PLAIN_HELP = (
+    "evaluate a historical log recorded without strace -yy: successful opens "
+    "need no returned-fd target, so aliases are not checked (recorded in the report)"
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("static")
+    s.add_argument("--tree", type=Path, required=True)
+    s.add_argument("--report", type=Path, required=True)
+    s.add_argument("--third-party-set", type=Path, default=THIRD_PARTY_SET)
+    s.add_argument("--entrypoint-pin", type=Path, default=ENTRYPOINT_PIN)
+    s.add_argument("--launcher-source", type=Path, default=LAUNCHER_SOURCE)
+    s.add_argument("--measurement-surface", type=Path, default=MEASUREMENT_SURFACE)
+    r = sub.add_parser("runtime")
+    r.add_argument("--strace-prefix", type=Path, required=True)
+    r.add_argument("--legacy-plain-trace", action="store_true", help=_PLAIN_HELP)
+    r.add_argument("--tree", type=Path, required=True)
+    r.add_argument("--tree-mount", required=True)
+    r.add_argument("--report", type=Path, required=True)
+    r.add_argument("--third-party-set", type=Path, default=THIRD_PARTY_SET)
+    j = sub.add_parser("rejected")
+    j.add_argument("--strace-prefix", type=Path, required=True)
+    j.add_argument("--legacy-plain-trace", action="store_true", help=_PLAIN_HELP)
+    j.add_argument("--log", type=Path, required=True)
+    j.add_argument("--out-dir", type=Path, required=True)
+    j.add_argument("--option", required=True)
+    j.add_argument("--tree-mount", required=True)
+    j.add_argument("--report", type=Path, required=True)
+    o = sub.add_parser("sources")
+    o.add_argument("--log-prefix", type=Path, required=True)
+    o.add_argument("--tree", type=Path, required=True)
+    o.add_argument("--report", type=Path, required=True)
+    o.add_argument("--third-party-set", type=Path, default=THIRD_PARTY_SET)
+    args = ap.parse_args(argv)
+    try:
+        return {
+            "static": cmd_static,
+            "runtime": cmd_runtime,
+            "rejected": cmd_rejected,
+            "sources": cmd_sources,
+        }[args.cmd](args)
+    except g2.CheckError as exc:
+        print(f"check_shipping_bundle: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

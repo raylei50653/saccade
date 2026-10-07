@@ -1049,3 +1049,610 @@ cmake --install build-release --component shipping --prefix <tree>
 bash scripts/native/run_shipping_container.sh pristine|strace <tree> <deps> <out>
 bash results/465_pr12_shipping/<label>/run.sh   # §16.3 gates 1-6 and N1-N8
 ```
+
+## 17. Bundle：第三方集合進 tree、launcher、loader provenance check（Phase C PR-C1）
+
+PR-C1 是 Phase C 的第一個 PR（[Phase C scope](native_runtime_phase_c_scope.md) §6）：把 PR-12 驗收過的 27 個第三方物件以原位元組放進 tree（owner 決策 C-D1），執行時不再需要 `LD_LIBRARY_PATH`。PR-C1 不改任何 stage 的計算，也不改 shipping 的 C++ 原始碼；entrypoint 與 operator library 的位元組都與 PR-12 相同。
+
+| 項目 | 位置 |
+|:--|:--|
+| 第三方集合 pin | `shipping/third_party_set.json`（SONAME、sha256、來源 wheel 與 root、授權檔）；`shipping/THIRD_PARTY.md`；產生工具 `scripts/native/export_third_party_set.py` |
+| entrypoint pin | `shipping/entrypoint_pin.json`；`SACCADE_SHIPPING_ENTRYPOINT` |
+| launcher | `shipping/launcher/saccade_track.sh` → `bin/saccade_track` |
+| loader provenance check | `shipping/src/loader_audit.c` → `lib/saccade_loader_audit.so` |
+| 安裝規則 | `shipping/CMakeLists.txt`、`shipping/cmake/install_third_party.cmake` |
+| 檢查工具 | `scripts/native/check_shipping_bundle.py`（`static`／`sources`／`runtime`）；`run_shipping_container.sh bundle`／`bundle-strace` |
+| 測試 | `tests/unit/test_shipping_bundle_checks.py`（含在真的 loader 上跑 auditor 的案例） |
+
+**owner 指示（2026-10-04，實作之前）**：先 probe glibc loader 的 `--library-path` 做法，再考慮改 `saccade_track`；優先保留 PR-12 executable 與 operator library 的位元組；`/proc/self/maps`／已載入物件的驗證是次要的 fail-closed provenance check；在 nvJitLink／cuFile／nvshmem 的散佈確認之前，bundle 只在本機 build 與測試；C-D5（簽章）＝v1 用 minisign。
+
+### 17.1 Probe（開發觀察，不是正式 run）
+
+`results/465_prc1_probe/p1_474da18b/`：bundle＝PR-12 r2 tree 與 deps 的 hard link，第三方物件放在 `lib/vendor/`；乾淨映像、MOT17-05-SDP 前 30 幀、`LD_DEBUG=files`。
+
+| case | 呼叫方式 | exit | 第三方物件來源 |
+|:--|:--|:--|:--|
+| P0 | PR-12 方式（tree＋deps，`LD_LIBRARY_PATH`） | 0 | deps 27 |
+| P1 | `ld.so --library-path <p>/lib/vendor`，無 `LD_LIBRARY_PATH` | 0 | vendor 27（含 operator library 的 `libnvrtc.so.13`） |
+| P2 | 直接 exec ELF，無 `LD_LIBRARY_PATH` | 127 | `libnvinfer.so.10: cannot open` |
+| P3 | P1＋`LD_LIBRARY_PATH` 指向一份不同的 libcublas | 0 | vendor 27（環境變數被 `--library-path` 取代） |
+| P4 | P1＋在 `<p>/nvidia/cu13/lib` 放一份多一個位元組的 libcublas | 0 | **那一份被載入**，沒有任何訊息 |
+| P5 | P1＋`--audit` auditor | 0 | vendor 27；載入集合＝P1＋auditor |
+| P6 | P4＋`--audit` | 127 | `foreign copy on the search path: …/nvidia/cu13/lib/libcublas.so.13` |
+
+P0、P1、P3、P4、P5 的 MOT txt 相同（`b3a1d9bb…`）。容器裡的 driver 物件是 7 個（P0 與 P1 相同，含 `libnvidia-ptxjitcompiler.so.1`）；§16.4 的 6 個是 host 上的數字。
+
+讀法：
+
+- `--library-path` 在 loader 的搜尋順序中排在 DT_RUNPATH 之前，所以 operator library（以 `dlopen` 載入、帶凍結的絕對 RUNPATH）的 `libnvrtc.so.13` 由 `lib/vendor` 解析：Phase C scope §5.1 的問題不必改 `saccade_track` 就解決。
+- **Phase C scope §5 的更正**：torch 系列（`libtorch*`、`libc10*`、`libgomp`）、`libnvinfer.so.10`、`libnvshmem_host.so.3` 帶的是 **DT_RPATH**，不是 RUNPATH；DT_RPATH 排在 `--library-path` 之前（P4），所以 `--library-path` 單獨擋不住在那些位置被放進去的檔案。把第三方物件放在 `<prefix>/lib/vendor/`（往下兩層）之後，每個相對 RPATH／RUNPATH 都展開在 `<prefix>` 之內；唯一的例外是 `libcusparseLt.so.0` RUNPATH 結尾的空項（目前工作目錄）。
+- auditor（rtld-audit，`--audit`）在載入之前就看得到每個搜尋候選路徑，不必改 `saccade_track` 的位元組，所以取代 scope §5.4 原本「在 `saccade_track` 裡讀 `/proc/self/maps`」的提案。
+
+### 17.2 改了什麼
+
+- **tree 的形狀**：`bin/saccade_track` 是 launcher（POSIX sh，只用 builtin）：`exec /lib64/ld-linux-x86-64.so.2 --library-path <prefix>/lib/vendor --audit <prefix>/lib/saccade_loader_audit.so --argv0 "$0" <prefix>/libexec/saccade_track "$@"`；呼叫端的 `LD_PRELOAD`、`LD_AUDIT`、`LD_LIBRARY_PATH` 先被 unset；prefix 含 `:` 時拒絕（loader 的路徑清單以 `:` 分隔）。ELF 移到 `libexec/saccade_track`，RUNPATH 仍是 `$ORIGIN/../lib`（`lib/` 只放 auditor，沒有第三方物件，所以直接 exec ELF 會在 loader 階段失敗，P2）。
+- **entrypoint 的位元組**：同一份 entrypoint 原始碼、同樣的 flag 重新 build，得到的 `saccade_track` 與 PR-12 的不同（同大小，10644 個位元組不同，分布在 `.rela.dyn`、`.rela.plt`、`.gnu.version*`、`.strtab` 的 nvcc `tmpxft_*` 名稱與 build-id；只記錄，不歸因）。所以 tree 帶的是 PR-12 正式 run r2 安裝的那一份（`d7c6e0d4…`，`shipping/entrypoint_pin.json`），由 `SACCADE_SHIPPING_ENTRYPOINT` 指定、安裝時比對 sha256；未設定時安裝這次 build 的 `saccade_track`，`static` 檢查會報告它不是 pin。
+- **第三方集合**：`install_third_party.cmake` 依 `third_party_set.json` 從 venv site-packages 與 FetchContent 的 nvJPEG wheel 複製 27 個物件到 `lib/vendor/<SONAME>`，逐檔比對 sha256；每個 wheel 的授權檔（也比對 sha256）到 `licenses/<wheel>/`，另放 `licenses/THIRD_PARTY.md` 與 Saccade 自己的 `LICENSE`／`NOTICE`。
+- **auditor**（C，只 NEED `libc.so.6`，沒有 RUNPATH）：從自己的路徑推出 `<prefix>`。`la_objsearch`：名字屬於 bundle 集合的，`lib/vendor/` 以外的候選一律跳過，若該候選檔案存在就 exit 127；相對路徑的候選（不論名字）同樣處理。`la_objopen`：bundle 名字的物件（realpath）必須在 `lib/vendor/`，operator library 必須是 model root 的那一份，任何 `libpython*`／`libtorch_python*` 都 exit 127。不要求 symbol binding 事件（`la_objopen` 回傳 0）。它**不**比對 3.5 GiB 的位元組：位元組的完整性由安裝時的 sha256 與 `static` 檢查負責（PR-C3 的 MANIFEST 驗證之後也會）。
+- **沒有動的**：shipping 與 tracking 的 C++ 原始碼、operator library、model root、PR-12 的檢查工具（`check_shipping_tree.py`）與它的組態（`run_shipping_container.sh pristine`／`strace` 不變）。
+- **不散佈**：PR-C1 產生的 tree 只在本機 build 與測試；在 Phase C scope §4 的授權確認之前，不上傳、不公開任何 tree 或包。
+
+### 17.3 開發期間已經看到的（在本節 commit 之前）
+
+都是工作樹上的試做，不是正式 run：`results/465_prc1_dev/t2`、`t3` 以 pin 的 entrypoint 安裝；`static` 11 項通過；`bundle` 容器跑 7 sequence，exit 0，`LD_LIBRARY_PATH` 未設，MOT txt 7/7 與 PR-12 `container_pristine` 相同；`bundle-strace` 的 `runtime` 3 項通過。host 上經 launcher 跑 MOT17-05 前 30 幀，`sources` 通過（46 個物件，第三方全部來自 `lib/vendor`）。這期間修過兩處：auditor 原本只接受絕對路徑（host 以相對 `--model-root` 執行時誤判 operator library，改成 realpath）；`sources` 原本沿用 PR-12 的名字配對，但 launcher 的 sh 與它 exec 的 loader 共用 pid、寫進同一個 `LD_DEBUG` 檔，改成只讀 auditor 載入之後的 'calling init' 路徑，並以 SONAME 分類。
+
+### 17.4 測量契約（正式 run 之前寫定）
+
+**組態**：同一台機器。`build-release/`：§16.3 的 configure 參數，加 `-DSACCADE_SHIPPING_ENTRYPOINT=<PR-12 r2 tree>/bin/saccade_track`；build `saccade_track`（連帶 build auditor），安裝到 `$R/tree`。oracle（`anchor`、`oracle-rows`）用 `build/` 既有的 extensions，`build/` 不 build 任何 target。容器同 §16.3 的映像與設定，但 bundle 模式：只掛 tree（唯讀）、MOT17 train（唯讀）與輸出目錄，不掛第三方目錄，不設 `LD_LIBRARY_PATH`。全部 GPU 步驟在 gpu0 lease 下依序執行。
+
+**有效性**（任一不成立 ⇒ 受影響的 gate 為 `UNRESOLVED`）：正式 run 在乾淨的 commit 上；`build/libsaccade_scan_torchop.so` 與 PR-12 r2 tree 的 `bin/saccade_track` 的 sha256 在整個 run 前後都分別等於 attestation 與 `entrypoint_pin.json` 的值；`anchor` 與 PR-2L `A_L_1` 7/7 相同、`oracle-rows` 有效（§13.3）；`container.txt` 顯示 Ubuntu 24.04、glibc 2.39、`LD_LIBRARY_PATH` 未設，且 §16.3 列的 9 個工具都不存在。
+
+**PASS 驗收規則**：PR-C1 的 verdict 是 `PASS` 若且唯若下列全部成立，否則是 `FAIL`（照 gate 分開報告）：
+
+1. **build 與安裝**：configure、build 成功，`saccade_track` POST_BUILD 通過；`cmake --install --component shipping` 成功（SM 清單、model root 4 個檔案、entrypoint pin、27 個第三方物件與全部授權檔的 sha256 都通過）。
+2. **靜態檢查**（`check_shipping_bundle.py static`，11 項都 PASS）：`layout_exact`（tree 恰好是預期的檔案集合）、`vendor_set_pinned`、`entrypoint_pinned`、`launcher_exact`、`licenses`、`g2_3_no_python_files`、`produced_elves`（entrypoint 只有 RUNPATH `$ORIGIN/../lib`；auditor 只 NEED `libc.so.6`、沒有搜尋路徑；operator library 是 attestation 的）、`search_path_containment`（例外只有 operator library 的絕對 RUNPATH 與 `libcusparseLt.so.0` 的空項，各以 sha256 綁定）、`g2_1_needed_closure`（從 entrypoint 與 operator library 出發，第三方名字全部在 `lib/vendor`，其餘是 base system／driver，沒有 Python）、`sm_ptx_entrypoint`、`glibc_baseline`（tree 裡每個 ELF，含 `lib/vendor`）。
+3. **host，經 launcher**：`LD_DEBUG=files` 下 `native_track_parity.py parity --track-binary $R/tree/bin/saccade_track --model-root $R/tree/share/saccade`（不給 `--track-library-path`；double buffer、trace）`EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7，且 `--against` PR-12 正式 run 的 `parity_pristine/report.json`：txt 與 trace 的 sha256 7/7 相同；`check_shipping_bundle.py sources` 通過（27 個第三方物件全部來自 `$R/tree/lib/vendor` 且位元組是 pin 的，operator library 與 auditor 來自 tree，沒有其他第三方物件、沒有 Python 函式庫）。
+4. **乾淨容器**（`run_shipping_container.sh bundle`）：7 sequence 在同一個 process 中跑完、exit 0；`parity --native-from` `EXACT`（三個 section 同第 3 條），且 `--against` 第 3 條的 report：txt 與 trace 7/7 相同。
+5. **G2-2／G2-4**（`run_shipping_container.sh bundle-strace`，7 sequence，exit 0）：`check_shipping_bundle.py runtime` 三項都 PASS：
+   - **exec chain**：恰好兩次 `execve`／`execveat`，都成功：先是 `/opt/saccade/bin/saccade_track`（launcher），再是 `/lib64/ld-linux-x86-64.so.2`，argv 以 `--library-path /opt/saccade/lib/vendor --audit /opt/saccade/lib/saccade_loader_audit.so` 開頭且含 `/opt/saccade/libexec/saccade_track`。這是 §16.3 第 6 條「恰好一次 `execve`」在 launcher 形式下的重新定義：兩次 exec 都不是 Python，sh 只執行 builtin；
+   - 沒有任何對 Python／Triton／inductor 路徑的 open（同 §16.3，含失敗的嘗試）；
+   - 成功 open 的 tree 內共享物件（以 sha256 比）恰好是 27 個 pin 的第三方物件＋operator library＋auditor；沒有任何 bundle 名字的物件從 `lib/vendor` 以外被開啟，也沒有 tree 以外的第三方物件。
+   
+   另外 `parity --native-from` 對這次 run `EXACT`，且 txt 與 trace 與第 4 條 7/7 相同。第 3–5 條的 harness 也檢查 `track_report.json` 的 `python_libraries_mapped` 為空。
+
+沒有容差。第 3–5 條的比較是逐位元組；任一不同就照 gate 報告第一個不同的檔案或項目，停在 PR-C1。
+
+**負控制**（tree 副本是 hard link；被改的檔案先刪再寫，不寫穿；每一個都必須被抓到）：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N1 | `SACCADE_SHIPPING_ENTRYPOINT` 指向這次 build 的 `saccade_track` | 安裝失敗（entrypoint pin） |
+| N2 | tree 副本的 `lib/vendor/libcublas.so.13` 多一個位元組 | `static`：`vendor_set_pinned` 失敗 |
+| N3 | tree 副本少 `lib/vendor/libnvrtc.so.13` | `static`：`layout_exact`、`vendor_set_pinned`、`g2_1_needed_closure` 失敗；容器 run（MOT17-05）exit 非 0 |
+| N4 | tree 副本在 `nvidia/cu13/lib/` 多一份（多一個位元組的）`libcublas.so.13` | `static`：`layout_exact` 失敗；容器 run（MOT17-05）exit 127，訊息是 auditor 的 `foreign copy on the search path` |
+| N5 | N4 的 tree，且 launcher 去掉 `--audit` 那一行 | `static`：`layout_exact`、`launcher_exact` 失敗；`bundle-strace`（MOT17-05）的 `runtime`：exec chain 與 opened set 失敗（那一份被開啟）。這一條顯示 runtime 擋下 N4 的是 auditor |
+| N6 | 容器帶 `LD_LIBRARY_PATH` 與 `LD_PRELOAD` 指向一份不同的 libcublas（唯讀掛載），加 `LD_DEBUG=files` | `bundle`（MOT17-05）exit 0、MOT txt 與第 4 條的 MOT17-05 相同、loader log 沒有任何來自那個目錄的物件 |
+| N7 | 容器直接 exec `/opt/saccade/libexec/saccade_track`（不經 launcher） | exit 127（loader 找不到 `libnvinfer.so.10`） |
+| N8 | tree 副本多一個 `share/saccade/helper.py` | `static`：`layout_exact`、`g2_3_no_python_files` 失敗 |
+| N9 | `bundle-strace` 映像以 `/bin/sh -c` 包住 launcher（MOT17-05 前 5 幀） | `runtime`：exec chain 失敗 |
+
+另有 `tests/unit/test_shipping_bundle_checks.py` 的拒絕案例，以及在真的 loader 上：DT_RPATH 的候選優先於 `--library-path`（沒有 auditor 時被放進去的那一份會被載入），有 auditor 時 exit 127。
+
+**修正 A1（2026-10-04，r1 之後、r2 之前）**：第一次正式 run（r1，`results/465_prc1_bundle/full_51840396/`，commit `51840396`）的 gate 1–5 全部成立（`EXACT`，與 PR-12 正式 run 7/7 相同），但有兩個負控制沒有照上表執行，所以 r1 不作為正式結果，整個 run 在 A1 的 commit 上從頭重跑（r2）：
+
+- **N3**：容器那一半照預期失敗（exit 2，`dlopen … libnvrtc.so.13: cannot open`），但 `static` 沒有產出報告：`g2_1_needed_closure` 對 `lib/vendor` 裡不存在的物件跑 `readelf`，工具以 exit 2 結束。修正：閉包遇到不存在的 vendor 物件時回報 `NEEDED … is missing from lib/vendor`（加測試）。這只改檢查工具，不改 tree 或任何量測。
+- **N6**：預測不成立。容器的 `LD_PRELOAD` 也作用在 launcher 自己的 sh 上：被 preload 的那份 `libcublas.so.13` 找不到它的 NEEDED `libcublasLt.so.13`，sh 在 loader 階段以 exit 127 結束，`saccade_track` 沒有啟動。這不是 provenance 被繞過（沒有任何東西以那份 libcublas 執行），但這個控制沒有測到它要測的東西：launcher 對 entrypoint process 的保護。N6 改為兩條：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N6a | 容器帶 `LD_LIBRARY_PATH` 指向一個放了多一個位元組的 `libcublas.so.13` 與 `libcudart.so.13` 的目錄（唯讀掛載），加 `LD_DEBUG=files` | `bundle`（MOT17-05）exit 0、MOT txt 與第 4 條的 MOT17-05 相同、auditor 載入之後的 loader log 沒有任何來自那個目錄的物件 |
+| N6b | N6a 再加 `LD_PRELOAD` 指向那份 `libcudart.so.13`（它的 NEEDED 都是 base system，sh 能載入） | 同 N6a。另外記錄（不是 gate）：auditor 載入之前，也就是 launcher 的 sh，是否載入了那份 preload |
+
+r1 的原 N6 結果（launcher 的 sh exit 127）記為觀察。其他 gate、負控制與判準不變。
+
+**不做的**：FPS 或任何效能比較；其他 GPU、其他主機（原生 Linux）、其他 glibc；第三方位元組在執行時的雜湊（安裝與 `static` 負責）；CLI 的開發選項（PR-C2）；tarball、MANIFEST、atomic 安裝與 minisign 簽章（PR-C3／C4）；任何散佈。
+
+### 17.5 驗收
+
+同一台機器（RTX 5070 Ti Laptop，driver 616.92，WSL2）。正式結果是 **r2**：commit `16233e92`（含 A1，工作樹乾淨；§17.4 的契約在 `51840396`，A1 在 `16233e92`，都早於 r2 的任何量測），全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library（`aa84cccd…`）與 pin 的 entrypoint（`d7c6e0d4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json` 的值。r1（`full_51840396/`）留在原處並附 `SUPERSEDED.txt`（§17.4 A1）。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 工作樹乾淨；`anchor` 與 `A_L_1` 7/7 相同；`oracle-rows` OK；容器是 Ubuntu 24.04.4、glibc 2.39、`LD_LIBRARY_PATH` 未設，9 個工具都不存在 |
+| 1 build 與安裝 | configure、build、install 都 exit 0；entrypoint 以 pin 安裝；tree 3.7 GiB |
+| 2 靜態檢查 | 11 項 PASS。containment 的例外只有 `libcusparseLt.so.0` 的空項與 operator library 的 7 個絕對 RUNPATH 條目；閉包 32 項，第三方名字全部解析到 `lib/vendor` |
+| 3 host，經 launcher | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7；txt 與 trace 與 PR-12 正式 run（`parity_pristine`）7/7 相同；`sources` PASS（27 個第三方物件全部來自 `tree/lib/vendor` 且是 pin 的位元組，operator library 與 auditor 來自 tree） |
+| 4 乾淨容器（bundle） | exit 0；`EXACT`（同上）；與第 3 條 7/7 相同 |
+| 5 G2-2／G2-4 | 三項 PASS：exec chain＝`/opt/saccade/bin/saccade_track` → `/lib64/ld-linux-x86-64.so.2 --library-path /opt/saccade/lib/vendor --audit /opt/saccade/lib/saccade_loader_audit.so … /opt/saccade/libexec/saccade_track`，兩次都成功；沒有任何對 Python／Triton／inductor 路徑的 open；開啟的 tree 內共享物件＝27 個 pin 的第三方物件＋operator library＋auditor，沒有外來的。`parity --native-from` `EXACT`，與第 4 條 7/7 相同；三次 run 的 `python_libraries_mapped` 都是空的 |
+| **verdict** | **`PASS`**（§17.4 第 1–5 條全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：
+
+| # | 結果 |
+|:--|:--|
+| N1 | 安裝失敗：這次 build 的 `saccade_track` sha256 `25d65611…` ≠ pin `d7c6e0d4…` |
+| N2 | `static`：`vendor_set_pinned` 失敗，其餘通過 |
+| N3 | `static`：`layout_exact`、`vendor_set_pinned`、`g2_1_needed_closure` 失敗；容器 run exit 2（`dlopen …libsaccade_scan_torchop.so: libnvrtc.so.13: cannot open`） |
+| N4 | `static`：`layout_exact` 失敗；容器 run exit 127，`loader provenance check failed: foreign copy on the search path: /opt/saccade/lib/vendor/../../nvidia/cu13/lib/libcublas.so.13` |
+| N5 | `static`：`layout_exact`、`launcher_exact` 失敗；容器 run exit 0（那一份被載入），`runtime`：exec chain 失敗（loader 沒有 `--audit`）、opened set 失敗（`/opt/saccade/nvidia/cu13/lib/libcublas.so.13` 被開啟） |
+| N6a | exit 0；MOT17-05 txt 與第 4 條相同；auditor 載入之後 47 個物件，沒有來自 `/opt/foreign` 的 |
+| N6b | 同 N6a。觀察：launcher 的 sh 載入了 preload 的 `/opt/foreign/libcudart.so.13`（auditor 載入之前） |
+| N7 | exit 127：`libnvinfer.so.10: cannot open shared object file` |
+| N8 | `static`：`layout_exact`、`g2_3_no_python_files` 失敗 |
+| N9 | `runtime`：exec chain 失敗（`/bin/sh`、launcher、loader 三次 `execve`），其餘兩項通過 |
+
+**觀察（不是 gate）**：`saccade_track` 在三次 build 得到三個不同的 sha256（PR-12 r2 `d7c6e0d4…`、§17.3 開發期間 `a14b76fb…`、本 run 的 `build-release` `25d65611…`），原始碼都相同（§17.2）。
+
+結果目錄：`results/465_prc1_bundle/full_16233e92/`（`run.sh`、`tree/`、`static.json`、`ld_host/`、`sources.json`、`anchor/`、`oracle_rows/`、`parity_host/`、`container_bundle/`、`parity_bundle/`、`container_strace/`、`runtime.json`、`parity_strace/`、`negctl/`、`pins_before.txt`／`pins_after.txt`）；probe 在 `results/465_prc1_probe/p1_474da18b/`，開發試做在 `results/465_prc1_dev/`。不納入版本控制。
+
+### 17.6 限制
+
+- **launcher 的 sh 不在保護範圍內**：呼叫端的 `LD_PRELOAD`／`LD_LIBRARY_PATH` 在 launcher 把它們 unset 之前就作用在 sh 自己身上（N6b 的觀察；r1 的原 N6 是一個依賴解析不到的 preload 讓 sh exit 127）。entrypoint process 不受影響（N6a、N6b）。
+- **auditor 只管路徑，不管位元組**：執行時不雜湊 3.5 GiB 的第三方物件；被就地改寫的 `lib/vendor` 物件只會被安裝時的 sha256 與 `static` 抓到（N2）。安裝後的完整性驗證在 PR-C3 的 MANIFEST。
+- **entrypoint 的位元組來自 PR-12 的結果目錄**：`SACCADE_SHIPPING_ENTRYPOINT` 指向 `results/465_pr12_shipping/full_c44dd876_r2/tree/bin/saccade_track`，那個目錄不在版本控制裡（operator library 在 `build/` 也是同樣的情況）。build 不可重現（§17.5 觀察），所以這份檔案若遺失，就要重新 build 並重做 parity，pin 也要換。
+- **`libcusparseLt.so.0` 的空 RUNPATH 項**（工作目錄）：auditor 拒絕任何相對路徑的候選，但這一條只在 cusparseLt 以名字 dlopen 尚未載入的物件時才會用到，本 run 沒有觀察到這種搜尋。
+- 仍然只支援 sm_120、只在這一台 WSL2 機器與這個 driver 上驗證過；包約 3.7 GiB；安裝仍不是 atomic（PR-C3）；CLI 的開發選項仍在（PR-C2；parity harness 每次都傳 `--measurement-mutation`）。
+- **沒有散佈**：tree 只在本機；nvJitLink／cuFile／nvshmem 的散佈依據確認之前不公開（Phase C scope §4）。
+
+### 17.7 重現
+
+```bash
+cmake -S . -B build-release -DSACCADE_WITH_OPENCV=OFF -DENABLE_NATIVE_TESTS=OFF \
+    "-DTORCH_CUDA_ARCH_LIST=7.5;8.0;8.6;9.0;10.0;12.0+PTX" \
+    -DSACCADE_SHIPPING_ENTRYPOINT=$PWD/results/465_pr12_shipping/full_c44dd876_r2/tree/bin/saccade_track
+cmake --build build-release --target saccade_track
+cmake --install build-release --component shipping --prefix <tree>
+.venv/bin/python scripts/native/check_shipping_bundle.py static --tree <tree> --report static.json
+bash scripts/native/run_shipping_container.sh bundle|bundle-strace <tree> <out>
+bash results/465_prc1_bundle/<label>/run.sh   # §17.4 gates 1-5 and the negative controls
+```
+
+### 17.8 修正 A2：auditor 必須初始化成功
+
+launcher 與 auditor 的原始碼註解以「§17.8, A2」指到這裡。修正案、契約修正與正式 run 結果在 §18.10–§18.11：A2 改的是 PR-C1 的 launcher 與 auditor，但正式 run 是在 PR-C1＋PR-C2 合在一起的 head 上重跑 §18.4 的整個 run。§17.4 與 §17.5 記錄的是舊 launcher（沒有 probe）。
+
+## 18. Shipping CLI：移除開發選項、measurement 邊界（Phase C PR-C2）
+
+PR-C2 是 Phase C 的第二個 PR（[Phase C scope](native_runtime_phase_c_scope.md) §6）：shipping 的 `saccade_track` 不再有任何開發／量測選項，也不含任何 mutation 程式碼；負控制注入只存在於一個明確、不安裝的 developer build。PR-C2 不改任何 stage 的計算，也不改 engine、operator library、27 個第三方物件的閉包、launcher／auditor、`sm_120` 與 Ubuntu 24.04 的契約。entrypoint 的原始碼改了，所以它的位元組改變，pin 換成新的一份（§18.4）。
+
+| 項目 | 位置 |
+|:--|:--|
+| shipping entrypoint | `shipping/tools/saccade_track.cpp`（只有 shipping 介面）；共用的 sequence loop／trace／report：`shipping/tools/track_driver.hpp` |
+| developer build | `shipping/tools/saccade_track_measurement.cpp` → `build*/shipping/saccade_track_measurement`（不安裝） |
+| measurement 邊界 | `SACCADE_SHIPPING_MEASUREMENT_HOOKS`；`shipping/CMakeLists.txt` 的 `saccade_shipping_variants()`：`saccade_shipping_{native,ingest,detector,runtime}` 與各自的 `_measurement` |
+| 禁止的位元組字串 | `shipping/measurement_surface.json`；POST_BUILD `shipping/cmake/check_no_measurement_surface.cmake`；`check_shipping_bundle.py static` 的 `entrypoint_no_measurement_surface` |
+| 被拒絕的選項 | `check_shipping_bundle.py rejected`（launcher 的 strace log） |
+| harness | `native_track_parity.py parity --entrypoint shipping|measurement` |
+| 測試 | `tests/unit/test_shipping_measurement_surface.py`、`tests/unit/test_shipping_bundle_checks.py`、`tests/unit/test_native_track_parity.py`；GPU：`tests/native/test_shipping_{serial,double_buffer}_runtime.cpp`、`test_shipping_post_detector_host.cpp`（改連 `_measurement`） |
+
+**owner 指示（2026-10-04，實作之前）**：`--measurement-mutation` 不再被 shipping `saccade_track` 接受，且在載入模型／GPU 之前 fail closed；盤點 CLI，只保留正式 shipping 選項，developer／test-only 功能移到明確的非 shipping 路徑；parity harness 不再依賴 production CLI 的 mutation flag，負控制仍要保留；不改 engine、operator library、27-lib closure、loader／auditor、`sm_120`、Ubuntu 24.04 contract；正式 run 之前凍結新的 CLI／harness 契約，確認 entrypoint／operator library 的 hash 不變；全量驗收仍需 detector 5316/5316 EXACT、MOT 7/7 byte-identical、graph captures 7/7 identical，並與 PR-12 正式 run 完全一致；runtime identity 有變更就照 C1 做 stacked republish。核心原則：不要把 `--measurement-mutation` 換成另一個 hidden flag，shipping path 必須完全沒有 mutation capability。
+
+§13／§14 的負控制寫的是 `saccade_track --measurement-mutation`：PR-C2 之後是 `saccade_track_measurement --measurement-mutation`（harness 的 `--entrypoint measurement`）；那兩節的內容是當時的紀錄，不改寫。
+
+### 18.1 CLI 盤點
+
+| 選項 | PR-C1 | PR-C2 | 理由 |
+|:--|:--|:--|:--|
+| `--config`、`--lineage`、`--attestation`、`--model-root`、`--out`、`SEQUENCE_DIR...` | shipping | shipping，不變 | entrypoint 的輸入與輸出位置（boundary §2） |
+| `--report JSON` | 「developer measurement」 | **shipping** | 只寫檔、不改計算；驗收讀它的 load report、graph 計數與 `python_libraries_mapped`（Phase C scope §2 的預設提案）。格式改為 `saccade.native_track_report/v2`：加 `entrypoint`，移除 `mutation` 與 `max_frames` |
+| `--trace DIR` | 「developer measurement」 | **shipping** | 只寫檔、不改計算；detector 5316/5316 的驗收要在 shipping binary 上讀它（scope §2）。每幀多一次 main stream 的 sync（§14 的限制，不變） |
+| `--max-frames N` | 開發選項 | **移到 developer build** | 只為了短跑測試：把輸入截成前 N 幀，截斷處的 sequence tail 不是 shipping 的語意；oracle 的 `--max-frames` 也是 eval 腳本的測試選項 |
+| `--schedule serial` | 開發選項 | **移到 developer build** | 覆寫 config 的排程。shipping 的排程只由 resolved config 決定（`select_schedule(cfg, false)`）；config 本身若指名 serial，shipping 仍走 `SerialRuntime` |
+| `--measurement-mutation M` | 開發選項（負控制） | **移到 developer build** | 負控制注入（owner 指示） |
+
+`--max-frames` 與 `--schedule serial` 的去留是本 PR 的決定（scope §2 只寫了 `--measurement-mutation`），owner review 時可以改。shipping binary 遇到這三個（或任何其他未列出的）選項，在 `parse_args` 就以 exit 2 結束（`saccade_track: unknown argument <option>`），之前不讀任何檔案；用法訊息只列 shipping 介面。
+
+### 18.2 改了什麼
+
+- **measurement 邊界**：四個帶有量測 hook 的 runtime library 各 build 兩次，同一份原始碼：`<name>`（shipping）與 `<name>_measurement`（PUBLIC `SACCADE_SHIPPING_MEASUREMENT_HOOKS=1`，所以使用端看到相同的宣告）。只在 `#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS` 之內宣告與實作的是：`DetectorMutation`（6 種）與 `DetectorHost::set_mutation_for_measurement`；`detect_graphed` 原本的 `refresh_input` 參數改成 `DetectorHost::set_stale_graph_input_for_measurement`（double-buffer runtime 每個 sequence 設一次，語意與原本逐呼叫傳入相同）；`JpegDecoder::force_decoupled_for_measurement`；`PostDetectorHost::set_pre_roll_for_measurement`、`set_stale_gmc_input_for_measurement`；`RuntimeMutation`（3 種）與 `DoubleBufferMutation`（3 種）以及它們的 `parse_*`／`*_name`、setter、成員與分支。shipping 物件裡這些全都不存在：shipping 的呼叫端無法指名它們（沒有宣告），mutation 為 `none` 時 measurement variant 執行的敘述與 shipping 相同。
+- **兩個 entrypoint**：`saccade_track.cpp` 只解析 shipping 介面（`track_driver.hpp` 的 `parse_interface_arg`），以 `#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS` `#error` 拒絕以 measurement variant 編譯；`saccade_track_measurement.cpp` 在同一個介面之外加 `--measurement-mutation`、`--schedule serial`、`--max-frames`，以 `#ifndef` `#error` 拒絕以 shipping variant 編譯，report 帶 `entrypoint: "saccade_track_measurement"` 與 `measurement`（`mutation`、`schedule_override`、`max_frames`）。兩者共用 `track_driver.hpp`（不含任何依賴巨集的程式碼）。`saccade_track_measurement` 不在任何 `install()` 裡。
+- **使用端**：`saccade_replay`、`saccade_ingest_probe`、`saccade_detector_probe` 與用到 hook 的 GPU 測試（serial／double-buffer runtime、post-detector host）改連 `_measurement`；其餘 GPU 測試連 shipping variant。沒有任何 target 同時連兩種 variant。
+- **建置時與安裝後的檢查**：`saccade_track` 的 POST_BUILD 在 link surface 之外再跑 `check_no_measurement_surface.cmake`：binary 含 `measurement_surface.json` 的任一字串就 build 失敗。字串是 mutation 的列舉、名稱與 setter 的片段（`Mutation`、`_mutation`、` mutation`、`mutation_`、`_for_measurement`）、developer build 的名字與三個選項、12 個 mutation 名稱、`stale_graph_input`、`force_decoupled`。`check_shipping_bundle.py static` 多一項 `entrypoint_no_measurement_surface`（共 12 項）。新的 `rejected` 子命令判讀 launcher 收到被移除的選項時的 strace log：exit 2 與 `unknown argument` 訊息、exec chain 仍是 launcher → loader、沒有開啟（含失敗的嘗試）model root 之下任何檔案或 operator library、沒有開啟 GPU 裝置節點（`/dev/dxg`、`/dev/nvidia*`）、沒有任何輸出。
+- **harness**：`--entrypoint shipping`（預設）只給 `saccade_track` 7 個介面選項；`--mutation`、`--schedule serial`、`--max-frames` 必須搭配 `--entrypoint measurement`，否則 argparse 拒絕。report 的 validity 檢查 `entrypoint` 是要求的那一個、shipping report 沒有 `measurement` 記錄、measurement report 的記錄等於要求。`--against` 除了 txt 與 trace 的 sha256，也比較每個 sequence 的 native graph capture／replay 計數。
+- **沒有動的**：engine、operator library（`aa84cccd…`）、model root、`third_party_set.json`（27 個）、launcher、auditor、安裝規則（除了 entrypoint 的 pin 值）、SM 清單、glibc baseline、容器映像與 `run_shipping_container.sh`。
+
+### 18.3 開發期間已經看到的（在本節 commit 之前）
+
+都是工作樹上的試做，不是正式 run（`results/465_prc2_dev/t1/`，oracle 借用 PR-C1 r2 的 `anchor`／`oracle_rows`，所以 harness 的 verdict 是 `UNRESOLVED`：oracle 不在這個 commit）：
+
+- **位元組字串**（`measurement_surface.json` 的 23 個）：`build-release` 與 `build/`（Debug）的新 shipping `saccade_track` 都是 0 個；PR-12 pin 的 `d7c6e0d4…` 有 20 個（例如 `_mutation` 10 次、`_for_measurement` 4 次、`--measurement-mutation`、`--max-frames` 與全部 12 個 mutation 名稱；`nm` 看得到 `DetectorHost::set_mutation_for_measurement`、`parse_detector_mutation` 等符號）；`saccade_track_measurement` 在 `build-release` 有 22 個、Debug 有 23 個。第一版清單用了 `measurement` 與 `mutation` 兩個泛用字，Debug 的 shipping `saccade_track` 因此被 POST_BUILD 誤判：tracker 的 Kalman filter 有 `measurement`、`output_measurement`，config 檢查有 `PermutationOf`（含 `mutation`）。改成上列的精確片段。
+- **parity**（gpu0 lease）：新 shipping binary `EXACT`（`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7），`--against` PR-12 正式 run 的 `parity_pristine`：txt、trace、graph 計數 7/7 相同；`--entrypoint measurement`（mutation `none`）與 shipping 7/7 相同；`stale_gmc_input` 的 `mot_txt` 是 `DIFFERS`。
+- **被拒絕的選項**（乾淨容器＋strace，dev tree）：`--measurement-mutation none`、`--schedule serial`、`--max-frames 5` 三者的 `rejected` 5 項都通過；對 PR-C1 r2 一次正常 run 的 strace log 跑 `rejected`，exit／model root／GPU 裝置／輸出 4 項失敗、exec chain 通過。`static` 在 dev tree 上除了 `entrypoint_pinned`（pin 仍是 PR-12 的）之外 11 項通過。
+- **GPU 測試**：`build/` 的 `ctest -R 'saccade_shipping|saccade_resolved'` 12/12 通過（含 serial／double-buffer runtime 的 mutation 測試，改連 `_measurement`）。`build/libsaccade_scan_torchop.so` 在 build 前後都是 `aa84cccd…`（只 build 具名 target）。
+- **「GPU 之前」的定義**：`LD_DEBUG=files` 顯示即使參數錯誤，`libcuda.so.1` 也在 `main` 之前被 `libcublasLt.so.13` 的初始化以 `dlopen` 載入，所以「在 GPU 之前 fail closed」不能以 `libcuda` 沒有載入來判定；改以「沒有開啟 GPU 裝置節點、沒有開啟 model root 與 operator library」判定（正常 run 會開啟 `/dev/dxg`、`/dev/nvidia-uvm`）。
+
+### 18.4 測量契約（正式 run 之前寫定）
+
+**entrypoint pin**：`shipping/entrypoint_pin.json` 換成 `92f74ef4724ff5e4cb5e7d4c7ce7e799563cec59b7b1ad806e682a9a95ceff34`（8736640 位元組）：commit `04f6f135`（工作樹乾淨）以全新的 `build-prc2-pin/`（§17.4 的 configure 參數，不設 `SACCADE_SHIPPING_ENTRYPOINT`）build `saccade_track`、`cmake --install` 之後的 `libexec/saccade_track`（RUNPATH `$ORIGIN/../lib`），放在 `results/465_prc2_cli/entrypoint_04f6f135/saccade_track`（唯讀）。它的 POST_BUILD 兩項都通過，裝出來的 tree 上 `static` 除 `entrypoint_pinned`（當時 pin 仍是 PR-12 的）之外 11 項通過。build 不可重現（§17.2），所以正式 run 安裝的是這一份，不是 run 中重新 build 的那一份。
+
+**組態**：同一台機器。`build-release/`：§17.4 的 configure 參數，`-DSACCADE_SHIPPING_ENTRYPOINT=<上面那份>`；build `saccade_track` 與 `saccade_track_measurement`，安裝到 `$R/tree`。developer build 是這次 run 在 `build-release/` 編出的 `saccade_track_measurement`（不安裝，以 build tree 的 RUNPATH 在 host 上執行）。oracle（`anchor`、`oracle-rows`）用 `build/` 既有的 extensions，`build/` 不 build 任何 target。容器同 §17.4（bundle 模式）。全部 GPU 步驟在 gpu0 lease 下依序執行。
+
+**有效性**（任一不成立 ⇒ 受影響的 gate 為 `UNRESOLVED`）：正式 run 在乾淨的 commit 上；`build/libsaccade_scan_torchop.so` 與 pin 檔案的 sha256 在整個 run 前後都分別等於 attestation 與 `entrypoint_pin.json` 的值；編出 pin 的原始碼不變：`git diff 04f6f135 HEAD -- shipping/src shipping/include shipping/tools src include` 為空，`shipping/CMakeLists.txt` 與 `shipping/cmake/` 的差異只有註解行；`anchor` 與 PR-2L `A_L_1` 7/7 相同、`oracle-rows` 有效（§13.3）；`container.txt` 同 §17.4。
+
+**PASS 驗收規則**：PR-C2 的 verdict 是 `PASS` 若且唯若下列全部成立，否則是 `FAIL`（照 gate 分開報告）：
+
+1. **build 與安裝**：同 §17.4 第 1 條；另外 `saccade_track` 的 POST_BUILD 兩項（link surface、measurement surface）都通過，`saccade_track_measurement` build 成功。
+2. **靜態檢查**：`check_shipping_bundle.py static` 12 項都 PASS（§17.4 的 11 項＋`entrypoint_no_measurement_surface`）。
+3. **host，經 launcher**：同 §17.4 第 3 條（`EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7；`sources` 通過），且 `--against` PR-12 正式 run 的 `parity_pristine/report.json`：txt、trace 與 native graph 計數 7/7 相同。harness 只給 7 個介面選項；report 的 `entrypoint` 是 `saccade_track`，沒有 `measurement` 記錄。
+4. **乾淨容器**：同 §17.4 第 4 條，`--against` 第 3 條：txt、trace、graph 計數 7/7 相同。
+5. **G2-2／G2-4**：同 §17.4 第 5 條，`--against` 第 4 條 7/7 相同。
+6. **CLI surface**：
+   - **a. 被移除的選項**：乾淨容器＋strace（`bundle-strace` 的映像與掛載），launcher 以第 4 條的完整參數加上 `--measurement-mutation none`、`--schedule serial`、`--max-frames 5` 之一（MOT17-05），三次的 `check_shipping_bundle.py rejected` 5 項都 PASS：exit 2 且訊息是 `saccade_track: unknown argument <option>`；exec chain 是 launcher → loader；沒有開啟（含失敗的嘗試）`/opt/saccade/share/saccade/` 之下任何路徑或 `libsaccade_scan_torchop.so`；沒有開啟 `/dev/dxg`、`/dev/nvidia*`；沒有 `native/` 或 `track_report.json`。
+   - **b. developer build 的基準**：`parity --entrypoint measurement`（mutation `none`、double buffer、trace）`EXACT`，且 `--against` 第 3 條：txt、trace、graph 計數 7/7 相同。負控制的基準因此就是 shipping 的計算。
+   - **c. serial 參考**：`parity --entrypoint measurement --schedule serial` 對 `oracle-rows`（serial oracle）`EXACT`（`detector` 5316/5316、`mot_txt` 7/7）。
+   - **d. 負控制保留**：每一個都 `CAUGHT`（指定的 section 是 `DIFFERS`、沒有 validity 問題），7 sequence：double buffer `stale_detector_input` → `detector`、`stale_gmc_input` → `mot_txt`、`swapped_detection_parity` → `detector`；serial `shared_post_host` → `mot_txt`、`stale_image_dims` → `detector`、`gmc_previous_frame` → `mot_txt`（`--entrypoint measurement`）；`--ref-edit` → `mot_txt`（shipping，經 launcher）。
+
+沒有容差。第 3–6 條的比較是逐位元組（graph 計數逐項相等）；任一不同就照 gate 報告第一個不同的檔案或項目，停在 PR-C2。
+
+**負控制**（新的檢查本身；tree 副本是 hard link，被改的檔案先刪再寫；每一個都必須被抓到）：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| M1 | 對 PR-C1 r2 的 tree（PR-12 的 entrypoint）跑 `static` | `entrypoint_no_measurement_surface` 與 `entrypoint_pinned` 失敗（舊的 surface 被抓到；pin 已換） |
+| M2 | tree 副本的 `libexec/saccade_track` 換成這次 run 的 `saccade_track_measurement` | `static`：`entrypoint_no_measurement_surface`、`entrypoint_pinned` 失敗（其餘照實記錄） |
+| M3 | `check_no_measurement_surface.cmake` 對 `saccade_track_measurement` | 失敗（POST_BUILD 會擋下連到 `_measurement` 的 shipping build） |
+| M4 | `rejected` 對第 5 條（正常 run）的 strace log | `exit_2_unknown_argument`、`no_model_root_open`、`no_gpu_device_open`、`no_output` 失敗 |
+| M5 | `parity --mutation stale_gmc_input`（沒有 `--entrypoint measurement`） | harness 在執行任何東西之前拒絕（exit 2） |
+| M6 | `parity --entrypoint shipping --track-binary build-release/shipping/saccade_track_measurement` | `UNRESOLVED`（report 的 `entrypoint` 不是 `saccade_track`） |
+
+另外以新的 pin 重跑 §17.4 的 N1–N5、N6a、N6b、N7–N9，必須的結果同 §17.4（N1 的「這次 build 的 `saccade_track`」是 `build-release` 的那一份）；N7、N9 原本帶 `--max-frames 5`，這個選項已經不在 shipping 介面裡，改跑完整的 MOT17-05。
+
+**不做的**：FPS 或任何效能比較；其他 GPU、其他主機、其他 glibc；`saccade_track_measurement` 的容器驗收（它不安裝）；tarball、MANIFEST、atomic 安裝與 minisign 簽章（PR-C3／C4）；任何散佈。
+
+### 18.5 驗收
+
+同一台機器（RTX 5070 Ti Laptop，driver 616.92，WSL2）。正式 run：commit `e63fde3f`（工作樹乾淨；§18.4 的契約與新的 pin 在這個 commit，早於任何量測），全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library（`aa84cccd…`）與 pin 的 entrypoint（`92f74ef4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json` 的值；`git diff 04f6f135 HEAD -- shipping/src shipping/include shipping/tools src include` 為空，`shipping/CMakeLists.txt`／`shipping/cmake/` 的差異只有註解行（`validity_sources.txt`）。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 工作樹乾淨；pin 的原始碼不變；`anchor` 與 `A_L_1` 7/7 相同；`oracle-rows` OK；容器是 Ubuntu 24.04.4、glibc 2.39、`LD_LIBRARY_PATH` 未設，9 個工具都不存在 |
+| 1 build 與安裝 | configure、build、install 都 exit 0；`saccade_track` 的 POST_BUILD 兩項通過（13 NEEDED；measurement surface 23 個字串都不在）；`saccade_track_measurement` build 成功；entrypoint 以 pin 安裝；tree 3.7 GiB |
+| 2 靜態檢查 | 12 項 PASS（含 `entrypoint_pinned` 與 `entrypoint_no_measurement_surface`） |
+| 3 host，經 launcher | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7；`--against` PR-12 `parity_pristine`：txt、trace、graph 計數 7/7 相同；`sources` PASS；report 的 `entrypoint` 是 `saccade_track`，沒有 `measurement` 記錄 |
+| 4 乾淨容器（bundle） | exit 0；`EXACT`（同上）；與第 3 條 7/7 相同 |
+| 5 G2-2／G2-4 | `runtime` 三項 PASS；`parity --native-from` `EXACT`，與第 4 條 7/7 相同；三次 run 的 `python_libraries_mapped` 都是空的 |
+| 6a 被移除的選項 | `--measurement-mutation none`、`--schedule serial`、`--max-frames 5`：三次 `rejected` 各 5 項 PASS（exit 2、`unknown argument`；exec chain launcher → loader；沒有開啟 model root、operator library、`/dev/dxg`／`/dev/nvidia*`；沒有輸出） |
+| 6b developer build 的基準 | `--entrypoint measurement`（mutation `none`）`EXACT`，與第 3 條：txt、trace、graph 計數 7/7 相同 |
+| 6c serial 參考 | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7 |
+| 6d 負控制 | 7 個都 `CAUGHT`：`stale_detector_input`（`detector`、`mot_txt` DIFFERS）、`stale_gmc_input`（`mot_txt`）、`swapped_detection_parity`（`detector`、`mot_txt`）、`shared_post_host`（`mot_txt`）、`stale_image_dims`（`detector`、`mot_txt`）、`gmc_previous_frame`（`mot_txt`）、`ref_edit`（`mot_txt`）；double buffer 的三個 `graph_captures` 都是 `EXACT` |
+| **verdict** | **`PASS`**（§18.4 第 1–6 條全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：
+
+| # | 結果 |
+|:--|:--|
+| M1 | PR-C1 r2 的 tree：`static` 的 `entrypoint_no_measurement_surface`、`entrypoint_pinned` 失敗，其餘通過 |
+| M2 | entrypoint 換成 `saccade_track_measurement`：`entrypoint_no_measurement_surface`、`entrypoint_pinned` 失敗；另外 `produced_elves`、`search_path_containment` 失敗（build tree 的 RUNPATH 指向 venv，不是 `$ORIGIN/../lib`） |
+| M3 | POST_BUILD 的 surface 檢查對 `saccade_track_measurement` exit 1 |
+| M4 | `rejected` 對第 5 條的正常 run：`exit_2_unknown_argument`、`no_model_root_open`、`no_gpu_device_open`、`no_output` 失敗（exec chain 通過） |
+| M5 | harness 以 exit 2 拒絕（`use --entrypoint measurement`），沒有執行任何東西 |
+| M6 | `UNRESOLVED`：`report entrypoint 'saccade_track_measurement' != 'saccade_track'`、`a shipping saccade_track report with a measurement record`（三個 section 本身 `EXACT`，validity 擋下） |
+| N1 | 安裝失敗：這次 build 的 `saccade_track`（`83005519…`）≠ pin |
+| N2 | `static`：`vendor_set_pinned` 失敗 |
+| N3 | `static`：`layout_exact`、`vendor_set_pinned`、`g2_1_needed_closure` 失敗；容器 run exit 2（`dlopen …libsaccade_scan_torchop.so: libnvrtc.so.13: cannot open`） |
+| N4 | `static`：`layout_exact` 失敗；容器 run exit 127，`foreign copy on the search path: /opt/saccade/lib/vendor/../../nvidia/cu13/lib/libcublas.so.13` |
+| N5 | `static`：`layout_exact`、`launcher_exact` 失敗；容器 run exit 0，`runtime`：exec chain 與 opened set 失敗 |
+| N6a | exit 0；MOT17-05 txt 與第 4 條相同；auditor 載入之後 47 個物件，沒有來自 `/opt/foreign` 的 |
+| N6b | 同 N6a。觀察：launcher 的 sh 載入了 preload 的 `/opt/foreign/libcudart.so.13`（auditor 載入之前，同 §17.5） |
+| N7 | exit 127：`libnvinfer.so.10: cannot open shared object file`（完整 MOT17-05） |
+| N8 | `static`：`layout_exact`、`g2_3_no_python_files` 失敗 |
+| N9 | `runtime`：exec chain 失敗，其餘兩項通過（完整 MOT17-05） |
+
+**觀察（不是 gate）**：本 run 在 `build-release` 編出的 `saccade_track` 是 `83005519…`、`saccade_track_measurement` 是 `e6d98c84…`；pin（`build-prc2-pin`，同一份原始碼）是 `92f74ef4…`。
+
+結果目錄：`results/465_prc2_cli/full_e63fde3f/`（`run.sh`、`validity_sources.txt`、`tree/`、`static.json`、`anchor/`、`oracle_rows/`、`parity_host/`、`ld_host/`、`sources.json`、`container_bundle/`、`parity_bundle/`、`container_strace/`、`runtime.json`、`parity_strace/`、`cli/`、`negctl/`、`pins_before.txt`／`pins_after.txt`）；pin 在 `results/465_prc2_cli/entrypoint_04f6f135/`，開發試做在 `results/465_prc2_dev/`。不納入版本控制。
+
+### 18.6 限制
+
+- **「沒有 mutation capability」的證據是三層，不是證明**：(1) 原始碼：每一個 hook 都在 `#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS` 之內，shipping 的 entrypoint 以 `#error` 拒絕 measurement variant（`test_shipping_measurement_surface.py` 逐行檢查 hook 名稱）；(2) binary：pin 不含 `measurement_surface.json` 的 23 個字串（POST_BUILD、`static`）；(3) 行為：被移除的選項在讀任何檔案之前被拒絕（6a）。字串檢查只能抓到清單上的名字；一個不帶這些名字的新 hook 要靠第 (1) 層與 review。
+- **resolved config 仍然是輸入**：shipping binary 依 config 計算；config 由 strict loader 驗證與排程檢查把關，但不在 PR-C2 的範圍內以 hash 綁定（PR-C3 的 MANIFEST 會記錄它的 sha256）。這是輸入，不是注入 hook。
+- **`--trace` 留在 shipping**：它只寫檔，但每幀多一次 main stream 的 sync（§14），不是 shipping 的預設組態；不帶 `--trace` 的 shipping run 在本 PR 沒有另外量（同 §14 以來的狀態）。
+- **launcher 的註解**仍寫「the PR-12 executable, bytes unchanged」：launcher 的位元組被 `launcher_exact` 綁定，PR-C2 不改 launcher，所以這句註解留到下一次必須改 launcher 的時候。
+- **pin 來自結果目錄**：`results/465_prc2_cli/entrypoint_04f6f135/saccade_track` 不在版本控制裡（同 §17.6 對 PR-12 pin 的限制）；build 不可重現，遺失就要重新 build、重做 parity 並換 pin。
+- `--max-frames` 與 `--schedule serial` 移出 shipping 是本 PR 的決定（§18.1），owner review 時可以改；改回 shipping 需要重新寫 surface 清單與這一節的驗收。
+- 其餘同 §17.6：只支援 sm_120、只在這一台 WSL2 機器與 driver 上驗證；launcher 的 sh 不在保護範圍；安裝仍不是 atomic（PR-C3）；沒有散佈。
+
+### 18.7 重現
+
+```bash
+# the pin (once; build at the implementation commit on a clean tree)
+cmake -S . -B build-prc2-pin -DSACCADE_WITH_OPENCV=OFF -DENABLE_NATIVE_TESTS=OFF \
+    "-DTORCH_CUDA_ARCH_LIST=7.5;8.0;8.6;9.0;10.0;12.0+PTX"
+cmake --build build-prc2-pin --target saccade_track
+cmake --install build-prc2-pin --component shipping --prefix <stage>   # keep <stage>/libexec/saccade_track
+# the formal run
+bash results/465_prc2_cli/<label>/run.sh   # §18.4 gates 1-6, M1-M6, N1-N9
+# by hand
+.venv/bin/python scripts/native/check_shipping_bundle.py static --tree <tree> --report static.json
+.venv/bin/python scripts/native/check_shipping_bundle.py rejected --strace-prefix <out>/strace/s \
+    --log <out>/saccade_track.log --out-dir <out> --option=--measurement-mutation \
+    --tree-mount /opt/saccade --report rejected.json
+.venv/bin/python scripts/eval/diagnostics/native_track_parity.py parity --entrypoint measurement \
+    --out <out> --oracle-rows <oracle_rows> --oracle-txt <anchor> --mutation stale_gmc_input
+```
+
+### 18.8 Review 修正：拒絕檢查的路徑與 trace 輸出
+
+Review 在 `60d66da7`／republish `2e0ae90c` 重現兩個 checker 漏檢：只有 `trace/` 輸出時 `no_output` 仍通過；model-root 本身與 directory-relative `openat` 也可能被漏掉。原始三次拒絕紀錄沒有這些存取或 trace 輸出；這是驗收工具的覆蓋缺口，沒有發現 shipping binary 違反拒絕契約。
+
+修正後 `rejected` 的五個 gate 名稱不變，判定收緊：
+
+- `no_model_root_open` 包含 model-root 本身。相對 `openat` 以 `strace -yy` 的 dirfd／`AT_FDCWD` cwd 註記解析；不推測未追蹤的 fd／cwd 狀態。相對路徑無法解析、或 open 紀錄不完整時，model／GPU／output 三項都 fail closed，報告列出 `unresolved`。
+- `no_output` 包含 `native/`、`track_report.json`、`trace/`，並從 exec argv 讀取實際的 `--out`／`--report`／`--trace` 路徑。即使檔案沒有留下，對這些路徑的寫入 open 嘗試（含失敗）也必須被抓到。
+- 回歸測試涵蓋存留 trace、directory-relative model open、cwd-relative model open、GPU 裝置、無法解析／不完整的 open、失敗的 trace 寫入、自訂 trace 路徑，以及能解析的無關唯讀 open。
+
+後續驗證保留 §18.5 的原始紀錄，另建新結果目錄：以更新的 checker 重驗三次歷史拒絕 log，再在同一乾淨容器以 `strace -yy` 新跑三次被移除的選項。這次只驗證拒絕 gate 與 checker，沒有重跑完整 detector／MOT parity；shipping 原始碼與 entrypoint／operator library pin 不變，§18.5 的正式 run 仍是原來的證據。
+
+**驗證結果**：乾淨 commit `2a3cce80`，`results/465_prc2_cli/review_fix_2a3cce80/`（`run.py`、`summary.json`、`historical_*.json`、`rejected_*/`）。歷史重驗 3/3 PASS；新容器拒絕 3/3 PASS，每次五項 gate 全通過。checker 回歸測試 47/47 PASS；shipping sources 與 `04f6f135` 相同，pin／operator hash 在新 run 前後均相同。`summary.json` sha256：`8c2b8d824774e09a5ae20169c5cd27e188257a372302c13e5a5968fe59a0c9e0`。這是 §18.8 的後續驗證，不取代 §18.5 的正式 parity。
+
+### 18.9 Review 修正：alias 目標與相對輸出參數
+
+Review 在 `2e74f3ee`（#530 合入後的 #529 head）用合成 trace 重現兩個 checker 漏檢，都是 `rejected` 的覆蓋缺口，沒有觀察到 shipping binary 違反拒絕契約：
+
+- 相對的 `--out`／`--trace`／`--report` 保持相對路徑，但 open 紀錄已解析成絕對路徑，兩者無法比對。例：`--trace custom_trace` 配 `openat(AT_FDCWD</out>, "custom_trace/detector.bin", O_WRONLY|O_CREAT, 0666) = -1 EACCES`，五項 gate 全過。
+- 只分類請求的路徑，忽略 `strace -yy` 對回傳 fd 的目標註記。經 symlink／裝置別名的成功 open（`/tmp/config-alias` → model-root 內的 config、`/dev/char/195:0` → `/dev/nvidia0`）能通過 `no_model_root_open`／`no_gpu_device_open`。
+
+修正後五個 gate 名稱不變，判定收緊：
+
+- model-root、GPU 裝置與輸出寫入三項同時檢查請求路徑與回傳 fd 的目標（含裝置的巢狀 `<char M:N>` 註記）。帶 dirfd 註記（即 `-yy` 格式）的成功 open 若缺少目標註記，視為不完整紀錄，三項都 fail closed。
+- 相對輸出參數以所有 `AT_FDCWD` 註記出現過的 cwd 解析；一個 cwd 都沒有時（例如非 `-yy` 的 log），`no_output` fail closed，報告的 `unresolved_outputs` 列出該參數。存留檔案檢查也套用解析後落在 `/out/` 下的路徑。
+- 非 `-yy` 的 log 沒有目標註記，無法排除經別名的存取；這是舊格式證據的 named limit，不是 PASS 的依據擴大。§18.5 的三次拒絕 run 只用預設的絕對輸出路徑。
+
+回歸測試新增 10 項：三種相對輸出參數的失敗寫入、相對 `--report` 的存留檔、無 cwd 時 fail closed、四種別名目標（config、operator library、GPU 裝置、trace 寫入）、缺目標註記的 `-yy` 紀錄。這 10 項在 `2e74f3ee` 的 checker 上全部失敗，修正後全部通過；checker 回歸測試 57/57 PASS。
+
+**驗證結果**：乾淨 commit `2c6fceae`，`results/465_prc2_cli/review_fix_2c6fceae/`（`run.py`、`summary.json`、`historical_*.json`、`yy_2a3cce80_*.json`、`m4_replay.json`、`runtime_replay.json`）。只重播既有 log，不新跑容器：shipping binary 未變，`2a3cce80` 的三次 `-yy` run 已帶目標與 cwd 註記。§18.5 歷史拒絕 log 3/3 PASS；`-yy` 拒絕 log 3/3 PASS；M4 負控制失敗的 gate 與原本逐項相同；正式 run 的 runtime 重播 PASS。shipping sources 與 `04f6f135` 相同，pin／operator hash 前後相同；runtime identity `--mode attested` exit 0，checker 不在 identity 輸入內，不需 republish。`summary.json` sha256：`38abaa0dc3d8dff979383870bd4b8ad60937a3b7dd85578894d804d1746d4f41`。不取代 §18.5 的正式 parity。
+
+### 18.10 修正 A2：auditor 必須初始化成功（PR-C1 launcher）
+
+Review 在 `b73d0a65`（#527 合入 C1＋C2 的 head）重現：auditor 不存在或無法載入時，loader 印出 `cannot be loaded as audit interface … ignored` 後照樣執行。以真的 loader 與原本的 launcher，刪除或截斷 auditor 後，被放在 DT_RPATH 位置的那一份會被載入，process exit 0，不是 127。§17 的 provenance 保護因此不是 fail-closed：只有 auditor 確實載入時才成立，§17.5 的 r2 與 §18.5 的 run 都是在 auditor 完整時量的。同一次 review 另有兩個 checker 漏檢（`runtime` 不看 alias 目標；`rejected` 的 model root 寫死），在 `0f26d08a` 修正。在乾淨的 `0f26d08a` 上，用修正後的 checker 重播 C1 與 C2 的 13 份既有報告（runtime、N5、N9 各兩份；6 份拒絕；M4），每份的逐項結果都與原本相同（`results/465_prc1_bundle/review_fix_0f26d08a/`，`summary.json` sha256 `8c767f2e…`）。A2 改了 exec chain 之後，舊 launcher 的 log 不會再通過 exec chain；那些是舊 launcher 的紀錄，不重播。
+
+**改了什麼**（`71acc415`）：
+
+- **auditor**：`la_version` 推出 `<prefix>` 之後，若 `SACCADE_AUDIT_PROBE=1`，就在 stdout 寫 `saccade-loader-audit-ready`，然後在程式執行前 exit 0。
+- **launcher**：先 unset 呼叫端的 `SACCADE_AUDIT_PROBE`，再以同一個 loader、同樣的 `--library-path` 與 `--audit` 對 `/bin/sh -c :` 跑一次 probe（指令替換，子 process）。讀不到那一行就印 `saccade_track: the loader provenance auditor did not initialize (…)` 並 exit 127；讀到之後，`exec` 一行與之前相同。在同一個 exec 內沒辦法做到 fail-closed：`--audit` 與 `--preload` 載入失敗都只是被忽略，而 entrypoint 是 pin 的，不能加 NEEDED。
+- **檢查**：G2-2 的 exec chain 改成恰好三次、都成功。launcher process 內依序是 launcher、loader（argv 同 §17.4）；另一個 process（`strace -ff` 的另一個 log）是 probe，argv 恰好是 `/lib64/ld-linux-x86-64.so.2 --library-path /opt/saccade/lib/vendor --audit /opt/saccade/lib/saccade_loader_audit.so /bin/sh -c :`。
+- **測試**：真的 loader 上，auditor 不存在、截斷一半、空檔、換成沒有 `la_version` 的 ELF 四種情況，都 exit 127、什麼都沒執行（舊 launcher 在這四種情況會執行被放進去的那一份）；呼叫端設 `SACCADE_AUDIT_PROBE=1` 時照常執行。
+- **沒有動的**：entrypoint pin（`92f74ef4…`）、operator library（`aa84cccd…`）、engine、model root、`third_party_set.json`（27 個）、安裝規則、SM 清單、glibc baseline、容器映像與 `run_shipping_container.sh`。auditor 是獨立的 library target（`saccade_loader_audit`），不進 entrypoint。
+
+**開發期間已經看到的**（`results/465_prc1_dev/a2_71acc415/`，不是正式 run）：
+
+- `static` 12 項通過。
+- `bundle-strace`（MOT17-05）exit 0。三次 exec，probe 在獨立的 log；`runtime` 三項通過。
+- 刪掉 auditor 的 tree：exit 127，訊息如上。只有 launcher 與 probe 兩次 exec，沒有輸出。
+- host 經 launcher 跑 MOT17-05（`LD_DEBUG=files`，probe 與主程式各一份 log）：`sources` 通過。
+- 對 PR-C1 r2 的 tree 跑 `static`：`entrypoint_pinned`、`launcher_exact`、`entrypoint_no_measurement_surface` 失敗。
+
+**契約修正**（正式 run 之前寫定）：正式 run＝§18.4 的整個 run（§17.4 第 1–5 條、§18.4 第 6 條、M1–M6、N1–N9），在 A2 的乾淨 commit 上重跑，以下不同：
+
+- **有效性**：編出 pin 的原始碼不變的檢查改成 `git diff 04f6f135 HEAD -- shipping/src shipping/include shipping/tools src include ':!shipping/src/loader_audit.c'` 為空；`loader_audit.c` 與 `04f6f135` 的差異只有 A2 的 probe（照實記錄）。
+- **第 5 條與第 6a 條的 exec chain**：照上面的三次 exec。
+- **M1**：`entrypoint_no_measurement_surface`、`entrypoint_pinned`、`launcher_exact` 失敗（launcher 已換）。
+- **N5** 改用 PR-C1 r2 tree 的 launcher（沒有 probe）去掉 `--audit` 那一行，放進 N4 的 tree。必須的結果同 §17.4：`static` 的 `layout_exact`、`launcher_exact` 失敗；`bundle-strace`（MOT17-05）exit 0，那一份被載入；`runtime` 的 exec chain 與 opened set 失敗。直接對新 launcher 刪 `--audit` 會連 probe 一起失效，變成 exit 127，測不到 N5 要測的東西。
+- **新的負控制**：N10–N12 都用 N4 的 tree（`nvidia/cu13/lib/` 有被放進去的那一份），只改 auditor，跑 `bundle-strace`（MOT17-05）：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N10 | 刪掉 `lib/saccade_loader_audit.so` | exit 127，log 有 `the loader provenance auditor did not initialize`；沒有 `native/`、`track_report.json`；strace 恰好兩次 exec（launcher、probe），沒有執行 entrypoint 的 loader |
+| N11 | auditor 換成它的前一半位元組 | 同 N10 |
+| N12 | auditor 換成 `lib/vendor/libcudart.so.13` 的副本（ELF，沒有 `la_version`） | 同 N10 |
+| N13 | 正常 tree，容器加 `-e SACCADE_AUDIT_PROBE=1`，跑 `bundle`（MOT17-05） | exit 0，MOT17-05 txt 與第 4 條相同 |
+
+其他 gate、負控制、判準與「不做的」不變。結果放在 `results/465_prc2_cli/full_<A2 commit>/`；§17.5 與 §18.5 的結果保留，作為舊 launcher 的紀錄。
+
+### 18.11 A2 正式 run 驗收
+
+同一台機器（RTX 5070 Ti Laptop，WSL2）。commit `036d6b95`：含 A2 的實作 `71acc415` 與契約 §18.10，工作樹乾淨，契約早於任何量測。全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library（`aa84cccd…`）與 pin 的 entrypoint（`92f74ef4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json` 的值。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 工作樹乾淨。`git diff 04f6f135 HEAD -- shipping/src shipping/include shipping/tools src include ':!shipping/src/loader_audit.c'` 為空。`loader_audit.c` 的差異只有 A2 的 probe。CMake 沒有非註解的變更。`anchor` 與 `A_L_1` 7/7 相同，`oracle-rows` OK |
+| 1 build 與安裝 | configure、build（`saccade_track`、`saccade_track_measurement`）、install 都 exit 0 |
+| 2 靜態檢查 | 12 項 PASS（含 `launcher_exact`：tree 的 launcher 是 A2 的版本） |
+| 3 host，經 launcher | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7。`--against` PR-12 `parity_pristine` 相同。`sources` PASS（probe 與主程式各一份 loader log） |
+| 4 乾淨容器（bundle） | exit 0，`EXACT`，與第 3 條 7/7 相同 |
+| 5 G2-2／G2-4 | 三項 PASS。exec chain 恰好三次、都成功：launcher process 內依序是 launcher → loader（`--library-path /opt/saccade/lib/vendor --audit /opt/saccade/lib/saccade_loader_audit.so … /opt/saccade/libexec/saccade_track`）；另一個 process 是 probe（`… /bin/sh -c :`）。`parity --native-from` `EXACT`，與第 4 條 7/7 相同。三次 run 的 `python_libraries_mapped` 都是空的 |
+| 6a 被移除的選項 | 三次 `rejected` 各 5 項 PASS（exit 2、`unknown argument`；三次 exec 的 chain；沒有 model root／operator library／GPU 裝置的 open；沒有輸出） |
+| 6b developer build 基準 | `EXACT`，與第 3 條 7/7 相同 |
+| 6c serial 參考 | `EXACT`（`detector` 5316/5316、`mot_txt` 7/7） |
+| 6d 負控制保留 | 7 個都 `CAUGHT`：`stale_detector_input`、`swapped_detection_parity`、`stale_image_dims` 的 `detector` `DIFFERS`；`stale_gmc_input`、`shared_post_host`、`gmc_previous_frame`、`ref_edit` 的 `mot_txt` `DIFFERS`；沒有 validity 問題 |
+| **verdict** | **`PASS`**（§18.4 第 1–6 條，依 §18.10 修正，全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：
+
+| # | 結果 |
+|:--|:--|
+| M1 | PR-C1 r2 的 tree：`entrypoint_pinned`、`launcher_exact`、`entrypoint_no_measurement_surface` 失敗，其餘通過 |
+| M2 | `entrypoint_pinned`、`entrypoint_no_measurement_surface` 失敗；另外 `produced_elves`、`search_path_containment` 失敗（同 §18.5：build tree 的 RUNPATH） |
+| M3 | exit 1 |
+| M4 | `exit_2_unknown_argument`、`no_model_root_open`、`no_gpu_device_open`、`no_output` 失敗；exec chain 通過（三次 exec） |
+| M5 | harness 在執行前 exit 2 |
+| M6 | `UNRESOLVED`（report 的 `entrypoint` 是 `saccade_track_measurement`） |
+| N1 | 安裝失敗（`build-release` 的 `saccade_track` sha256 ≠ pin） |
+| N2 | `static`：`vendor_set_pinned` 失敗 |
+| N3 | `static`：`layout_exact`、`vendor_set_pinned`、`g2_1_needed_closure` 失敗；容器 exit 2（`libnvrtc.so.13: cannot open`） |
+| N4 | `static`：`layout_exact` 失敗；容器 exit 127，`foreign copy on the search path: …/nvidia/cu13/lib/libcublas.so.13` |
+| N5（A2） | PR-C1 r2 的 launcher 去掉 `--audit`：`static` 的 `layout_exact`、`launcher_exact` 失敗。容器 exit 0（被放進去的那一份被載入）。`runtime`：exec chain 失敗、opened set 失敗（`/opt/saccade/nvidia/cu13/lib/libcublas.so.13`） |
+| N6a | exit 0；MOT17-05 txt 與第 4 條相同；auditor 載入之後 49 個物件，沒有來自 `/opt/foreign` 的 |
+| N6b | 同 N6a。觀察：launcher 的 sh 載入了 preload 的 `/opt/foreign/libcudart.so.13`（同 §17.6 的限制） |
+| N7 | exit 127：`libnvinfer.so.10: cannot open shared object file` |
+| N8 | `static`：`layout_exact`、`g2_3_no_python_files` 失敗 |
+| N9 | `runtime`：exec chain 失敗（`/bin/sh`、launcher、probe、loader 四次 exec），其餘兩項通過 |
+| N10（A2） | auditor 刪除：exit 127，`the loader provenance auditor did not initialize`；只有 launcher 與 probe 兩次 exec，entrypoint 沒有執行；沒有輸出 |
+| N11（A2） | auditor 截成一半：同 N10 |
+| N12（A2） | auditor 換成 `libcudart.so.13`：同 N10 |
+| N13（A2） | 呼叫端 `SACCADE_AUDIT_PROBE=1`：exit 0，MOT17-05 txt 與第 4 條相同 |
+
+N10–N12 用的都是 N4 的 tree，被放進去的 `libcublas.so.13` 還在。用舊的 launcher（§17.5 N5）時，那一份會被載入，exit 0。
+
+**限制**（在 §17.6 之外）：
+
+- probe 與正式 exec 是兩次 loader 啟動，中間 auditor 檔案仍可能被換掉。能在這之間改寫 tree 的人，也能直接改寫 launcher，所以這不比 §17.6 的威脅模型更弱；這裡不宣稱防得住 race。
+- probe 只證明 auditor 能載入、`la_version` 推得出 `<prefix>`。auditor 的位元組沒有在執行時驗證，同 §17.6「auditor 只管路徑，不管位元組」。安裝後的完整性驗證留給 PR-C3 的 MANIFEST。
+
+結果目錄：`results/465_prc2_cli/full_036d6b95/`（`run.sh`、`tree/`、`static.json`、`ld_host/`、`sources.json`、`anchor/`、`oracle_rows/`、`parity_*`、`container_*`、`runtime.json`、`cli/`、`negctl/`、`pins_before.txt`／`pins_after.txt`、`validity_sources.txt`）；開發試做在 `results/465_prc1_dev/a2_71acc415/`。不納入版本控制。§17.5 與 §18.5 的結果保留原處，是舊 launcher 的紀錄。
+
+### 18.12 修正 A3：auditor 以真實路徑分類、trace 帶 fd 目標
+
+Review 在 `93f4de43`（#531 合入後的 #527 head）提出三點。都不是在正式 shipping run 裡觀察到的 parity 違反，是保護與證據的覆蓋缺口：
+
+- **auditor 可被 symlink 別名繞過**：`la_objopen` 先用請求路徑的 basename 分類，名字不屬於 bundle 集合也不是 operator library 就直接放行，不呼叫 `realpath`。真實 loader 的 CPU 控制：直接載入外部的 `libfoo.so` 會 exit 127；經 `payload → libfoo.so` 載入則 exit 0，執行了外部的函式。
+- **`runtime` 對不完整的 trace 仍回報 PASS**：parser 已經把 `openat(7, "payload", O_RDONLY) = 9` 這類紀錄標成 unresolved，但 `runtime` 的三項檢查都沒有看 unresolved。
+- **trace 收集沒有 `-yy`**：A2 正式 run 的 6,533 筆 open 都沒有 fd 目標，所以 alias 檢查在那份證據上沒有作用。
+
+**改了什麼**（`f1d98b93`、`06002566`）：
+
+- **auditor**：`la_objopen` 先 `realpath`，再用請求名與真實名兩個 basename 分類（bundle 名字、operator library、Python）。解析不了的物件（vDSO）只有在兩項檢查都不適用於它的請求名時才放行。
+- **`runtime`**：unresolved 紀錄讓 Python open 與 opened set 兩項失敗。
+- **`runtime`／`rejected` 預設要求 fd 目標**：成功的 open 沒有回傳 fd 的目標註記，就算 unresolved。`--legacy-plain-trace` 用來評估沒有 `-yy` 的歷史 log，報告會記下 alias 目標沒有被檢查。fd 目標若不是路徑（例如 `pipe:[N]`），也算有名字。
+- **fd 目標按 SONAME 家族分類**：`-yy` 把 base system 的 SONAME symlink 標成帶完整版本號的實體檔（`libstdc++.so.6` → `libstdc++.so.6.0.33`、`libz.so.1` → `libz.so.1.3`），所以分類時逐段去掉尾端的版本號，直到某個名字能分類。這跟 SONAME 本身一樣是按名字判斷，不是按位元組。名字像 base system、實際指向第三方物件的 alias 仍然算外來的。
+- **`run_shipping_container.sh bundle-strace`** 改成 `strace -ff -qq -yy`。PR-12 的 `strace` 模式不變。
+- **測試**：
+  - 真實 loader：經 `payload` alias 的外部 `libfoo.so`，exit 127，沒有輸出（舊 auditor 會印出外部的結果）。
+  - `runtime` 遇到 unresolved（dirfd 沒有註記、cwd 相對路徑、不完整、`-yy` 紀錄缺目標）時失敗。
+  - plain log 必須加 `--legacy-plain-trace` 才能評估。
+  - SONAME 家族分類。
+- **沒有動的**：launcher、entrypoint pin、operator library、engine、model root、`third_party_set.json`、安裝規則。
+
+**開發期間已經看到的**（`results/465_prc1_dev/a3_f1d98b93/`，不是正式 run）：
+
+- `static` 12 項通過。
+- `bundle-strace`（MOT17-05，`-yy`）exit 0。
+- 第一次 `runtime` 的 opened set 失敗：兩筆 base system 的版本號檔名被當成外來的（上面 SONAME 家族那一點的由來）。修正後三項 PASS，0 筆 unresolved。
+
+**契約修正**（正式 run 之前寫定）：正式 run＝§18.10 修正後的整個 run，在 A3 的乾淨 commit 上重跑，以下不同：
+
+- 第 5 條、N5、N9、N10–N12 的 `bundle-strace`，以及第 6a 條與 N9 直接呼叫的 strace，都帶 `-yy`。
+- `runtime` 與 `rejected` 不帶 `--legacy-plain-trace`。第 5 條要求另外成立：Python open 與 opened set 兩項的 `unresolved` 為空。
+- **新的負控制**：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N14 | 對 A2 正式 run（`full_036d6b95`）的 plain `container_strace` 跑 `runtime` | 不帶 `--legacy-plain-trace`：Python open、opened set 兩項失敗，`unresolved` 列出缺目標的 open；帶 `--legacy-plain-trace`：三項 PASS，報告 `legacy_plain_trace: true` |
+
+symlink alias 的控制只在 CPU 上的真實 loader 測試裡做（上面的測試）。在 shipping tree 上要做出「非 bundle 名字的 NEEDED 經 alias 指到外來 bundle 物件」，必須改 pin 的 ELF，所以不做。
+
+其他 gate、負控制、判準與「不做的」不變。結果放在 `results/465_prc2_cli/full_<A3 commit>/`；§18.11 的 A2 結果保留，作為沒有 `-yy` 的證據紀錄。
+
+### 18.13 A3 正式 run 驗收
+
+同一台機器。commit `276659a8`：含 A3 的實作 `f1d98b93`、`06002566` 與契約 §18.12，工作樹乾淨，契約早於任何量測。全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library（`aa84cccd…`）與 pin 的 entrypoint（`92f74ef4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json` 的值。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 同 §18.11：工作樹乾淨。原始碼檢查（排除 `loader_audit.c`）為空。CMake 沒有非註解的變更。`anchor` 與 `A_L_1` 7/7 相同，`oracle-rows` OK |
+| 1 build 與安裝 | configure、build、install 都 exit 0 |
+| 2 靜態檢查 | 12 項 PASS |
+| 3 host，經 launcher | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7。`--against` PR-12 `parity_pristine` 相同。`sources` PASS |
+| 4 乾淨容器（bundle） | exit 0，`EXACT`，與第 3 條 7/7 相同 |
+| 5 G2-2／G2-4 | `-yy` trace：6,533 筆 open，6,028 筆成功的全部帶 fd 目標，0 筆 unresolved。`runtime`（不帶 `--legacy-plain-trace`）三項 PASS：三次 exec 的 chain、沒有 Python 路徑、opened set 等於 bundle。`parity --native-from` `EXACT`，與第 4 條 7/7 相同。三次 run 的 `python_libraries_mapped` 都是空的 |
+| 6a 被移除的選項 | 三次 `rejected` 各 5 項 PASS（`-yy`；`rejected_schedule` 50 筆成功的 open 全部帶目標） |
+| 6b–6d | 同 §18.11：developer build 基準 `EXACT` 且與第 3 條相同；serial 參考 `EXACT`；7 個 mutation 負控制都 `CAUGHT`，指定的 section `DIFFERS`，沒有 validity 問題 |
+| **verdict** | **`PASS`**（§18.4 第 1–6 條，依 §18.10 與 §18.12 修正，全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：M1–M6、N1–N13 的結果與 §18.11 相同。
+
+- M1：`entrypoint_pinned`、`launcher_exact`、`entrypoint_no_measurement_surface` 失敗。
+- M4：exit／model root／GPU／輸出四項失敗，exec chain 通過。
+- N4：exit 127，`foreign copy on the search path`。
+- N5：容器 exit 0，`runtime` 的 exec chain 與 opened set 失敗（`/opt/saccade/nvidia/cu13/lib/libcublas.so.13`）。
+- N7：exit 127（`libnvinfer.so.10`）。
+- N9：四次 exec，exec chain 失敗。
+- N10–N12：exit 127，entrypoint 沒有執行，沒有輸出。
+- N13：exit 0，MOT17-05 相同。
+- 新的 N14：A2 的 plain `container_strace` 不帶 `--legacy-plain-trace` 時，Python open 與 opened set 兩項失敗，`unresolved` 各 6,028 筆；帶這個旗標時三項 PASS，報告 `legacy_plain_trace: true`。
+
+**限制**（在 §17.6、§18.11 之外）：
+
+- auditor 與 checker 都按名字分類：真實路徑的 basename、SONAME 家族。一份改了名字的外來實體檔（不是 symlink），若以非 bundle 名字被 NEEDED 或 `dlopen`，兩者都不會辨認出來；位元組的完整性仍靠安裝時的 sha256、`static` 與 PR-C3 的 MANIFEST。
+- symlink alias 的控制只在 CPU 上的真實 loader 測試裡做（§18.12）。
+
+結果目錄：`results/465_prc2_cli/full_276659a8/`；開發試做在 `results/465_prc1_dev/a3_f1d98b93/`。不納入版本控制。§18.11 的 A2 結果保留，作為沒有 `-yy` 的紀錄。
+
+### 18.14 修正 A4：版本號 alias、完整的 loader argv、不完整的 exec、預設 model root
+
+Review 在 `ff7359d4`（#532 合入後的 #527 head）提出五點，四個 P2、一個 P3。同樣都不是在正式 shipping run 裡觀察到的 parity 違反，是保護與 checker 的覆蓋缺口：
+
+- **auditor 可被指向帶版本號檔名的 alias 繞過**：`payload → libcudart.so.13.1.0`，請求名與真實名都不等於 bundle 的 SONAME `libcudart.so.13`，所以被當成非 bundle 物件放行。真實 loader 重現：exit 0，執行了外來的函式。
+- **exec chain 沒有檢查 loader 實際執行的程式**：只比對 loader argv 的前四個參數，以及 entrypoint 有沒有出現在 argv 裡。把 loader 的參數換成 `--argv0 /opt/saccade/libexec/saccade_track /bin/true`，`runtime` 的每一項仍然 PASS，但程式位置上是 `/bin/true`。
+- **不完整的 exec 紀錄被丟掉**：parser 的 fallback 只認得 open。在一份 PASS 的 trace 後面接一筆 unfinished 的 Python `execve`，結果仍然 PASS，checker 照樣認證「恰好三次 exec」。
+- **`rejected` 沒有保護預設的 model root**：沒給 `--model-root` 時，`track::Options` 預設 `.`。這項檢查只保護 argv 明確給的輸入與安裝的 model root；cwd 為 `/work`、open `/work/models/yolo/yolo26s_backbone_640_best.engine` 的 trace，五項都 PASS。
+- **launcher 只拒絕 `:`**（P3）：glibc 切 `--library-path` 時 `;` 也算分隔符，跟 shell 的引號無關。tree 放在含 `;` 的目錄下時，會通過 launcher 的檢查與 readiness probe，然後 loader 找不到 bundle 的函式庫，exit 127。
+
+**改了什麼**（`e6b57ac8`）：
+
+- **auditor**：`la_objopen` 用 SONAME 家族比對請求名與真實名。家族指去掉尾端數字版本段之後、以 `.so` 結尾的名字，跟 checker 的 `_object_class` 同一個規則，所以 `libcudart.so.13.1.0` 屬於 bundle 家族 `libcudart.so`，必須來自 `lib/vendor`。operator library 也按家族比對。`la_objsearch` 不變，因為搜尋候選的 basename 就是請求的 NEEDED 名。
+- **launcher**：前綴含 `:` 或 `;` 時 exit 2。
+- **exec chain**：loader 的 argv 必須**完整等於** `[ld.so, --library-path, <mount>/lib/vendor, --audit, <mount>/lib/saccade_loader_audit.so, --argv0, <launcher 的 argv[0]>, <mount>/libexec/saccade_track, <launcher 的 argv[1:]>]`。
+- **不完整的 exec**：`execve`／`execveat` 開頭、但 strace 沒有記錄完整（unfinished、截斷）的行，會留下成一筆失敗的 exec（`incomplete: true`），所以 exec chain 失敗。
+- **預設 model root**：照 `track_driver.hpp` 的 `parse_interface_arg` 模擬 entrypoint 的 argv parse。只要有一次 entrypoint exec 的 parse 在停下來（遇到未知選項或缺值）之前沒有取到 `--model-root`，就把每一個有證據的 cwd 都當成 model root 保護。沒有 cwd 證據時算 unresolved，檢查失敗。另外修正 `_within` 在 root 為 `/` 時不涵蓋任何路徑的問題。
+- **測試**：
+  - 真實 loader：經 `payload` 指到 `libfoo.so.1.0.0`、`libfoo.so.13`（bundle 家族 `libfoo.so`）都 exit 127；指到其他家族（`libfoobar.so.1.0`）照常執行。
+  - exec chain：`/bin/true` 放在程式位置、entrypoint 排在程式之後、轉送的參數多了或少了、`--argv0` 不同、多一個 loader 選項，都會失敗。
+  - 三種不完整的 exec 都會失敗。
+  - 預設 model root：cwd `/work`、cwd `/`、parse 沒走到 `--model-root`、沒有 cwd 證據。
+  - launcher 前綴含 `:` 或 `;`。
+  - 新加的測試在 `ff7359d4` 的原始碼上全部失敗，修正後全部通過，共 104 項。
+  - fixture 的 launcher／loader argv 改成跟正式 run 一樣帶 `--model-root`。
+- **沒有動的**：entrypoint pin、operator library、engine、model root、`third_party_set.json`、安裝規則、`run_shipping_container.sh`。
+
+**開發期間已經看到的**（`results/465_prc1_dev/a4_e6b57ac8/`，不是正式 run）：
+
+- `static` 12 項通過。
+- `bundle-strace`（MOT17-05）exit 0，`runtime` 三項 PASS，MOT17-05 txt 與 A3 的第 4 條相同。
+- `rejected`（`--measurement-mutation`）5 項 PASS。
+- 新 checker 重新評估 A3 正式 run 的 `runtime` 與三次 `rejected`：全部 PASS。預設 model root 沒有被加入，因為 argv 有給 `--model-root`。
+- 下面 N15–N17 的合成控制，在開發 trace 上：新 checker 都在對應的那一項失敗；A3 的 checker（`ff7359d4`）全部 PASS。
+- `;` 前綴：A4 launcher exit 2；A3 launcher 通過 probe 之後，loader 找不到 `libnvinfer.so.10`。
+
+**契約修正**（正式 run 之前寫定）：正式 run＝§18.12 修正後的整個 run，在 A4 的乾淨 commit 上重跑，以下不同：
+
+- `runtime`、`rejected` 用 A4 的 checker。第 5 條與第 6a 條的 exec chain 以完整的 loader argv 判定。
+- N9 仍然必須失敗（四次 exec）。N14 帶 `--legacy-plain-trace` 時三項仍然必須 PASS（A2 plain trace 的 loader argv 也要通過完整比對）。
+- **新的負控制**：N15–N17 是合成的，在這次 run 的真實 `-yy` trace 複本上做一處修改（修改腳本寫在 `run.sh` 裡）。每一個也用 A3 的 checker（`ff7359d4` 的版本）評估一次，作為重現紀錄，不列入判準。
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N15 | 第 5 條 `container_strace` 的複本：loader exec 改成 `--argv0 /opt/saccade/libexec/saccade_track /bin/true` | `runtime`：exec chain 失敗，其他兩項 PASS |
+| N16 | 第 5 條 `container_strace` 的複本：launcher 的 log 後面加一筆 `execve("/usr/bin/python3", …) <unfinished ...>` | `runtime`：exec chain 失敗，報告的 `incomplete` 紀錄就是那一筆；其他兩項 PASS |
+| N17a | 第 6a 條 `rejected_measurement_mutation` 的複本：launcher 與 loader 的 argv 去掉 `--model-root <值>` | `rejected`：`no_model_root_open` 失敗，`model_inputs` 含 cwd `/`；其他四項 PASS |
+| N17b | N17a，另外把每一個 `AT_FDCWD</>` 改成 `AT_FDCWD</work>`，再接一筆 open `/work/models/yolo/yolo26s_backbone_640_best.engine` | `rejected`：`no_model_root_open` 失敗，`attempted` 正好是那個 engine 路徑；其他四項 PASS |
+| N18 | 乾淨 image（不給 GPU），tree 掛在 `/opt/sac;cade`，執行 `/opt/sac;cade/bin/saccade_track` | A4 tree：exit 2，訊息是 `must not contain ':' or ';'`。A3 tree（`full_276659a8`）exit 127，只作重現紀錄 |
+
+版本號 alias 的控制只在 CPU 上的真實 loader 測試裡做（上面的測試），理由與 §18.12 相同：要在 shipping tree 上做，必須改 pin 的 ELF。
+
+其他 gate、負控制、判準與「不做的」不變。結果放在 `results/465_prc2_cli/full_<A4 commit>/`；§18.13 的 A3 結果保留。
+
+### 18.15 A4 正式 run 驗收
+
+同一台機器。commit `1ae402c2`：含 A4 的實作 `e6b57ac8` 與契約 §18.14，工作樹乾淨，契約早於任何量測。全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library（`aa84cccd…`）與 pin 的 entrypoint（`92f74ef4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json` 的值。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 同 §18.13：工作樹乾淨。原始碼檢查（排除 `loader_audit.c`）為空。CMake 沒有非註解的變更。`anchor` 與 `A_L_1` 7/7 相同，`oracle-rows` OK |
+| 1 build 與安裝 | configure、build、install 都 exit 0 |
+| 2 靜態檢查 | 12 項 PASS（`launcher_exact`：tree 的 launcher 等於 A4 的原始碼） |
+| 3 host，經 launcher | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7。`--against` PR-12 `parity_pristine` 相同。`sources` PASS |
+| 4 乾淨容器（bundle） | exit 0，`EXACT`，與第 3 條 7/7 相同 |
+| 5 G2-2／G2-4 | `-yy` trace：6,485 筆 open，5,992 筆成功的全部帶 fd 目標，0 筆 unresolved。`runtime` 三項 PASS，其中 exec chain 以完整的 loader argv 判定。`parity --native-from` `EXACT`，與第 4 條 7/7 相同。三次 run 的 `python_libraries_mapped` 都是空的 |
+| 6a 被移除的選項 | 三次 `rejected` 各 5 項 PASS（`-yy`；每次 50 筆成功的 open 全部帶目標；argv 有給 `--model-root`，所以沒有加入預設 model root） |
+| 6b–6d | 同 §18.13：developer build 基準 `EXACT` 且與第 3 條相同；serial 參考 `EXACT`；7 個 mutation 負控制都 `CAUGHT`，指定的 section 都不同，沒有 validity 問題 |
+| **verdict** | **`PASS`**（§18.4 第 1–6 條，依 §18.10、§18.12 與 §18.14 修正，全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：M1–M6、N1–N14 的結果與 §18.13 相同。N9 四次 exec，exec chain 失敗。N14 帶 `--legacy-plain-trace` 時三項 PASS，表示 A2 plain trace 的 loader argv 也通過完整比對。新的控制：
+
+| # | A4 checker／launcher（判準） | A3（`ff7359d4`，只作重現紀錄） |
+|:--|:--|:--|
+| N15 程式位置換成 `/bin/true` | exec chain 失敗，其他兩項 PASS | 三項 PASS |
+| N16 接一筆 unfinished 的 Python `execve` | exec chain 失敗，`incomplete` 紀錄正好是那一筆；其他兩項 PASS | 三項 PASS |
+| N17a 去掉 `--model-root` | `no_model_root_open` 失敗，`model_inputs` 含 cwd `/`（96 筆 attempted）；其他四項 PASS | 五項 PASS |
+| N17b N17a＋cwd `/work`＋engine open | `no_model_root_open` 失敗，`attempted` 只有 `/work/models/yolo/yolo26s_backbone_640_best.engine`；其他四項 PASS | 五項 PASS |
+| N18 tree 掛在 `/opt/sac;cade` | exit 2，`the install prefix must not contain ':' or ';'` | exit 127，loader 找不到 `libnvinfer.so.10` |
+
+**限制**（在 §17.6、§18.11、§18.13 之外）：
+
+- SONAME 家族仍然是名字：一份改了名字、名字不屬於任何 bundle 家族的外來實體檔，auditor 與 checker 都不會辨認出來（§18.13 的限制不變）。
+- 版本號 alias 的控制只在 CPU 上的真實 loader 測試裡做（§18.14）。
+- N15–N17 是在真實 trace 上做一處修改的合成控制，證明的是 checker 的判定，不是 runtime 的行為。
+- 預設 model root 的判定靠模擬 entrypoint 的 argv parse；parse 的規則改了，checker 要跟著改（`_ENTRYPOINT_VALUE_OPTIONS` 指向 `track_driver.hpp`）。
+
+結果目錄：`results/465_prc2_cli/full_1ae402c2/`；開發試做在 `results/465_prc1_dev/a4_e6b57ac8/`。不納入版本控制。§18.13 的 A3 結果保留。

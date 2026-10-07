@@ -113,14 +113,33 @@ add_test(NAME saccade_shipping_detector_plan_test
             ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json)
 
 if(TARGET saccade_tracking)
-    add_library(saccade_shipping_native STATIC src/native_build.cpp src/post_detector_host.cpp)
-    target_link_libraries(saccade_shipping_native PUBLIC saccade_shipping_native_config saccade_tracking)
-    target_include_directories(saccade_shipping_native PUBLIC ${SACCADE_REPO_ROOT}/include)
-    set_target_properties(saccade_shipping_native PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    # Measurement boundary (#465 Phase C PR-C2). Each runtime library below is
+    # built twice from the same sources: <name>, the shipping objects, and
+    # <name>_measurement, compiled with SACCADE_SHIPPING_MEASUREMENT_HOOKS
+    # (PUBLIC, so every consumer sees the same declarations), which adds the
+    # negative-control mutations and the other measurement setters
+    # (*_for_measurement). The shipping objects do not contain them: a shipping
+    # caller cannot name one (it is not declared) and the shipping entrypoint
+    # carries no mutation code (check_shipping_bundle.py static,
+    # entrypoint_no_measurement_surface). Only developer tools and tests link a
+    # _measurement library; none of them is installed, and no target links
+    # both variants.
+    function(saccade_shipping_variants name)
+        add_library(${name} STATIC ${ARGN})
+        add_library(${name}_measurement STATIC ${ARGN})
+        target_compile_definitions(${name}_measurement PUBLIC SACCADE_SHIPPING_MEASUREMENT_HOOKS=1)
+        set_target_properties(${name} ${name}_measurement PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    endfunction()
+
+    saccade_shipping_variants(saccade_shipping_native src/native_build.cpp src/post_detector_host.cpp)
+    foreach(_v "" "_measurement")
+        target_link_libraries(saccade_shipping_native${_v} PUBLIC saccade_shipping_native_config saccade_tracking)
+        target_include_directories(saccade_shipping_native${_v} PUBLIC ${SACCADE_REPO_ROOT}/include)
+    endforeach()
 
     # Developer tool (#465 PR-5): replay a post-detector dump through the host.
     add_executable(saccade_replay tools/saccade_replay.cpp)
-    target_link_libraries(saccade_replay PRIVATE saccade_shipping_native CUDA::cudart)
+    target_link_libraries(saccade_replay PRIVATE saccade_shipping_native_measurement CUDA::cudart)
 
     # nvJPEG for the native ingest (PR-7): the oracle's own decoder build. The
     # oracle decodes with torchvision's bundled libnvjpeg, which is the
@@ -156,42 +175,53 @@ if(TARGET saccade_tracking)
         IMPORTED_SONAME "libnvjpeg.so.13"
         INTERFACE_INCLUDE_DIRECTORIES "${saccade_nvjpeg_wheel_SOURCE_DIR}/nvidia/cu13/include")
 
-    add_library(saccade_shipping_ingest STATIC src/ingest_host.cpp src/ingest_normalize.cu)
-    target_link_libraries(saccade_shipping_ingest PUBLIC
-        saccade_shipping_native_config CUDA::cudart saccade_nvjpeg)
-    target_include_directories(saccade_shipping_ingest PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    set_target_properties(saccade_shipping_ingest PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    saccade_shipping_variants(saccade_shipping_ingest src/ingest_host.cpp src/ingest_normalize.cu)
+    foreach(_v "" "_measurement")
+        target_link_libraries(saccade_shipping_ingest${_v} PUBLIC
+            saccade_shipping_native_config CUDA::cudart saccade_nvjpeg)
+        target_include_directories(saccade_shipping_ingest${_v} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    endforeach()
 
     # Developer tool (#465 PR-7): stream the native ingest of one sequence to
     # scripts/eval/diagnostics/native_ingest_parity.py.
     add_executable(saccade_ingest_probe tools/saccade_ingest_probe.cpp)
-    target_link_libraries(saccade_ingest_probe PRIVATE saccade_shipping_ingest)
+    target_link_libraries(saccade_ingest_probe PRIVATE saccade_shipping_ingest_measurement)
 
     # Native detector (PR-8): resize -> the existing TRTEngine backbone
     # (saccade_perception) -> the PR-1L LibTorch head -> S2. LibTorch only
     # (TORCH_LIBRARIES has no libtorch_python); the head's scan operator is
     # dlopen'ed at load time after its hash is checked.
-    add_library(saccade_shipping_detector STATIC src/detector_host.cpp src/detector_s2.cu)
-    target_link_libraries(saccade_shipping_detector PUBLIC
-        saccade_shipping_native_config saccade_perception ${TORCH_LIBRARIES} CUDA::cudart
-        ${CMAKE_DL_LIBS})
-    target_include_directories(saccade_shipping_detector PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include ${SACCADE_REPO_ROOT}/include)
-    set_target_properties(saccade_shipping_detector PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    saccade_shipping_variants(saccade_shipping_detector src/detector_host.cpp src/detector_s2.cu)
+    foreach(_v "" "_measurement")
+        target_link_libraries(saccade_shipping_detector${_v} PUBLIC
+            saccade_shipping_native_config saccade_perception ${TORCH_LIBRARIES} CUDA::cudart
+            ${CMAKE_DL_LIBS})
+        target_include_directories(saccade_shipping_detector${_v} PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include ${SACCADE_REPO_ROOT}/include)
+    endforeach()
 
     # Developer tool (#465 PR-8): stream the native ingest + detector of one
     # sequence to scripts/eval/diagnostics/native_detector_parity.py.
     add_executable(saccade_detector_probe tools/saccade_detector_probe.cpp)
-    target_link_libraries(saccade_detector_probe PRIVATE saccade_shipping_detector saccade_shipping_ingest)
+    target_link_libraries(saccade_detector_probe PRIVATE
+        saccade_shipping_detector_measurement saccade_shipping_ingest_measurement)
 
     # End-to-end runtimes: ingest -> detector -> post-detector host -> MOT emit
     # and tail, serial and eager (PR-9) and the oracle's double-buffer schedule
     # with CUDA graphs (PR-10); the shipping entrypoint saccade_track (boundary
     # §2) runs the schedule the resolved config names.
-    add_library(saccade_shipping_runtime STATIC src/serial_runtime.cpp src/double_buffer_runtime.cpp)
-    target_link_libraries(saccade_shipping_runtime PUBLIC
-        saccade_shipping_detector saccade_shipping_ingest saccade_shipping_native)
-    set_target_properties(saccade_shipping_runtime PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    saccade_shipping_variants(saccade_shipping_runtime src/serial_runtime.cpp src/double_buffer_runtime.cpp)
+    foreach(_v "" "_measurement")
+        target_link_libraries(saccade_shipping_runtime${_v} PUBLIC
+            saccade_shipping_detector${_v} saccade_shipping_ingest${_v} saccade_shipping_native${_v})
+    endforeach()
+
+    # Developer build of the entrypoint (PR-C2): saccade_track's interface plus
+    # the negative controls, the serial override and --max-frames, on the
+    # measurement variant (tools/saccade_track_measurement.cpp). Not installed.
+    add_executable(saccade_track_measurement tools/saccade_track_measurement.cpp)
+    target_link_libraries(saccade_track_measurement PRIVATE saccade_shipping_runtime_measurement)
+    target_link_options(saccade_track_measurement PRIVATE LINKER:--as-needed)
 
     add_executable(saccade_track tools/saccade_track.cpp)
     target_link_libraries(saccade_track PRIVATE saccade_shipping_runtime)
@@ -200,24 +230,37 @@ if(TARGET saccade_tracking)
     # --as-needed switch on the link line (e.g. libnvinfer_plugin, which nothing
     # here calls) becomes a dependency by link order alone (#465 PR-11).
     target_link_options(saccade_track PRIVATE LINKER:--as-needed)
-    # The entrypoint must not need OpenCV or Python (#465 PR-11): a build that
-    # links either fails here.
+    # The entrypoint must not need OpenCV or Python (#465 PR-11) and must carry
+    # no measurement hook or developer option (PR-C2): a build that links
+    # either, or a _measurement library, fails here.
     if(NOT CMAKE_READELF)
         find_program(CMAKE_READELF readelf REQUIRED)
     endif()
     add_custom_command(TARGET saccade_track POST_BUILD
         COMMAND ${CMAKE_COMMAND} -DREADELF=${CMAKE_READELF} -DBINARY=$<TARGET_FILE:saccade_track>
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_link_surface.cmake
+        COMMAND ${CMAKE_COMMAND} -DBINARY=$<TARGET_FILE:saccade_track>
+                -DSURFACE=${CMAKE_CURRENT_SOURCE_DIR}/measurement_surface.json
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_no_measurement_surface.cmake
         VERBATIM)
 
-    # The shipping tree (#465 PR-12): `cmake --install <build> --component
-    # shipping --prefix <tree>` gives
-    #   bin/saccade_track         RUNPATH $ORIGIN/../lib only (no build or venv
-    #                             path); lib/ is the slot a Phase C bundle
-    #                             would fill, empty here
+    # The shipping tree (#465 PR-12, bundled in Phase C PR-C1): `cmake --install
+    # <build> --component shipping --prefix <tree>` gives
+    #   bin/saccade_track         the launcher (launcher/saccade_track.sh): runs
+    #                             the entrypoint through the system loader with
+    #                             --library-path lib/vendor and --audit
+    #   libexec/saccade_track     the entrypoint, RUNPATH $ORIGIN/../lib only (no
+    #                             build or venv path); the pinned bytes
+    #                             (entrypoint_pin.json; PR-C2: no measurement
+    #                             hook or developer option)
+    #   lib/saccade_loader_audit.so  the loader provenance check (src/loader_audit.c)
+    #   lib/vendor/<SONAME>       the bundled third-party set, pinned by sha256
+    #                             in third_party_set.json (owner decision C-D1)
+    #   licenses/                 each wheel's license files, THIRD_PARTY.md,
+    #                             Saccade's LICENSE / NOTICE
     #   share/saccade/...         the model root (install_model_root.cmake)
-    # Third-party runtime libraries (CUDA runtime, nvJPEG, TensorRT, LibTorch)
-    # are not in the tree: whether and how they ship is Phase C.
+    # docs/reference/native_runtime_resolved_config.md §16 (tree), §17 (bundle),
+    # §18 (CLI surface).
     # Device code: find_package(Torch) turns CMAKE_CUDA_ARCHITECTURES off and
     # compiles every CUDA target for TORCH_CUDA_ARCH_LIST (the local GPU when
     # unset). The shipping tree needs the explicit list below, LibTorch's own
@@ -236,7 +279,65 @@ if(TARGET saccade_tracking)
         if(NOT \"${TORCH_CUDA_ARCH_LIST}\" STREQUAL \"${SACCADE_SHIPPING_TORCH_CUDA_ARCH_LIST}\")
             message(FATAL_ERROR \"shipping tree: this build compiles CUDA for TORCH_CUDA_ARCH_LIST='${TORCH_CUDA_ARCH_LIST}'; configure with -DTORCH_CUDA_ARCH_LIST='${SACCADE_SHIPPING_TORCH_CUDA_ARCH_LIST}' (#465 PR-12)\")
         endif()" COMPONENT shipping)
-    install(TARGETS saccade_track RUNTIME DESTINATION bin COMPONENT shipping)
+    # The entrypoint bytes (PR-C1): a rebuild of the same sources is not
+    # byte-identical (entrypoint_pin.json), so the package carries the pinned
+    # binary (PR-12's until PR-C2, then PR-C2's) named by
+    # SACCADE_SHIPPING_ENTRYPOINT, hash-checked at
+    # install. Unset, the install takes this build's saccade_track (a
+    # development tree; the bundle check reports that it is not the pin).
+    set(SACCADE_SHIPPING_ENTRYPOINT "" CACHE FILEPATH
+        "The pinned saccade_track the shipping tree carries (sha256 = shipping/entrypoint_pin.json); empty = this build's")
+    if(SACCADE_SHIPPING_ENTRYPOINT)
+        install(CODE "
+            file(READ \"${CMAKE_CURRENT_SOURCE_DIR}/entrypoint_pin.json\" _pin)
+            string(JSON _want GET \"\${_pin}\" sha256)
+            if(NOT EXISTS \"${SACCADE_SHIPPING_ENTRYPOINT}\")
+                message(FATAL_ERROR \"shipping tree: ${SACCADE_SHIPPING_ENTRYPOINT} does not exist\")
+            endif()
+            file(SHA256 \"${SACCADE_SHIPPING_ENTRYPOINT}\" _got)
+            if(NOT _got STREQUAL _want)
+                message(FATAL_ERROR \"shipping tree: ${SACCADE_SHIPPING_ENTRYPOINT} sha256 \${_got} != \${_want} (shipping/entrypoint_pin.json)\")
+            endif()
+            set(_dst \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/libexec/saccade_track\")
+            file(MAKE_DIRECTORY \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/libexec\")
+            message(STATUS \"Installing: \${_dst} (pinned, sha256 \${_want})\")
+            file(COPY_FILE \"${SACCADE_SHIPPING_ENTRYPOINT}\" \"\${_dst}\")
+            file(CHMOD \"\${_dst}\" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)" COMPONENT shipping)
+    else()
+        install(TARGETS saccade_track RUNTIME DESTINATION libexec COMPONENT shipping)
+    endif()
+    install(PROGRAMS launcher/saccade_track.sh DESTINATION bin RENAME saccade_track COMPONENT shipping)
+
+    # The loader provenance check (PR-C1): C and libc only (it runs in the
+    # loader's audit namespace). Its bundled-name list comes from the pinned set.
+    enable_language(C)
+    set(SACCADE_THIRD_PARTY_SET ${CMAKE_CURRENT_SOURCE_DIR}/third_party_set.json)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SACCADE_THIRD_PARTY_SET})
+    file(READ ${SACCADE_THIRD_PARTY_SET} _saccade_tp)
+    string(JSON _saccade_tp_n LENGTH "${_saccade_tp}" entries)
+    math(EXPR _saccade_tp_last "${_saccade_tp_n} - 1")
+    set(_saccade_tp_names "")
+    foreach(_i RANGE ${_saccade_tp_last})
+        string(JSON _saccade_tp_soname GET "${_saccade_tp}" entries ${_i} soname)
+        string(APPEND _saccade_tp_names "    \"${_saccade_tp_soname}\",\n")
+    endforeach()
+    file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/loader_audit_names.inc
+        CONTENT "/* Generated from shipping/third_party_set.json; do not edit. */\nstatic const char *const kBundled[] = {\n${_saccade_tp_names}    NULL};\n")
+    add_library(saccade_loader_audit SHARED src/loader_audit.c)
+    target_include_directories(saccade_loader_audit PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+    target_compile_options(saccade_loader_audit PRIVATE -Wall -Wextra -Werror)
+    set_target_properties(saccade_loader_audit PROPERTIES
+        PREFIX "" C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF
+        INSTALL_RPATH "" INSTALL_RPATH_USE_LINK_PATH OFF)
+    add_dependencies(saccade_track saccade_loader_audit)
+    install(TARGETS saccade_loader_audit LIBRARY DESTINATION lib COMPONENT shipping)
+    install(CODE "
+        set(SACCADE_REPO_ROOT \"${SACCADE_REPO_ROOT}\")
+        set(SACCADE_PREFIX_DEST \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\")
+        set(SACCADE_THIRD_PARTY_SET \"${SACCADE_THIRD_PARTY_SET}\")
+        set(SACCADE_ROOT_purelib \"${_saccade_purelib}\")
+        set(SACCADE_ROOT_nvjpeg_wheel \"${saccade_nvjpeg_wheel_SOURCE_DIR}\")
+        include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/install_third_party.cmake\")" COMPONENT shipping)
     install(CODE "
         set(SACCADE_REPO_ROOT \"${SACCADE_REPO_ROOT}\")
         set(SACCADE_MODEL_ROOT_DEST \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/share/saccade\")
@@ -258,7 +359,7 @@ if(TARGET saccade_tracking)
         add_executable(saccade_shipping_post_detector_host_test
             ${SACCADE_REPO_ROOT}/tests/native/test_shipping_post_detector_host.cpp)
         target_link_libraries(saccade_shipping_post_detector_host_test PRIVATE
-            saccade_shipping_native CUDA::cudart)
+            saccade_shipping_native_measurement CUDA::cudart)
         add_test(NAME saccade_shipping_post_detector_host_test
             COMMAND saccade_shipping_post_detector_host_test ${SACCADE_RESOLVED_CONFIG})
 
@@ -279,7 +380,7 @@ if(TARGET saccade_tracking)
         # wiring mutations, on MOT17 frames when the models and data exist.
         add_executable(saccade_shipping_serial_runtime_test
             ${SACCADE_REPO_ROOT}/tests/native/test_shipping_serial_runtime.cpp)
-        target_link_libraries(saccade_shipping_serial_runtime_test PRIVATE saccade_shipping_runtime)
+        target_link_libraries(saccade_shipping_serial_runtime_test PRIVATE saccade_shipping_runtime_measurement)
         add_test(NAME saccade_shipping_serial_runtime_test
             COMMAND saccade_shipping_serial_runtime_test ${SACCADE_RESOLVED_CONFIG}
                     ${SACCADE_REPO_ROOT}/models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json
@@ -291,7 +392,7 @@ if(TARGET saccade_tracking)
         # the graph capture keys and counts, and the schedule negative controls.
         add_executable(saccade_shipping_double_buffer_runtime_test
             ${SACCADE_REPO_ROOT}/tests/native/test_shipping_double_buffer_runtime.cpp)
-        target_link_libraries(saccade_shipping_double_buffer_runtime_test PRIVATE saccade_shipping_runtime)
+        target_link_libraries(saccade_shipping_double_buffer_runtime_test PRIVATE saccade_shipping_runtime_measurement)
         add_test(NAME saccade_shipping_double_buffer_runtime_test
             COMMAND saccade_shipping_double_buffer_runtime_test ${SACCADE_RESOLVED_CONFIG}
                     ${SACCADE_REPO_ROOT}/models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json
