@@ -1621,3 +1621,38 @@ Review 在 `ff7359d4`（#532 合入後的 #527 head）提出五點，四個 P2�
 版本號 alias 的控制只在 CPU 上的真實 loader 測試裡做（上面的測試），理由與 §18.12 相同：要在 shipping tree 上做，必須改 pin 的 ELF。
 
 其他 gate、負控制、判準與「不做的」不變。結果放在 `results/465_prc2_cli/full_<A4 commit>/`；§18.13 的 A3 結果保留。
+
+### 18.15 A4 正式 run 驗收
+
+同一台機器。commit `1ae402c2`：含 A4 的實作 `e6b57ac8` 與契約 §18.14，工作樹乾淨，契約早於任何量測。全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library（`aa84cccd…`）與 pin 的 entrypoint（`92f74ef4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json` 的值。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 同 §18.13：工作樹乾淨。原始碼檢查（排除 `loader_audit.c`）為空。CMake 沒有非註解的變更。`anchor` 與 `A_L_1` 7/7 相同，`oracle-rows` OK |
+| 1 build 與安裝 | configure、build、install 都 exit 0 |
+| 2 靜態檢查 | 12 項 PASS（`launcher_exact`：tree 的 launcher 等於 A4 的原始碼） |
+| 3 host，經 launcher | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7。`--against` PR-12 `parity_pristine` 相同。`sources` PASS |
+| 4 乾淨容器（bundle） | exit 0，`EXACT`，與第 3 條 7/7 相同 |
+| 5 G2-2／G2-4 | `-yy` trace：6,485 筆 open，5,992 筆成功的全部帶 fd 目標，0 筆 unresolved。`runtime` 三項 PASS，其中 exec chain 以完整的 loader argv 判定。`parity --native-from` `EXACT`，與第 4 條 7/7 相同。三次 run 的 `python_libraries_mapped` 都是空的 |
+| 6a 被移除的選項 | 三次 `rejected` 各 5 項 PASS（`-yy`；每次 50 筆成功的 open 全部帶目標；argv 有給 `--model-root`，所以沒有加入預設 model root） |
+| 6b–6d | 同 §18.13：developer build 基準 `EXACT` 且與第 3 條相同；serial 參考 `EXACT`；7 個 mutation 負控制都 `CAUGHT`，指定的 section 都不同，沒有 validity 問題 |
+| **verdict** | **`PASS`**（§18.4 第 1–6 條，依 §18.10、§18.12 與 §18.14 修正，全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：M1–M6、N1–N14 的結果與 §18.13 相同。N9 四次 exec，exec chain 失敗。N14 帶 `--legacy-plain-trace` 時三項 PASS，表示 A2 plain trace 的 loader argv 也通過完整比對。新的控制：
+
+| # | A4 checker／launcher（判準） | A3（`ff7359d4`，只作重現紀錄） |
+|:--|:--|:--|
+| N15 程式位置換成 `/bin/true` | exec chain 失敗，其他兩項 PASS | 三項 PASS |
+| N16 接一筆 unfinished 的 Python `execve` | exec chain 失敗，`incomplete` 紀錄正好是那一筆；其他兩項 PASS | 三項 PASS |
+| N17a 去掉 `--model-root` | `no_model_root_open` 失敗，`model_inputs` 含 cwd `/`（96 筆 attempted）；其他四項 PASS | 五項 PASS |
+| N17b N17a＋cwd `/work`＋engine open | `no_model_root_open` 失敗，`attempted` 只有 `/work/models/yolo/yolo26s_backbone_640_best.engine`；其他四項 PASS | 五項 PASS |
+| N18 tree 掛在 `/opt/sac;cade` | exit 2，`the install prefix must not contain ':' or ';'` | exit 127，loader 找不到 `libnvinfer.so.10` |
+
+**限制**（在 §17.6、§18.11、§18.13 之外）：
+
+- SONAME 家族仍然是名字：一份改了名字、名字不屬於任何 bundle 家族的外來實體檔，auditor 與 checker 都不會辨認出來（§18.13 的限制不變）。
+- 版本號 alias 的控制只在 CPU 上的真實 loader 測試裡做（§18.14）。
+- N15–N17 是在真實 trace 上做一處修改的合成控制，證明的是 checker 的判定，不是 runtime 的行為。
+- 預設 model root 的判定靠模擬 entrypoint 的 argv parse；parse 的規則改了，checker 要跟著改（`_ENTRYPOINT_VALUE_OPTIONS` 指向 `track_driver.hpp`）。
+
+結果目錄：`results/465_prc2_cli/full_1ae402c2/`；開發試做在 `results/465_prc1_dev/a4_e6b57ac8/`。不納入版本控制。§18.13 的 A3 結果保留。
