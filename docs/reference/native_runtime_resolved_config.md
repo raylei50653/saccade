@@ -1207,6 +1207,10 @@ bash scripts/native/run_shipping_container.sh bundle|bundle-strace <tree> <out>
 bash results/465_prc1_bundle/<label>/run.sh   # §17.4 gates 1-5 and the negative controls
 ```
 
+### 17.8 修正 A2：auditor 必須初始化成功
+
+launcher 與 auditor 的原始碼註解以「§17.8, A2」指到這裡。修正案、契約修正與正式 run 結果在 §18.10–§18.11：A2 改的是 PR-C1 的 launcher 與 auditor，但正式 run 是在 PR-C1＋PR-C2 合在一起的 head 上重跑 §18.4 的整個 run。§17.4 與 §17.5 記錄的是舊 launcher（沒有 probe）。
+
 ## 18. Shipping CLI：移除開發選項、measurement 邊界（Phase C PR-C2）
 
 PR-C2 是 Phase C 的第二個 PR（[Phase C scope](native_runtime_phase_c_scope.md) §6）：shipping 的 `saccade_track` 不再有任何開發／量測選項，也不含任何 mutation 程式碼；負控制注入只存在於一個明確、不安裝的 developer build。PR-C2 不改任何 stage 的計算，也不改 engine、operator library、27 個第三方物件的閉包、launcher／auditor、`sm_120` 與 Ubuntu 24.04 的契約。entrypoint 的原始碼改了，所以它的位元組改變，pin 換成新的一份（§18.4）。
@@ -1434,3 +1438,55 @@ Review 在 `b73d0a65`（#527 合入 C1＋C2 的 head）重現：auditor 不存�
 | N13 | 正常 tree，容器加 `-e SACCADE_AUDIT_PROBE=1`，跑 `bundle`（MOT17-05） | exit 0，MOT17-05 txt 與第 4 條相同 |
 
 其他 gate、負控制、判準與「不做的」不變。結果放在 `results/465_prc2_cli/full_<A2 commit>/`；§17.5 與 §18.5 的結果保留，作為舊 launcher 的紀錄。
+
+### 18.11 A2 正式 run 驗收
+
+同一台機器（RTX 5070 Ti Laptop，WSL2）。commit `036d6b95`：含 A2 的實作 `71acc415` 與契約 §18.10，工作樹乾淨，契約早於任何量測。全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library（`aa84cccd…`）與 pin 的 entrypoint（`92f74ef4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json` 的值。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 工作樹乾淨。`git diff 04f6f135 HEAD -- shipping/src shipping/include shipping/tools src include ':!shipping/src/loader_audit.c'` 為空。`loader_audit.c` 的差異只有 A2 的 probe。CMake 沒有非註解的變更。`anchor` 與 `A_L_1` 7/7 相同，`oracle-rows` OK |
+| 1 build 與安裝 | configure、build（`saccade_track`、`saccade_track_measurement`）、install 都 exit 0 |
+| 2 靜態檢查 | 12 項 PASS（含 `launcher_exact`：tree 的 launcher 是 A2 的版本） |
+| 3 host，經 launcher | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7。`--against` PR-12 `parity_pristine` 相同。`sources` PASS（probe 與主程式各一份 loader log） |
+| 4 乾淨容器（bundle） | exit 0，`EXACT`，與第 3 條 7/7 相同 |
+| 5 G2-2／G2-4 | 三項 PASS。exec chain 恰好三次、都成功：launcher process 內依序是 launcher → loader（`--library-path /opt/saccade/lib/vendor --audit /opt/saccade/lib/saccade_loader_audit.so … /opt/saccade/libexec/saccade_track`）；另一個 process 是 probe（`… /bin/sh -c :`）。`parity --native-from` `EXACT`，與第 4 條 7/7 相同。三次 run 的 `python_libraries_mapped` 都是空的 |
+| 6a 被移除的選項 | 三次 `rejected` 各 5 項 PASS（exit 2、`unknown argument`；三次 exec 的 chain；沒有 model root／operator library／GPU 裝置的 open；沒有輸出） |
+| 6b developer build 基準 | `EXACT`，與第 3 條 7/7 相同 |
+| 6c serial 參考 | `EXACT`（`detector` 5316/5316、`mot_txt` 7/7） |
+| 6d 負控制保留 | 7 個都 `CAUGHT`：`stale_detector_input`、`swapped_detection_parity`、`stale_image_dims` 的 `detector` `DIFFERS`；`stale_gmc_input`、`shared_post_host`、`gmc_previous_frame`、`ref_edit` 的 `mot_txt` `DIFFERS`；沒有 validity 問題 |
+| **verdict** | **`PASS`**（§18.4 第 1–6 條，依 §18.10 修正，全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：
+
+| # | 結果 |
+|:--|:--|
+| M1 | PR-C1 r2 的 tree：`entrypoint_pinned`、`launcher_exact`、`entrypoint_no_measurement_surface` 失敗，其餘通過 |
+| M2 | `entrypoint_pinned`、`entrypoint_no_measurement_surface` 失敗；另外 `produced_elves`、`search_path_containment` 失敗（同 §18.5：build tree 的 RUNPATH） |
+| M3 | exit 1 |
+| M4 | `exit_2_unknown_argument`、`no_model_root_open`、`no_gpu_device_open`、`no_output` 失敗；exec chain 通過（三次 exec） |
+| M5 | harness 在執行前 exit 2 |
+| M6 | `UNRESOLVED`（report 的 `entrypoint` 是 `saccade_track_measurement`） |
+| N1 | 安裝失敗（`build-release` 的 `saccade_track` sha256 ≠ pin） |
+| N2 | `static`：`vendor_set_pinned` 失敗 |
+| N3 | `static`：`layout_exact`、`vendor_set_pinned`、`g2_1_needed_closure` 失敗；容器 exit 2（`libnvrtc.so.13: cannot open`） |
+| N4 | `static`：`layout_exact` 失敗；容器 exit 127，`foreign copy on the search path: …/nvidia/cu13/lib/libcublas.so.13` |
+| N5（A2） | PR-C1 r2 的 launcher 去掉 `--audit`：`static` 的 `layout_exact`、`launcher_exact` 失敗。容器 exit 0（被放進去的那一份被載入）。`runtime`：exec chain 失敗、opened set 失敗（`/opt/saccade/nvidia/cu13/lib/libcublas.so.13`） |
+| N6a | exit 0；MOT17-05 txt 與第 4 條相同；auditor 載入之後 49 個物件，沒有來自 `/opt/foreign` 的 |
+| N6b | 同 N6a。觀察：launcher 的 sh 載入了 preload 的 `/opt/foreign/libcudart.so.13`（同 §17.6 的限制） |
+| N7 | exit 127：`libnvinfer.so.10: cannot open shared object file` |
+| N8 | `static`：`layout_exact`、`g2_3_no_python_files` 失敗 |
+| N9 | `runtime`：exec chain 失敗（`/bin/sh`、launcher、probe、loader 四次 exec），其餘兩項通過 |
+| N10（A2） | auditor 刪除：exit 127，`the loader provenance auditor did not initialize`；只有 launcher 與 probe 兩次 exec，entrypoint 沒有執行；沒有輸出 |
+| N11（A2） | auditor 截成一半：同 N10 |
+| N12（A2） | auditor 換成 `libcudart.so.13`：同 N10 |
+| N13（A2） | 呼叫端 `SACCADE_AUDIT_PROBE=1`：exit 0，MOT17-05 txt 與第 4 條相同 |
+
+N10–N12 用的都是 N4 的 tree，被放進去的 `libcublas.so.13` 還在。用舊的 launcher（§17.5 N5）時，那一份會被載入，exit 0。
+
+**限制**（在 §17.6 之外）：
+
+- probe 與正式 exec 是兩次 loader 啟動，中間 auditor 檔案仍可能被換掉。能在這之間改寫 tree 的人，也能直接改寫 launcher，所以這不比 §17.6 的威脅模型更弱；這裡不宣稱防得住 race。
+- probe 只證明 auditor 能載入、`la_version` 推得出 `<prefix>`。auditor 的位元組沒有在執行時驗證，同 §17.6「auditor 只管路徑，不管位元組」。安裝後的完整性驗證留給 PR-C3 的 MANIFEST。
+
+結果目錄：`results/465_prc2_cli/full_036d6b95/`（`run.sh`、`tree/`、`static.json`、`ld_host/`、`sources.json`、`anchor/`、`oracle_rows/`、`parity_*`、`container_*`、`runtime.json`、`cli/`、`negctl/`、`pins_before.txt`／`pins_after.txt`、`validity_sources.txt`）；開發試做在 `results/465_prc1_dev/a2_71acc415/`。不納入版本控制。§17.5 與 §18.5 的結果保留原處，是舊 launcher 的紀錄。
