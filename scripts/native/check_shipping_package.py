@@ -29,7 +29,9 @@ Subcommand:
              their sha256, size and mode; the tree inside is the expected layout
              with the pinned bytes (vendor set, entrypoint, launcher, operator
              library, THIRD_PARTY.md); the name and metadata agree with the
-             repository at the recorded source commit.
+             repository at the recorded source commit, which was clean and
+             whose runtime-identity publication was current
+             (``check_runtime_identity_staleness.py --mode attested``).
 
 Usage::
 
@@ -496,6 +498,7 @@ def cmd_tarball(args: argparse.Namespace) -> int:
         head = manifest_head(
             commit=source.get("commit", ""),
             tree_clean=source.get("tree_clean"),
+            identity_current=source.get("identity_current"),
             files=files,
         )
     except (subprocess.CalledProcessError, PackageError, KeyError, ValueError) as exc:
@@ -510,6 +513,10 @@ def cmd_tarball(args: argparse.Namespace) -> int:
         md_bad.append("the released installer is not the one at the source commit")
     if source.get("tree_clean") is not True:
         md_bad.append("built from a working tree that was not clean")
+    if source.get("identity_current") is not True:
+        md_bad.append(
+            "the runtime-identity publication did not describe the source commit"
+        )
     _check(checks, "metadata", md_bad, commit=source.get("commit"))
 
     report = {
@@ -530,6 +537,7 @@ def cmd_tarball(args: argparse.Namespace) -> int:
 def manifest_head(
     commit: str,
     tree_clean: Any,
+    identity_current: Any,
     files: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     """Every MANIFEST key but "files", derived from the repository at `commit`
@@ -628,6 +636,7 @@ def manifest_head(
             "commit": commit,
             "commit_time": int(_git("show", "-s", "--format=%ct", commit).strip()),
             "tree_clean": tree_clean,
+            "identity_current": identity_current,
         },
         "pins": {
             "third_party_set": {

@@ -3,9 +3,11 @@
 
 docs/reference/native_runtime_resolved_config.md §19. The tree is what
 ``cmake --install <build> --component shipping`` wrote; it must pass
-``check_shipping_bundle.py static`` (run here, report kept) and the repository
-must be clean (``--allow-dirty`` is for trials; the package then records
-``tree_clean: false`` and ``check_shipping_package.py tarball`` fails it).
+``check_shipping_bundle.py static`` (run here, report kept); the repository
+must be clean and its runtime-identity publication must describe HEAD
+(``check_runtime_identity_staleness.py --mode attested``), since the MANIFEST
+records that coordinate. ``--trial`` packages anyway and records which of the
+two did not hold; ``check_shipping_package.py tarball`` fails such a package.
 
 Writes three files to OUT (created; must not hold anything):
 
@@ -49,6 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_shipping_package as pkg  # noqa: E402
 
 CHECK_BUNDLE = Path(__file__).resolve().parent / "check_shipping_bundle.py"
+CHECK_IDENTITY = pkg.REPO / "scripts/tools/check_runtime_identity_staleness.py"
 
 
 class _HashingReader:
@@ -148,9 +151,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--static-report", type=Path, required=True)
     ap.add_argument(
-        "--allow-dirty",
+        "--trial",
         action="store_true",
-        help="trials only; recorded as tree_clean: false",
+        help="package a dirty tree or a stale runtime identity; recorded, and the package check fails it",
     )
     ap.add_argument("--compresslevel", type=int, default=6)
     args = ap.parse_args(argv)
@@ -184,16 +187,28 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         commit = pkg._git("rev-parse", "HEAD").strip()
         clean = pkg._git("status", "--porcelain").strip() == ""
-        if not clean and not args.allow_dirty:
-            print(
-                "build_shipping_package: the working tree is not clean", file=sys.stderr
-            )
+        identity = subprocess.run(
+            [sys.executable, str(CHECK_IDENTITY), "--mode", "attested"],
+            cwd=pkg.REPO,
+            capture_output=True,
+            text=True,
+        )
+        current = identity.returncode == 0
+        for ok, what in (
+            (clean, "the working tree is not clean"),
+            (current, "the runtime-identity publication does not describe HEAD"),
+        ):
+            if not ok:
+                print(f"build_shipping_package: {what}", file=sys.stderr)
+        if not (clean and current) and not args.trial:
             return 1
         files, problems = pkg.tree_entries(tree)
         if problems:
             print(f"build_shipping_package: {problems}", file=sys.stderr)
             return 1
-        head = pkg.manifest_head(commit=commit, tree_clean=clean, files=files)
+        head = pkg.manifest_head(
+            commit=commit, tree_clean=clean, identity_current=current, files=files
+        )
         installer = pkg._git_show(
             commit, pkg.INSTALLER_SOURCE.relative_to(pkg.REPO).as_posix()
         )
@@ -211,6 +226,7 @@ def main(argv: list[str] | None = None) -> int:
                 "package": head["package"],
                 "commit": commit,
                 "tree_clean": clean,
+                "identity_current": current,
                 "sha256": sums,
             },
             indent=2,
