@@ -219,6 +219,13 @@ LOADER = (
     '"/opt/saccade/bin/saccade_track", "/opt/saccade/libexec/saccade_track", "--config", "/cfg/c.json"], 0x0 /* 3 vars */) = 0'
 )
 LAUNCHER = 'execve("/opt/saccade/bin/saccade_track", ["/opt/saccade/bin/saccade_track", "--config", "/cfg/c.json"], 0x0 /* 3 vars */) = 0'
+# The auditor readiness probe (A2), exec'd by the launcher's command
+# substitution: a child process, so strace -ff logs it in a file of its own.
+PROBE = (
+    'execve("/lib64/ld-linux-x86-64.so.2", ["/lib64/ld-linux-x86-64.so.2", "--library-path", '
+    '"/opt/saccade/lib/vendor", "--audit", "/opt/saccade/lib/saccade_loader_audit.so", '
+    '"/bin/sh", "-c", ":"], 0x0 /* 4 vars */) = 0'
+)
 
 
 def _runtime_tree(tmp_path: Path) -> tuple[Path, Path, list[str]]:
@@ -247,10 +254,19 @@ def _runtime_tree(tmp_path: Path) -> tuple[Path, Path, list[str]]:
     return tree, set_path, opens
 
 
-def _runtime(tmp_path: Path, lines: list[str]) -> dict[str, Any]:
+def _write_strace(st: Path, lines: list[str], probe: list[str] | None) -> None:
+    """``lines`` as the launcher process's log, ``probe`` as its child's."""
+    st.mkdir(exist_ok=True)
+    (st / "s.1").write_text("\n".join(lines) + "\n")
+    if probe:
+        (st / "s.2").write_text("\n".join(probe) + "\n")
+
+
+def _runtime(
+    tmp_path: Path, lines: list[str], probe: list[str] | None = None
+) -> dict[str, Any]:
     tree, set_path, _ = _runtime_tree(tmp_path)
-    (tmp_path / "st").mkdir(exist_ok=True)
-    (tmp_path / "st" / "s.1").write_text("\n".join(lines) + "\n")
+    _write_strace(tmp_path / "st", lines, [PROBE] if probe is None else probe)
     report = tmp_path / "runtime.json"
     bundle.main(
         [
@@ -321,6 +337,38 @@ def test_runtime_rejects(tmp_path: Path, mutate: Any, check: str) -> None:
     assert not r["checks"][check]["pass"]
 
 
+_FAILED_PROBE = PROBE.removesuffix(" = 0") + " = -1 ENOENT"
+
+
+@pytest.mark.parametrize(
+    ("lines", "probe"),
+    [
+        # the PR-C1 form: no readiness probe
+        ([LAUNCHER, LOADER], []),
+        # the probe in the launcher's own process, not a child
+        ([LAUNCHER, PROBE, LOADER], []),
+        ([LAUNCHER, LOADER], [PROBE, PROBE]),
+        ([LAUNCHER, LOADER], [_FAILED_PROBE]),
+        (
+            [LAUNCHER, LOADER],
+            [
+                PROBE.replace(
+                    '"--audit", "/opt/saccade/lib/saccade_loader_audit.so", ', ""
+                )
+            ],
+        ),
+        ([LAUNCHER, LOADER], [PROBE.replace('"-c", ":"', '"-c", "id"')]),
+        ([LOADER, LAUNCHER], [PROBE]),
+    ],
+)
+def test_runtime_exec_chain_needs_the_readiness_probe(
+    tmp_path: Path, lines: list[str], probe: list[str]
+) -> None:
+    _, _, opens = _runtime_tree(tmp_path)
+    r = _runtime(tmp_path, [*lines, *opens], probe)
+    assert not r["checks"]["g2_2_g2_4_exec_chain"]["pass"]
+
+
 # ── measurement surface (PR-C2) ────────────────────────────────────────────────
 
 SURFACE = REPO / "shipping" / "measurement_surface.json"
@@ -387,11 +435,14 @@ def test_post_build_surface_check(tmp_path: Path) -> None:
 
 
 def _rejected(
-    tmp_path: Path, lines: list[str], log: list[str], outputs: bool = False
+    tmp_path: Path,
+    lines: list[str],
+    log: list[str],
+    outputs: bool = False,
+    probe: list[str] | None = None,
 ) -> dict[str, Any]:
     st = tmp_path / "st"
-    st.mkdir(exist_ok=True)
-    (st / "s.1").write_text("\n".join(lines) + "\n")
+    _write_strace(st, lines, [PROBE] if probe is None else probe)
     (tmp_path / "saccade_track.log").write_text("\n".join(log) + "\n")
     out = tmp_path / "out"
     out.mkdir(exist_ok=True)
@@ -704,7 +755,9 @@ def test_launcher_runs_the_entrypoint_through_the_loader() -> None:
     assert '--library-path "$prefix/lib/vendor"' in text
     assert '--audit "$prefix/lib/saccade_loader_audit.so"' in text
     assert '"$prefix/libexec/saccade_track" "$@"' in text
-    assert "unset LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH" in text
+    assert "unset LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH SACCADE_AUDIT_PROBE" in text
+    assert "ready=$(SACCADE_AUDIT_PROBE=1 /lib64/ld-linux-x86-64.so.2" in text
+    assert '[ "$ready" != saccade-loader-audit-ready ]' in text
     if shutil.which("sh"):
         subprocess.run(
             ["sh", "-n", str(REPO / "shipping" / "launcher" / "saccade_track.sh")],
@@ -717,10 +770,18 @@ def test_launcher_runs_the_entrypoint_through_the_loader() -> None:
 LDSO = Path("/lib64/ld-linux-x86-64.so.2")
 
 
-@pytest.mark.skipif(
+_NEEDS_LOADER = pytest.mark.skipif(
     not shutil.which("cc") or not LDSO.exists(), reason="needs cc and the x86-64 loader"
 )
-def test_auditor_fails_closed_on_a_planted_rpath_copy(tmp_path: Path) -> None:
+
+
+def _cc(*args: str) -> None:
+    subprocess.run(["cc", *args], check=True, capture_output=True)
+
+
+def _audit_prefix(tmp_path: Path) -> Path:
+    """<prefix> with lib/vendor/libfoo.so (prints 1), libexec/main (DT_RPATH
+    $ORIGIN/../nvidia before --library-path), the real auditor and launcher."""
     p = tmp_path / "prefix"
     for d in ("lib/vendor", "libexec", "nvidia", "gen", "src"):
         (p / d).mkdir(parents=True, exist_ok=True)
@@ -734,10 +795,7 @@ def test_auditor_fails_closed_on_a_planted_rpath_copy(tmp_path: Path) -> None:
         'static const char *const kBundled[] = {"libfoo.so", NULL};\n'
     )
 
-    def cc(*args: str) -> None:
-        subprocess.run(["cc", *args], check=True, capture_output=True)
-
-    cc(
+    _cc(
         "-shared",
         "-fPIC",
         "-Wl,-soname,libfoo.so",
@@ -746,7 +804,7 @@ def test_auditor_fails_closed_on_a_planted_rpath_copy(tmp_path: Path) -> None:
         str(src / "foo1.c"),
     )
     # DT_RPATH (not RUNPATH): the loader searches it before --library-path
-    cc(
+    _cc(
         "-o",
         str(p / "libexec/main"),
         str(src / "main.c"),
@@ -754,7 +812,7 @@ def test_auditor_fails_closed_on_a_planted_rpath_copy(tmp_path: Path) -> None:
         "-lfoo",
         "-Wl,--disable-new-dtags,-rpath,$ORIGIN/../nvidia",
     )
-    cc(
+    _cc(
         "-shared",
         "-fPIC",
         "-std=c11",
@@ -767,24 +825,42 @@ def test_auditor_fails_closed_on_a_planted_rpath_copy(tmp_path: Path) -> None:
         str(REPO / "shipping/src/loader_audit.c"),
     )
 
-    def run(audit: bool) -> subprocess.CompletedProcess[str]:
-        cmd = [str(LDSO), "--library-path", str(p / "lib/vendor")]
-        if audit:
-            cmd += ["--audit", str(p / "lib/saccade_loader_audit.so")]
-        return subprocess.run(
-            [*cmd, str(p / "libexec/main")], capture_output=True, text=True, env={}
-        )
+    (p / "bin").mkdir()
+    shutil.copy(REPO / "shipping/launcher/saccade_track.sh", p / "bin/saccade_track")
+    (p / "bin/saccade_track").chmod(0o755)
+    (p / "libexec/main").rename(p / "libexec/saccade_track")
+    return p
 
-    clean = run(audit=True)
-    assert clean.returncode == 0 and clean.stdout == "1\n", clean.stderr
-    cc(
+
+def _plant_foreign_copy(p: Path) -> None:
+    _cc(
         "-shared",
         "-fPIC",
         "-Wl,-soname,libfoo.so",
         "-o",
         str(p / "nvidia/libfoo.so"),
-        str(src / "foo2.c"),
+        str(p / "src/foo2.c"),
     )
+
+
+@_NEEDS_LOADER
+def test_auditor_fails_closed_on_a_planted_rpath_copy(tmp_path: Path) -> None:
+    p = _audit_prefix(tmp_path)
+
+    def run(audit: bool) -> subprocess.CompletedProcess[str]:
+        cmd = [str(LDSO), "--library-path", str(p / "lib/vendor")]
+        if audit:
+            cmd += ["--audit", str(p / "lib/saccade_loader_audit.so")]
+        return subprocess.run(
+            [*cmd, str(p / "libexec/saccade_track")],
+            capture_output=True,
+            text=True,
+            env={},
+        )
+
+    clean = run(audit=True)
+    assert clean.returncode == 0 and clean.stdout == "1\n", clean.stderr
+    _plant_foreign_copy(p)
     silent = run(audit=False)
     assert (
         silent.returncode == 0 and silent.stdout == "2\n"
@@ -795,6 +871,55 @@ def test_auditor_fails_closed_on_a_planted_rpath_copy(tmp_path: Path) -> None:
         "foreign copy on the search path" in refused.stderr
         and "nvidia/libfoo.so" in refused.stderr
     )
+
+
+def _launch(
+    p: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [str(p / "bin/saccade_track")],
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", **(env or {})},
+    )
+
+
+@_NEEDS_LOADER
+def test_launcher_runs_the_entrypoint_when_the_auditor_initializes(
+    tmp_path: Path,
+) -> None:
+    p = _audit_prefix(tmp_path)
+    clean = _launch(p)
+    assert clean.returncode == 0 and clean.stdout == "1\n", clean.stderr
+    # a caller's probe variable does not reach the entrypoint's loader
+    probed = _launch(p, {"SACCADE_AUDIT_PROBE": "1"})
+    assert probed.returncode == 0 and probed.stdout == "1\n", probed.stderr
+    _plant_foreign_copy(p)
+    refused = _launch(p)
+    assert refused.returncode == 127 and refused.stdout == ""
+    assert "foreign copy on the search path" in refused.stderr
+
+
+@_NEEDS_LOADER
+@pytest.mark.parametrize("damage", ["missing", "truncated", "empty", "not_an_auditor"])
+def test_launcher_fails_closed_when_the_auditor_does_not_initialize(
+    tmp_path: Path, damage: str
+) -> None:
+    p = _audit_prefix(tmp_path)
+    _plant_foreign_copy(p)
+    auditor = p / "lib/saccade_loader_audit.so"
+    data = auditor.read_bytes()
+    auditor.unlink()
+    if damage == "truncated":
+        auditor.write_bytes(data[: len(data) // 2])
+    elif damage == "empty":
+        auditor.write_bytes(b"")
+    elif damage == "not_an_auditor":  # loads, but has no la_version
+        shutil.copy(p / "lib/vendor/libfoo.so", auditor)
+    r = _launch(p)
+    # the loader alone would ignore the auditor and run the planted copy ("2")
+    assert r.returncode == 127 and r.stdout == "", (r.stdout, r.stderr)
+    assert "the loader provenance auditor did not initialize" in r.stderr
 
 
 # ── install ────────────────────────────────────────────────────────────────────

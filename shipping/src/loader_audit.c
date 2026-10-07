@@ -18,6 +18,13 @@
  *                 its model root path; nothing named libpython* /
  *                 libtorch_python*.
  *
+ *   la_version    with SACCADE_AUDIT_PROBE=1, once <prefix> is derived,
+ *                 writes kReady to stdout and exits 0 before the program
+ *                 runs. The loader ignores an audit library it cannot load
+ *                 (missing, truncated, no la_version), so the launcher first
+ *                 runs this probe and refuses to start the entrypoint unless
+ *                 it reads kReady (docs §17.8, A2).
+ *
  * <prefix> is derived from this library's own path (<prefix>/lib/; the
  * launcher passes it as a physical path). It asks
  * for no symbol-binding events (la_objopen returns 0), so binding is the
@@ -38,6 +45,7 @@
 #include "loader_audit_names.inc" /* static const char *const kBundled[] = {..., NULL}; */
 
 static const char kOpLibraryRel[] = "/share/saccade/build/libsaccade_scan_torchop.so";
+static const char kReady[] = "saccade-loader-audit-ready\n";
 static char g_vendor[PATH_MAX];
 static char g_op_library[PATH_MAX];
 
@@ -113,6 +121,11 @@ unsigned int la_version(unsigned int version) {
     *slash = '\0';
     if (snprintf(g_op_library, sizeof g_op_library, "%s%s", self, kOpLibraryRel) >= (int)sizeof g_op_library)
         fail("prefix too long", self);
+    const char *probe = getenv("SACCADE_AUDIT_PROBE");
+    if (probe != NULL && strcmp(probe, "1") == 0) {
+        if (write(STDOUT_FILENO, kReady, sizeof kReady - 1) != (ssize_t)(sizeof kReady - 1)) _exit(127);
+        _exit(0);
+    }
     return LAV_CURRENT;
 }
 

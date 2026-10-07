@@ -27,8 +27,9 @@ Subcommands:
              name from the tree's lib/vendor with the pinned bytes, the
              operator library and the auditor from the tree, nothing else.
 ``runtime``  G2-2 / G2-4 from ``strace -ff`` logs of a run started through
-             the launcher: exactly two ``execve`` (the launcher, then the
-             system loader with the launcher's arguments), no Python / Triton /
+             the launcher: exactly three ``execve`` (in one process the
+             launcher, then the system loader with the launcher's arguments;
+             in a child of it the auditor readiness probe, A2), no Python / Triton /
              compiler open, and every shared object it opened from the tree is
              the vendor set + the operator library + the auditor, with no
              bundled name opened from anywhere else.
@@ -469,6 +470,7 @@ def strace_records(
             }
             if call.startswith("exec"):
                 rec["argv"] = _argv(strings)
+                rec["log"] = log.name
                 execs.append(rec)
             else:
                 resolved = _open_path(call, argstr, rec["path"])
@@ -497,26 +499,41 @@ def strace_records(
 
 
 def exec_chain(execs: list[dict[str, Any]], mount: str) -> dict[str, Any]:
-    """Exactly the launcher, then the system loader with its arguments."""
-    want_loader_args = [
+    """Exactly three execs: in one process the launcher, then the system loader
+    with its arguments; in another (the launcher's command substitution) the
+    auditor readiness probe (A2). ``strace -ff`` writes one log per process,
+    so order is checked within a log, not across logs."""
+    loader_args = [
         "--library-path",
         f"{mount}/{VENDOR}",
         "--audit",
         f"{mount}/{AUDITOR}",
     ]
+    probe_argv = [SYSTEM_LOADER, *loader_args, "/bin/sh", "-c", ":"]
+    by_log: dict[str, list[dict[str, Any]]] = {}
+    for e in execs:
+        by_log.setdefault(e.get("log", ""), []).append(e)
+    main = [es for es in by_log.values() if es[0]["path"] == f"{mount}/{LAUNCHER}"]
+    probe = [es for es in by_log.values() if es[0]["path"] != f"{mount}/{LAUNCHER}"]
     exec_ok = (
-        len(execs) == 2
+        len(execs) == 3
         and all(e["rc"] == 0 for e in execs)
-        and execs[0]["path"] == f"{mount}/{LAUNCHER}"
-        and execs[1]["path"] == SYSTEM_LOADER
-        and execs[1]["argv"][1:5] == want_loader_args
-        and f"{mount}/{ENTRYPOINT}" in execs[1]["argv"]
+        and len(main) == 1
+        and len(main[0]) == 2
+        and main[0][1]["path"] == SYSTEM_LOADER
+        and main[0][1]["argv"][1:5] == loader_args
+        and f"{mount}/{ENTRYPOINT}" in main[0][1]["argv"]
+        and len(probe) == 1
+        and len(probe[0]) == 1
+        and probe[0][0]["path"] == SYSTEM_LOADER
+        and probe[0][0]["argv"] == probe_argv
     )
     return {
         "pass": exec_ok,
         "expected": [
             f"{mount}/{LAUNCHER}",
-            f"{SYSTEM_LOADER} {' '.join(want_loader_args)} ... {mount}/{ENTRYPOINT}",
+            f"(child) {' '.join(probe_argv)}",
+            f"{SYSTEM_LOADER} {' '.join(loader_args)} ... {mount}/{ENTRYPOINT}",
         ],
         "execs": execs,
     }
