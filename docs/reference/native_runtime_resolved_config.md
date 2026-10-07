@@ -1656,3 +1656,104 @@ Review 在 `ff7359d4`（#532 合入後的 #527 head）提出五點，四個 P2�
 - 預設 model root 的判定靠模擬 entrypoint 的 argv parse；parse 的規則改了，checker 要跟著改（`_ENTRYPOINT_VALUE_OPTIONS` 指向 `track_driver.hpp`）。
 
 結果目錄：`results/465_prc2_cli/full_1ae402c2/`；開發試做在 `results/465_prc1_dev/a4_e6b57ac8/`。不納入版本控制。§18.13 的 A3 結果保留。
+
+## 19. Package：tarball、MANIFEST、package digest、atomic 安裝器（Phase C PR-C3）
+
+PR-C3 是 Phase C 的第三個 PR（[Phase C scope](native_runtime_phase_c_scope.md) §6）：把 PR-C1／C2 的 shipping tree 包成一個可以從乾淨系統安裝的 package，安裝失敗時目標目錄不動（PR-12 §16.5 N2 的「安裝不是 atomic」）。PR-C3 不改任何 stage 的計算、entrypoint（pin `92f74ef4…`）、operator library（`aa84cccd…`）、27 個第三方物件、launcher、auditor、安裝規則、SM 清單與 glibc baseline；package 裡的 tree 就是 `cmake --install --component shipping` 寫出的那一份，加一個 `MANIFEST.json`。
+
+| 項目 | 位置 |
+|:--|:--|
+| 安裝器 | `shipping/package/install.sh` → 隨 package 發佈為 `<name>.install.sh` |
+| 產生 package | `scripts/native/build_shipping_package.py` |
+| MANIFEST 格式與 package 檢查 | `scripts/native/check_shipping_package.py`（`tarball`、`install-trace`）；`check_shipping_bundle.py static --manifest`（安裝後的 tree） |
+| 容器內安裝 | `scripts/native/run_package_container.sh install`／`install-strace` |
+| 測試 | `tests/unit/test_shipping_package.py` |
+
+實作之前沒有額外的 owner 指示；範圍是 Phase C scope §6 的 PR-C3 那一列。§19.1 的設計是本 PR 的決定，owner review 時可以改。
+
+### 19.1 設計決定
+
+- **發佈的是三個檔案**：`<name>.tar.gz`、`<name>.install.sh`、`<name>.sha256`。`<name>`＝`saccade-<version>-linux-x86_64-cu<x.y>-trt<x.y>-sm120-glibc<x.y>`，目前是 `saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39`：version 讀 `pyproject.toml`，CUDA 與 TensorRT 讀 `third_party_set.json` 的 `nvidia_cuda_runtime`、`tensorrt_cu12_libs` wheel，SM 是 C-D2，glibc 是 §16 的 baseline。
+- **安裝器在 tarball 外面**：要先驗證 tarball 才解開它，所以安裝器不能在 tarball 裡。`<name>.sha256`（package digest）是兩行 `sha256sum` 格式，涵蓋 tarball 與安裝器；PR-C4 的 minisign 簽的就是這個檔案。安裝器只能驗 tarball，驗不了自己：安裝器本身的完整性由使用者 `sha256sum -c`（PR-C4 之後是簽章）負責。
+- **digest 不是簽章**：能換掉 tarball 的人也能換掉 `<name>.sha256`。安裝器擋得住損壞與不完整的下載，擋不住一份重新包過、digest 也重算過的 package（§19.4 P3 照實記錄這一點）；那是 PR-C4 的範圍。
+- **MANIFEST.json**：tarball 裡唯一的頂層目錄 `<name>/` 下，安裝後在 `<prefix>/MANIFEST.json`。除了 `files` 之外的每個欄位都由 source commit 的 repository 推出（`check_shipping_package.manifest_head`），不是複製：版本 pin（每個 wheel、CUDA runtime、TensorRT、torch、cuDNN）、`gpu`（支援 `sm_120`；entrypoint 的 SASS／PTX 清單）、`platform`（loader、glibc baseline）、`source`（commit、commit 時間、工作樹是否乾淨、runtime identity 是否 current）、`pins`（`third_party_set.json` 的 sha256、entrypoint pin、launcher、auditor、operator library 與它的 attestation、安裝器）、`model_root`（resolved config、attestation、lineage、TorchScript head、backbone engine 各自的 sha256；resolved config 與 attestation 必須等於 source commit 的版本）、`runtime_identity`（`docs/reference/runtime_identity.generated.json` 的 sha256 與五軸座標）。推導時若 tree 的檔案不是 repository 的 pin，就拒絕產生。`files` 是 tree 裡每個檔案的 path、sha256、大小、mode（0755 或 0644），一行一個物件、照 path 排序：安裝器沒有 JSON parser（base system 沒有），用 `sed` 讀這個固定格式，任何不符合格式的行或 `file_count` 對不上都會失敗；`check_shipping_package.py` 以「重新序列化後逐位元組相同」確認 MANIFEST 是 canonical 的。
+- **runtime identity 必須 current**：MANIFEST 記錄的座標要描述 package 的原始碼。`shipping/package/install.sh` 是 identity 的輸入（`shipping/**`），所以 PR-C3 的 republish 要在正式 run **之前**（C1／C2 是在之後）；builder 以 `check_runtime_identity_staleness.py --mode attested` 判定，不 current 或工作樹不乾淨就拒絕，`--trial` 照樣產生但記錄下來，`tarball` 檢查會讓這種 package 失敗。
+- **tarball 是決定性的**：USTAR、member 依 path 排序、owner 0 且沒有名字、每個 mtime 都是 source commit 的時間、目錄 0755、檔案 0755（有任何 execute bit）或 0644、gzip header 沒有檔名與時間（level 6）。同一台機器、同一個 tree、同一個 commit 產生相同的位元組（Python 的 zlib；換一台機器不保證）。
+- **安裝器的步驟**（POSIX sh；Ubuntu 24.04 base system 的工具：dash、coreutils、tar、gzip、sed、grep、findutils）：
+  1. 檢查參數：TARGET 不存在（任何種類：目錄、空目錄、檔案、symlink、dangling symlink），它的上層目錄存在，路徑不含 `:`／`;`（launcher 會拒絕這種 prefix，§18.14）。
+  2. `<name>.sha256` 恰好一行指名 `<name>.tar.gz`，sha256 相符。
+  3. 在 TARGET 的上層目錄 `mktemp -d .saccade-install.XXXXXX`（同一個檔案系統，mode 0700），以 `--no-same-owner --no-same-permissions --keep-old-files` 解開。
+  4. 解開的結果恰好是一個目錄 `<name>/`；其中恰好是 MANIFEST 列的檔案加 `MANIFEST.json`，沒有其他任何項目（symlink、裝置、空目錄）；每個檔案是 regular file、大小與 sha256 相符；依 MANIFEST 設定 mode（目錄 0755）後再讀回確認。
+  5. `mv -n -T <staging>/x/<name> TARGET`：GNU coreutils 9.4 的這個呼叫是一次 `renameat2(…, RENAME_NOREPLACE)`（開發期間以 strace 確認），TARGET 在這之間出現就不取代它。之後以「來源已經不在」確認 rename 確實發生（某些 mv 版本略過時 exit 0）。
+  6. 任何失敗或 HUP／INT／TERM：刪除 staging 目錄，TARGET 不會被建立。只有 SIGKILL（或當機）會留下 staging；下一次安裝會指出它，但不刪除（可能屬於另一個正在執行的安裝）。
+  
+  `install.sh --verify PREFIX` 以同一套規則（第 4 步，只檢查不設定 mode）驗證已安裝的 tree。安裝器沒有任何會改變檢查內容的選項或環境變數（測試檢查它只讀 `TMPDIR` 與自己設定的 `LC_ALL`），與 PR-C2 的原則相同：沒有 hidden hook。
+- **`cmake --install` 不變**：開發用的安裝路徑仍然不是 atomic；atomic 的是 package 的安裝路徑。
+
+### 19.2 改了什麼
+
+- 新檔案：`shipping/package/install.sh`、`scripts/native/build_shipping_package.py`、`scripts/native/check_shipping_package.py`、`scripts/native/run_package_container.sh`、`tests/unit/test_shipping_package.py`。
+- `check_shipping_bundle.py static --manifest`：layout 多一個 `MANIFEST.json`，多一項 `manifest_tree`（MANIFEST canonical、恰好列出 tree 的其他檔案及其 sha256／大小／mode、目錄 0755）。不帶 `--manifest` 時與之前相同（12 項）。它的 `# status:` 註解移到 docstring 前面：原本在第 68 行，超出 scripts index 的 60 行掃描範圍，生成的 index 因此漏掉了它的標籤。
+- **沒有動的**：shipping 與 tracking 的 C++ 原始碼、entrypoint pin、operator library、engine、model root、`third_party_set.json`、launcher、auditor、安裝規則、`run_shipping_container.sh`、PR-12／C1／C2 的檢查。
+
+### 19.3 開發期間已經看到的（在本節 commit 之前）
+
+都是工作樹上的試做，不是正式 run（`results/465_prc3_dev/t1/`）：
+
+- 以 PR-C2 A4 正式 run 的 tree（`results/465_prc2_cli/full_1ae402c2/tree`）、`--trial`（identity 尚未 republish）產生 package：94 秒；tarball 2.22 GiB（tree 3.7 GiB），56 個檔案。`tarball` 檢查除了 `metadata`（identity 不 current，照預期）之外 6 項通過。
+- 乾淨容器（dash，沒有 Python／編譯器）安裝：exit 0。時間：digest 約 1.5 秒、解開約 15 秒、逐檔驗證約 2 秒（page cache 是熱的）。`install-trace` 5 項通過：TARGET 只被一次 `renameat2(…, RENAME_NOREPLACE) = 0` 碰到，其他 274 筆有寫入性質的呼叫全部在 staging 之內，staging 被刪除。安裝後的 tree：`static --manifest` 13 項通過、`install.sh --verify` 通過。第一次 trace 用了 `%desc`，記下了每一筆 read／write 的資料（11 GB），改成 `%file` 加 fd 類的寫入呼叫（1.3 MB）。
+- 安裝後的 tree 在乾淨容器跑 MOT17-05（bundle 模式）：exit 0，MOT txt 與 A4 正式 run 的 `container_bundle` 相同（`6fe80348…`）。
+- 安裝器負控制（容器）：1 GiB 的 tmpfs（磁碟滿）exit 1，tmpfs 是空的；15 秒時 SIGTERM（`timeout`，整個 process group）：TARGET 不存在、staging 已刪；15 秒時 SIGKILL：TARGET 不存在，staging（3.3 GB）留下。
+- `tar` 的 `--no-overwrite-dir` 與 `--keep-old-files` 不能同時使用，去掉前者（staging 是空的，沒有可以覆寫的目錄）。
+
+### 19.4 測量契約（正式 run 之前寫定）
+
+**順序**：本節 commit 之後先 republish runtime identity（`docs/reference/runbooks/runtime_identity_republication.md`；`shipping/package/install.sh` 是新的 identity 輸入），正式 run 在 republish 之後的乾淨 commit 上執行，所以 package 記錄的座標描述它自己的 source commit。
+
+**組態**：同一台機器。`build-release/`：§18.4 的 configure 參數（`-DSACCADE_SHIPPING_ENTRYPOINT=results/465_prc2_cli/entrypoint_04f6f135/saccade_track`），只 build `saccade_track`，安裝到 `$R/tree`。package 產生在 `$R/dist`。容器：安裝用 §17.4 的 pinned `ubuntu:24.04`（`install`）與加 strace 的映像（`install-strace`），不給 GPU、不給網路；執行用 §17.4 的 bundle 模式，tree 是從 package 安裝出來的那一份（`$R/installed/saccade`），唯讀掛載。oracle（`anchor`、`oracle-rows`）用 `build/` 既有的 extensions。全部 GPU 步驟在 gpu0 lease 下依序執行。
+
+**有效性**（任一不成立 ⇒ 受影響的 gate 為 `UNRESOLVED`）：正式 run 在乾淨的 commit 上；`check_runtime_identity_staleness.py --mode attested` 在 run 開始時 exit 0；`build/libsaccade_scan_torchop.so` 與 entrypoint pin 檔案的 sha256 在 run 前後都分別等於 attestation 與 `entrypoint_pin.json` 的值；`git diff 1ae402c2 HEAD -- shipping/src shipping/include shipping/tools shipping/launcher shipping/cmake shipping/CMakeLists.txt shipping/third_party_set.json shipping/entrypoint_pin.json src include` 為空（tree 的來源與 PR-C2 A4 正式 run 相同）；`anchor` 與 PR-2L `A_L_1` 7/7 相同、`oracle-rows` 有效（§13.3）；兩種容器的 `container.txt` 顯示 Ubuntu 24.04、glibc 2.39，安裝容器的 `/bin/sh` 是 dash、沒有 Python 與編譯器。
+
+**PASS 驗收規則**：PR-C3 的 verdict 是 `PASS` 若且唯若下列全部成立，否則是 `FAIL`（照 gate 分開報告）：
+
+1. **build 與安裝**：同 §17.4 第 1 條（只 build `saccade_track`）。
+2. **靜態檢查**：`check_shipping_bundle.py static` 對 `$R/tree` 12 項都 PASS。
+3. **package**：
+   - `build_shipping_package.py`（不帶 `--trial`）exit 0，記錄 `tree_clean: true`、`identity_current: true`。
+   - `check_shipping_package.py tarball` 7 項都 PASS：`release_set`、`package_digest`、`installer_exact`、`tar_members`、`manifest_exact`、`pinned_tree`、`metadata`。
+   - **決定性**：以同一個 tree 在同一個 commit 再產生一次到 `$R/dist_again`，三個檔案逐位元組相同。
+   - MANIFEST 的 `files` 恰好是 `$R/tree` 的檔案，sha256 與大小逐項相同。
+4. **從 tarball 安裝到乾淨容器**：
+   - `run_package_container.sh install-strace $R/dist $R/installed/saccade` exit 0。
+   - `check_shipping_package.py install-trace` 5 項都 PASS：`one_staging_directory`（在 TARGET 的上層目錄）、`target_only_by_one_noreplace_rename`（TARGET 只被一次成功的 `renameat2(<staging>/x/<name>, TARGET, RENAME_NOREPLACE)` 碰到，沒有其他寫入性質的呼叫，失敗的嘗試也算）、`other_mutations_in_staging`、`staging_removed`、`trace_complete`。這一條就是「PR-12 的 N2 不再成立」的直接證據。
+   - 安裝後的 tree：`check_shipping_bundle.py static --manifest` 13 項都 PASS；安裝容器內 `install.sh --verify /install/saccade` exit 0；除 `MANIFEST.json` 之外，每個檔案與 `$R/tree` 的對應檔案逐位元組相同，沒有多也沒有少。
+5. **乾淨容器執行（從 package 安裝的 tree）**：`run_shipping_container.sh bundle $R/installed/saccade`：7 sequence 在同一個 process 中跑完、exit 0；`parity --native-from` `EXACT`（`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7），且 `--against` PR-C2 A4 正式 run 的 `results/465_prc2_cli/full_1ae402c2/parity_bundle/report.json`：txt、trace 與 native graph 計數 7/7 相同。
+6. **G2-2／G2-4（從 package 安裝的 tree）**：`bundle-strace`，`check_shipping_bundle.py runtime` 三項都 PASS；`parity --native-from` `EXACT`，且 `--against` 第 5 條 7/7 相同。
+
+沒有容差。第 3–6 條的比較是逐位元組；任一不同就照 gate 報告第一個不同的檔案或項目，停在 PR-C3。
+
+**安裝器負控制**（容器內以 dash 執行；被改的 package 放在各自的 dist 副本，未改的檔案是 hard link；「被重新包過」的 tarball 以 Python 從原 tarball 串流改寫一個 member，`<name>.sha256` 重算；每一條都要記錄 `install.log`、上層目錄安裝前後的列表與 `after.txt`）。除 P3、P10b 之外，必須的結果都包含：**TARGET 不存在、上層目錄沒有留下 `.saccade-install.*`、上層目錄的列表與安裝前相同**。
+
+| # | 操作 | 必須的結果（在上面的共同結果之外） |
+|:--|:--|:--|
+| P1 | tarball 中間一個位元組反轉（digest 不重算） | exit 1，`sha256 is not the one in`；log 沒有 `extracting`（沒有解開任何東西） |
+| P2 | 重新包：`lib/vendor/libcublas.so.13` 最後一個位元組反轉（大小不變），digest 重算 | exit 1，`lib/vendor/libcublas.so.13: sha256 is not`；`tarball`：`manifest_exact`、`pinned_tree` 失敗 |
+| P3 | P2 的改動，再把 MANIFEST 裡那個檔案的 sha256 改成改過之後的值（一份「別人重新包過」、內部一致的 package），digest 重算 | **安裝器 exit 0**（digest 不是簽章，§19.1）；`tarball`：`pinned_tree`、`metadata` 失敗；安裝後的 tree：`static --manifest` 的 `vendor_set_pinned` 失敗。這一條記錄的是 PR-C3 擋不住什麼、由誰抓到 |
+| P4 | 重新包：多一個 `share/saccade/helper.py`，digest 重算 | exit 1，訊息列出 `share/saccade/helper.py` |
+| P5 | 重新包：少 `lib/vendor/libnvrtc.so.13`，digest 重算 | exit 1，訊息列出 `lib/vendor/libnvrtc.so.13` |
+| P6a–d | TARGET 已存在：(a) 有一個 sentinel 檔案的目錄，(b) 空目錄，(c) 一般檔案，(d) 指向另一個目錄的 symlink | exit 2，`exists; nothing was changed`；TARGET 與 sentinel 的內容、種類不變（此列的「TARGET 不存在」改為「TARGET 與安裝前相同」） |
+| P7 | `/install` 是 1 GiB 的 tmpfs（磁碟滿） | exit 1，`extraction failed`；`after.txt` 顯示 `/install` 是空的 |
+| P8 | `timeout -s TERM 5`（解開期間） | log 的最後一行是 `extracting`；（`timeout` 的 exit 124） |
+| P9 | `timeout -s TERM <d>`（逐檔驗證期間），`<d>` 依序試 17、16.5、17.5、16、18 秒，直到 log 的最後一行是 `checking` | 每一次嘗試都要滿足共同結果；`<d>` 與每次的最後一行照實記錄。五個值都沒落在驗證期間 ⇒ P9 記為 `UNRESOLVED`（不是 PASS） |
+| P10a | `timeout -s KILL 8`（解開期間） | TARGET 不存在；**staging 留下**（照實記錄大小） |
+| P10b | P10a 之後，同一個上層目錄正常安裝 | exit 0，log 有 `note: … is left from another installation`；P10a 的 staging 內容不變；安裝後 `install.sh --verify` exit 0 |
+| P11 | 原 package 的 tarball 不經安裝器、直接 `tar -xzf` 解到上層目錄，TARGET＝`/install/<name>`（strace 映像，同第 4 條的 trace 設定） | `install-trace`：`target_only_by_one_noreplace_rename` 失敗。這一條顯示第 4 條的檢查分辨得出非 atomic 的安裝 |
+| P12 | 安裝後 tree 的副本（hard link），`lib/vendor/libcudart.so.13` 先刪再寫入多一個位元組的版本 | `install.sh --verify` exit 1（`size is not`）；`static --manifest`：`manifest_tree`、`vendor_set_pinned` 失敗 |
+| P13a | 刪掉 `<name>.sha256` | exit 2，`no package digest` |
+| P13b | `<name>.sha256` 的 tarball 那一行重複一次 | exit 1，`does not name … exactly once` |
+| P14 | tarball 與安裝器改名成 `saccade-0.1.1-…`（內容不變），digest 重算 | exit 1，`the tarball does not hold exactly one directory` |
+| P15 | TARGET 的上層目錄名稱含 `:` | exit 2，`must not contain`；上層目錄沒有任何新項目 |
+
+另外 `tests/unit/test_shipping_package.py` 涵蓋 symlink member、`..` member、MANIFEST 改名、MANIFEST 格式錯誤、TARGET 為 dangling symlink 與 `install-trace` 的拒絕案例；這些在合成 package 上做，不在 3.7 GiB 的 package 上重做。
+
+**不做的**：FPS 或任何效能比較；host 經 launcher 的 parity 與 `sources`（tree 的位元組與 PR-C2 A4 正式 run 相同，第 4 條逐位元組確認）；PR-C2 的 CLI gate（6a–6d，entrypoint 沒有變）；PR-C1／C2 的 N1–N18、M1–M6（它們檢查的 tree、launcher、auditor、checker 都沒有變）；其他 GPU、其他主機、其他 glibc；minisign 簽章（PR-C4）；任何散佈（Phase C scope §4）。
