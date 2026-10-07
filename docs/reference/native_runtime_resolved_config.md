@@ -1397,3 +1397,40 @@ Review 在 `2e74f3ee`（#530 合入後的 #529 head）用合成 trace 重現兩�
 回歸測試新增 10 項：三種相對輸出參數的失敗寫入、相對 `--report` 的存留檔、無 cwd 時 fail closed、四種別名目標（config、operator library、GPU 裝置、trace 寫入）、缺目標註記的 `-yy` 紀錄。這 10 項在 `2e74f3ee` 的 checker 上全部失敗，修正後全部通過；checker 回歸測試 57/57 PASS。
 
 **驗證結果**：乾淨 commit `2c6fceae`，`results/465_prc2_cli/review_fix_2c6fceae/`（`run.py`、`summary.json`、`historical_*.json`、`yy_2a3cce80_*.json`、`m4_replay.json`、`runtime_replay.json`）。只重播既有 log，不新跑容器：shipping binary 未變，`2a3cce80` 的三次 `-yy` run 已帶目標與 cwd 註記。§18.5 歷史拒絕 log 3/3 PASS；`-yy` 拒絕 log 3/3 PASS；M4 負控制失敗的 gate 與原本逐項相同；正式 run 的 runtime 重播 PASS。shipping sources 與 `04f6f135` 相同，pin／operator hash 前後相同；runtime identity `--mode attested` exit 0，checker 不在 identity 輸入內，不需 republish。`summary.json` sha256：`38abaa0dc3d8dff979383870bd4b8ad60937a3b7dd85578894d804d1746d4f41`。不取代 §18.5 的正式 parity。
+
+### 18.10 修正 A2：auditor 必須初始化成功（PR-C1 launcher）
+
+Review 在 `b73d0a65`（#527 合入 C1＋C2 的 head）重現：auditor 不存在或無法載入時，loader 印出 `cannot be loaded as audit interface … ignored` 後照樣執行。以真的 loader 與原本的 launcher，刪除或截斷 auditor 後，被放在 DT_RPATH 位置的那一份會被載入，process exit 0，不是 127。§17 的 provenance 保護因此不是 fail-closed：只有 auditor 確實載入時才成立，§17.5 的 r2 與 §18.5 的 run 都是在 auditor 完整時量的。同一次 review 另有兩個 checker 漏檢（`runtime` 不看 alias 目標；`rejected` 的 model root 寫死），在 `0f26d08a` 修正，13 份既有報告重播後逐項結果不變。
+
+**改了什麼**（`71acc415`）：
+
+- **auditor**：`la_version` 推出 `<prefix>` 之後，若 `SACCADE_AUDIT_PROBE=1`，就在 stdout 寫 `saccade-loader-audit-ready`，然後在程式執行前 exit 0。
+- **launcher**：先 unset 呼叫端的 `SACCADE_AUDIT_PROBE`，再以同一個 loader、同樣的 `--library-path` 與 `--audit` 對 `/bin/sh -c :` 跑一次 probe（指令替換，子 process）。讀不到那一行就印 `saccade_track: the loader provenance auditor did not initialize (…)` 並 exit 127；讀到之後，`exec` 一行與之前相同。在同一個 exec 內沒辦法做到 fail-closed：`--audit` 與 `--preload` 載入失敗都只是被忽略，而 entrypoint 是 pin 的，不能加 NEEDED。
+- **檢查**：G2-2 的 exec chain 改成恰好三次、都成功。launcher process 內依序是 launcher、loader（argv 同 §17.4）；另一個 process（`strace -ff` 的另一個 log）是 probe，argv 恰好是 `/lib64/ld-linux-x86-64.so.2 --library-path /opt/saccade/lib/vendor --audit /opt/saccade/lib/saccade_loader_audit.so /bin/sh -c :`。
+- **測試**：真的 loader 上，auditor 不存在、截斷一半、空檔、換成沒有 `la_version` 的 ELF 四種情況，都 exit 127、什麼都沒執行（舊 launcher 在這四種情況會執行被放進去的那一份）；呼叫端設 `SACCADE_AUDIT_PROBE=1` 時照常執行。
+- **沒有動的**：entrypoint pin（`92f74ef4…`）、operator library（`aa84cccd…`）、engine、model root、`third_party_set.json`（27 個）、安裝規則、SM 清單、glibc baseline、容器映像與 `run_shipping_container.sh`。auditor 是獨立的 library target（`saccade_loader_audit`），不進 entrypoint。
+
+**開發期間已經看到的**（`results/465_prc1_dev/a2_71acc415/`，不是正式 run）：
+
+- `static` 12 項通過。
+- `bundle-strace`（MOT17-05）exit 0。三次 exec，probe 在獨立的 log；`runtime` 三項通過。
+- 刪掉 auditor 的 tree：exit 127，訊息如上。只有 launcher 與 probe 兩次 exec，沒有輸出。
+- host 經 launcher 跑 MOT17-05（`LD_DEBUG=files`，probe 與主程式各一份 log）：`sources` 通過。
+- 對 PR-C1 r2 的 tree 跑 `static`：`entrypoint_pinned`、`launcher_exact`、`entrypoint_no_measurement_surface` 失敗。
+
+**契約修正**（正式 run 之前寫定）：正式 run＝§18.4 的整個 run（§17.4 第 1–5 條、§18.4 第 6 條、M1–M6、N1–N9），在 A2 的乾淨 commit 上重跑，以下不同：
+
+- **有效性**：編出 pin 的原始碼不變的檢查改成 `git diff 04f6f135 HEAD -- shipping/src shipping/include shipping/tools src include ':!shipping/src/loader_audit.c'` 為空；`loader_audit.c` 與 `04f6f135` 的差異只有 A2 的 probe（照實記錄）。
+- **第 5 條與第 6a 條的 exec chain**：照上面的三次 exec。
+- **M1**：`entrypoint_no_measurement_surface`、`entrypoint_pinned`、`launcher_exact` 失敗（launcher 已換）。
+- **N5** 改用 PR-C1 r2 tree 的 launcher（沒有 probe）去掉 `--audit` 那一行，放進 N4 的 tree。必須的結果同 §17.4：`static` 的 `layout_exact`、`launcher_exact` 失敗；`bundle-strace`（MOT17-05）exit 0，那一份被載入；`runtime` 的 exec chain 與 opened set 失敗。直接對新 launcher 刪 `--audit` 會連 probe 一起失效，變成 exit 127，測不到 N5 要測的東西。
+- **新的負控制**：N10–N12 都用 N4 的 tree（`nvidia/cu13/lib/` 有被放進去的那一份），只改 auditor，跑 `bundle-strace`（MOT17-05）：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N10 | 刪掉 `lib/saccade_loader_audit.so` | exit 127，log 有 `the loader provenance auditor did not initialize`；沒有 `native/`、`track_report.json`；strace 恰好兩次 exec（launcher、probe），沒有執行 entrypoint 的 loader |
+| N11 | auditor 換成它的前一半位元組 | 同 N10 |
+| N12 | auditor 換成 `lib/vendor/libcudart.so.13` 的副本（ELF，沒有 `la_version`） | 同 N10 |
+| N13 | 正常 tree，容器加 `-e SACCADE_AUDIT_PROBE=1`，跑 `bundle`（MOT17-05） | exit 0，MOT17-05 txt 與第 4 條相同 |
+
+其他 gate、負控制、判準與「不做的」不變。結果放在 `results/465_prc2_cli/full_<A2 commit>/`；§17.5 與 §18.5 的結果保留，作為舊 launcher 的紀錄。
