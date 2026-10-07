@@ -1532,3 +1532,38 @@ Review 在 `93f4de43`（#531 合入後的 #527 head）提出三點。都不是�
 symlink alias 的控制只在 CPU 上的真實 loader 測試裡做（上面的測試）。在 shipping tree 上要做出「非 bundle 名字的 NEEDED 經 alias 指到外來 bundle 物件」，必須改 pin 的 ELF，所以不做。
 
 其他 gate、負控制、判準與「不做的」不變。結果放在 `results/465_prc2_cli/full_<A3 commit>/`；§18.11 的 A2 結果保留，作為沒有 `-yy` 的證據紀錄。
+
+### 18.13 A3 正式 run 驗收
+
+同一台機器。commit `276659a8`：含 A3 的實作 `f1d98b93`、`06002566` 與契約 §18.12，工作樹乾淨，契約早於任何量測。全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。operator library（`aa84cccd…`）與 pin 的 entrypoint（`92f74ef4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json` 的值。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 同 §18.11：工作樹乾淨。原始碼檢查（排除 `loader_audit.c`）為空。CMake 沒有非註解的變更。`anchor` 與 `A_L_1` 7/7 相同，`oracle-rows` OK |
+| 1 build 與安裝 | configure、build、install 都 exit 0 |
+| 2 靜態檢查 | 12 項 PASS |
+| 3 host，經 launcher | `EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7。`--against` PR-12 `parity_pristine` 相同。`sources` PASS |
+| 4 乾淨容器（bundle） | exit 0，`EXACT`，與第 3 條 7/7 相同 |
+| 5 G2-2／G2-4 | `-yy` trace：6,533 筆 open，6,028 筆成功的全部帶 fd 目標，0 筆 unresolved。`runtime`（不帶 `--legacy-plain-trace`）三項 PASS：三次 exec 的 chain、沒有 Python 路徑、opened set 等於 bundle。`parity --native-from` `EXACT`，與第 4 條 7/7 相同。三次 run 的 `python_libraries_mapped` 都是空的 |
+| 6a 被移除的選項 | 三次 `rejected` 各 5 項 PASS（`-yy`；`rejected_schedule` 50 筆成功的 open 全部帶目標） |
+| 6b–6d | 同 §18.11：developer build 基準 `EXACT` 且與第 3 條相同；serial 參考 `EXACT`；7 個 mutation 負控制都 `CAUGHT`，指定的 section `DIFFERS`，沒有 validity 問題 |
+| **verdict** | **`PASS`**（§18.4 第 1–6 條，依 §18.10 與 §18.12 修正，全部成立） |
+
+**負控制**（`negctl/`，全部抓到）：M1–M6、N1–N13 的結果與 §18.11 相同。
+
+- M1：`entrypoint_pinned`、`launcher_exact`、`entrypoint_no_measurement_surface` 失敗。
+- M4：exit／model root／GPU／輸出四項失敗，exec chain 通過。
+- N4：exit 127，`foreign copy on the search path`。
+- N5：容器 exit 0，`runtime` 的 exec chain 與 opened set 失敗（`/opt/saccade/nvidia/cu13/lib/libcublas.so.13`）。
+- N7：exit 127（`libnvinfer.so.10`）。
+- N9：四次 exec，exec chain 失敗。
+- N10–N12：exit 127，entrypoint 沒有執行，沒有輸出。
+- N13：exit 0，MOT17-05 相同。
+- 新的 N14：A2 的 plain `container_strace` 不帶 `--legacy-plain-trace` 時，Python open 與 opened set 兩項失敗，`unresolved` 各 6,028 筆；帶這個旗標時三項 PASS，報告 `legacy_plain_trace: true`。
+
+**限制**（在 §17.6、§18.11 之外）：
+
+- auditor 與 checker 都按名字分類：真實路徑的 basename、SONAME 家族。一份改了名字的外來實體檔（不是 symlink），若以非 bundle 名字被 NEEDED 或 `dlopen`，兩者都不會辨認出來；位元組的完整性仍靠安裝時的 sha256、`static` 與 PR-C3 的 MANIFEST。
+- symlink alias 的控制只在 CPU 上的真實 loader 測試裡做（§18.12）。
+
+結果目錄：`results/465_prc2_cli/full_276659a8/`；開發試做在 `results/465_prc1_dev/a3_f1d98b93/`。不納入版本控制。§18.11 的 A2 結果保留，作為沒有 `-yy` 的紀錄。
