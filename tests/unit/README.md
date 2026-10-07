@@ -37,7 +37,9 @@
 | `test_shipping_config_loader_sources.py` | system | contract | active | Source-level guards for the native shipping config (#465 PR-4a, PR-4b). |
 | `test_shipping_g2_checks.py` | system | contract | active | The shipping tree's G2 checks and model-root install (#465 PR-12). |
 | `test_shipping_link_surface.py` | system | contract | active | The shipping link surface: tracking without perception, no OpenCV (#465 PR-11). |
+| `test_shipping_measurement_surface.py` | system | contract | active | The shipping entrypoint carries no measurement surface (#465 Phase C PR-C2). |
 | `test_shipping_mot_output_oracle_pins.py` | system | contract | active | Oracle pins for the native MOT output path (#465 Phase B PR-6, U4). |
+| `test_shipping_package.py` | system | contract | active | The shipping package: MANIFEST format, builder, installer (#465 PR-C3). |
 | `test_signal_tables.py` | eval | contract | active | Unit tests for signal_tables schema helpers. |
 | `test_slim_release_manifest.py` | system | contract | active | Integrity checks for the slim release manifest. |
 | `test_summarize_relink_pairs.py` | eval | contract | active | Tests for scripts/tools/summarize_relink_pairs.py B1 output contract. |

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# status: diagnostic
 """Checks of the bundled shipping tree (#465 Phase C PR-C1).
 
 The tree is what ``cmake --install <build> --component shipping`` writes after
@@ -52,10 +53,12 @@ report records that alias targets were not checked.
 
 PR-C2 adds to ``static``: the entrypoint contains none of the byte strings in
 shipping/measurement_surface.json (no measurement hook, no developer option).
+PR-C3: ``static --manifest`` (a tree installed from the package) adds
+``MANIFEST.json`` to the layout and checks it lists the tree (manifest_tree).
 
 Usage::
 
-    check_shipping_bundle.py static --tree TREE --report static.json
+    check_shipping_bundle.py static --tree TREE [--manifest] --report static.json
     check_shipping_bundle.py sources --log-prefix DIR/ld --tree TREE --report sources.json
     check_shipping_bundle.py runtime --strace-prefix DIR/s --tree TREE \\
         --tree-mount /opt/saccade --report runtime.json
@@ -65,7 +68,6 @@ Usage::
 
 Exit 0: every check passes; 1: a check fails (named in the report); 2: error.
 """
-# status: diagnostic
 
 from __future__ import annotations
 
@@ -247,6 +249,8 @@ def cmd_static(args: argparse.Namespace) -> int:
         if p.is_file() or p.is_symlink()
     }
     want = expected_files(set_)
+    if args.manifest:
+        want.add("MANIFEST.json")
     checks["layout_exact"] = {
         "pass": present == want,
         "missing": sorted(want - present),
@@ -364,6 +368,11 @@ def cmd_static(args: argparse.Namespace) -> int:
         "baseline": {k: ".".join(map(str, v)) for k, v in g2.VERSION_BASELINE.items()},
         "over": over,
     }
+
+    if args.manifest:
+        import check_shipping_package as pkg
+
+        checks["manifest_tree"] = pkg.manifest_matches_tree(tree)
 
     report = {
         "schema": SCHEMA,
@@ -910,6 +919,11 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--entrypoint-pin", type=Path, default=ENTRYPOINT_PIN)
     s.add_argument("--launcher-source", type=Path, default=LAUNCHER_SOURCE)
     s.add_argument("--measurement-surface", type=Path, default=MEASUREMENT_SURFACE)
+    s.add_argument(
+        "--manifest",
+        action="store_true",
+        help="a tree installed from the package (PR-C3): MANIFEST.json is expected and must list the tree exactly",
+    )
     r = sub.add_parser("runtime")
     r.add_argument("--strace-prefix", type=Path, required=True)
     r.add_argument("--legacy-plain-trace", action="store_true", help=_PLAIN_HELP)
