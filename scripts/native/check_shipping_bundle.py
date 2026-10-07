@@ -391,6 +391,13 @@ def _open_path(call: str, argstr: str, path: str) -> str | None:
     return None
 
 
+# strace -yy annotates a successful open's returned fd with the opened
+# object's path (a device adds a nested "<char M:N>").
+_FD_TARGET = re.compile(r"^<(/[^<>]*)(?:<[^<>]*>)?>")
+_DIRFD_ANNOTATED = re.compile(r"^(?:AT_FDCWD|\d+)<")
+_CWD = re.compile(r"^AT_FDCWD<(/[^>]*)>,")
+
+
 def _within(path: str, root: str) -> bool:
     root = os.path.normpath(root)
     return path == root or path.startswith(root + "/")
@@ -421,6 +428,7 @@ def strace_records(
                     )
                 continue
             call, argstr, rc = m.group(1), m.group(2), int(m.group(3))
+            rest = line.strip()[m.end() :]
             strings = [
                 s.encode().decode("unicode_escape") for s in g2._STRING.findall(argstr)
             ]
@@ -434,7 +442,15 @@ def strace_records(
                 execs.append(rec)
             else:
                 resolved = _open_path(call, argstr, rec["path"])
-                rec["unresolved"] = resolved is None
+                target = _FD_TARGET.match(rest) if rc >= 0 else None
+                rec["target"] = os.path.normpath(target.group(1)) if target else None
+                cwd = _CWD.match(argstr)
+                rec["cwd"] = os.path.normpath(cwd.group(1)) if cwd else None
+                # An -yy record (annotated dirfd) that succeeded must name
+                # what it opened; without it an alias cannot be ruled out.
+                rec["unresolved"] = resolved is None or (
+                    rc >= 0 and target is None and bool(_DIRFD_ANNOTATED.match(argstr))
+                )
                 rec["raw"] = line.strip()
                 if resolved is not None:
                     rec["path"] = resolved
@@ -550,12 +566,18 @@ def cmd_rejected(args: argparse.Namespace) -> int:
     checks["exec_chain"] = exec_chain(execs, mount)
     unresolved = [o["raw"] for o in opens if o["unresolved"]]
     model_root = f"{mount}/{g2.MODEL_ROOT}"
+
+    def accessed(o: dict[str, Any]) -> list[str]:
+        """The attempted path and, through a symlink or alias, the opened one."""
+        return [p for p in (o["path"], o.get("target")) if p]
+
     touched = sorted(
         {
-            o["path"]
+            p
             for o in opens
-            if _within(o["path"], model_root)
-            or os.path.basename(o["path"]) == "libsaccade_scan_torchop.so"
+            for p in accessed(o)
+            if _within(p, model_root)
+            or os.path.basename(p) == "libsaccade_scan_torchop.so"
         }
     )
     checks["no_model_root_open"] = {
@@ -563,7 +585,7 @@ def cmd_rejected(args: argparse.Namespace) -> int:
         "attempted": touched,
         "unresolved": unresolved,
     }
-    devices = sorted({o["path"] for o in opens if _GPU_DEVICE.match(o["path"])})
+    devices = sorted({p for o in opens for p in accessed(o) if _GPU_DEVICE.match(p)})
     checks["no_gpu_device_open"] = {
         "pass": not devices and not unresolved,
         "attempted": devices,
@@ -571,11 +593,25 @@ def cmd_rejected(args: argparse.Namespace) -> int:
     }
     # The container runner mounts out_dir at /out. Include paths named by
     # the actual entrypoint arguments as well as the runner's defaults.
+    # A relative argument names a path under the process cwd. Resolve it
+    # against every cwd an AT_FDCWD annotation evidences; with none, its
+    # base cannot be established and the check fails closed.
     output_paths = {"/out/native", "/out/trace", "/out/track_report.json"}
+    cwds = sorted({o["cwd"] for o in opens if o.get("cwd")})
+    unresolved_outputs: list[str] = []
     for e in execs:
         for i, arg in enumerate(e["argv"][:-1]):
-            if arg in ("--out", "--trace", "--report"):
-                output_paths.add(os.path.normpath(e["argv"][i + 1]))
+            if arg not in ("--out", "--trace", "--report"):
+                continue
+            value = e["argv"][i + 1]
+            if os.path.isabs(value):
+                output_paths.add(os.path.normpath(value))
+            elif cwds:
+                output_paths.update(
+                    os.path.normpath(os.path.join(c, value)) for c in cwds
+                )
+            else:
+                unresolved_outputs.append(f"{arg} {value}")
     outputs = [
         str(args.out_dir / p.removeprefix("/out/"))
         for p in sorted(output_paths)
@@ -584,16 +620,22 @@ def cmd_rejected(args: argparse.Namespace) -> int:
     ]
     writes = sorted(
         {
-            o["path"]
+            p
             for o in opens
-            if o["write"] and any(_within(o["path"], p) for p in output_paths)
+            if o["write"]
+            for p in accessed(o)
+            if any(_within(p, q) for q in output_paths)
         }
     )
     checks["no_output"] = {
-        "pass": not outputs and not writes and not unresolved,
+        "pass": not outputs
+        and not writes
+        and not unresolved
+        and not unresolved_outputs,
         "found": outputs,
         "attempted": writes,
         "unresolved": unresolved,
+        "unresolved_outputs": unresolved_outputs,
     }
     report = {
         "schema": SCHEMA,

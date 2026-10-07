@@ -541,6 +541,91 @@ def test_rejected_checks_output_paths_from_argv(tmp_path: Path) -> None:
     assert not r["pass"] and not r["checks"]["no_output"]["pass"]
 
 
+def _with_args(*args: str) -> str:
+    extra = ", ".join(f'"{a}"' for a in args)
+    return LOADER.replace('"--config", "c"', f'"--config", "c", {extra}')
+
+
+@pytest.mark.parametrize("option", ["--out", "--trace", "--report"])
+def test_rejected_resolves_relative_output_args_against_the_cwd(
+    tmp_path: Path, option: str
+) -> None:
+    loader = _with_args(option, "custom_trace")
+    line = (
+        'openat(AT_FDCWD</out>, "custom_trace/detector.bin", '
+        "O_WRONLY|O_CREAT, 0666) = -1 EACCES"
+    )
+    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    assert not r["pass"] and not r["checks"]["no_output"]["pass"]
+    assert r["checks"]["no_output"]["attempted"] == ["/out/custom_trace/detector.bin"]
+
+
+def test_rejected_finds_relative_output_surviving_under_the_cwd(tmp_path: Path) -> None:
+    (tmp_path / "out" / "custom_report.json").parent.mkdir(parents=True)
+    (tmp_path / "out" / "custom_report.json").write_bytes(b"{}")
+    loader = _with_args("--report", "custom_report.json")
+    cwd = 'openat(AT_FDCWD</out>, "/etc/ld.so.cache", O_RDONLY) = 3</etc/ld.so.cache>'
+    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS, cwd], _REJECTED_LOG)
+    assert not r["pass"] and r["checks"]["no_output"]["found"]
+
+
+def test_rejected_fails_closed_on_relative_output_without_a_cwd(
+    tmp_path: Path,
+) -> None:
+    # Plain (non -yy) records carry no cwd: the argument's base is unknown.
+    loader = _with_args("--trace", "custom_trace")
+    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS], _REJECTED_LOG)
+    assert not r["pass"] and not r["checks"]["no_output"]["pass"]
+    assert r["checks"]["no_output"]["unresolved_outputs"] == ["--trace custom_trace"]
+
+
+@pytest.mark.parametrize(
+    ("line", "check", "target"),
+    [
+        (
+            'openat(AT_FDCWD</>, "/tmp/config-alias", O_RDONLY) = '
+            "3</opt/saccade/share/saccade/configs/shipping/mamba_whole_graph.resolved.json>",
+            "no_model_root_open",
+            "/opt/saccade/share/saccade/configs/shipping/mamba_whole_graph.resolved.json",
+        ),
+        (
+            'openat(AT_FDCWD</>, "/tmp/op.so", O_RDONLY|O_CLOEXEC) = '
+            "3</elsewhere/libsaccade_scan_torchop.so>",
+            "no_model_root_open",
+            "/elsewhere/libsaccade_scan_torchop.so",
+        ),
+        (
+            'openat(AT_FDCWD</>, "/dev/char/195:0", O_RDWR) = 4</dev/nvidia0<char 195:0>>',
+            "no_gpu_device_open",
+            "/dev/nvidia0",
+        ),
+        (
+            'openat(AT_FDCWD</>, "/tmp/trace-alias", O_WRONLY|O_CREAT, 0666) = '
+            "5</out/trace/detector.bin>",
+            "no_output",
+            "/out/trace/detector.bin",
+        ),
+    ],
+)
+def test_rejected_checks_the_opened_target_of_an_alias(
+    tmp_path: Path, line: str, check: str, target: str
+) -> None:
+    r = _rejected(tmp_path, [LAUNCHER, LOADER, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    assert not r["pass"] and not r["checks"][check]["pass"]
+    assert target in r["checks"][check]["attempted"]
+    assert not r["checks"][check]["unresolved"]
+
+
+def test_rejected_fails_closed_on_a_yy_open_without_its_target(
+    tmp_path: Path,
+) -> None:
+    line = 'openat(AT_FDCWD</>, "/tmp/config-alias", O_RDONLY) = 3'
+    r = _rejected(tmp_path, [LAUNCHER, LOADER, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    assert not r["pass"]
+    for check in ("no_model_root_open", "no_gpu_device_open", "no_output"):
+        assert r["checks"][check]["unresolved"] == [line]
+
+
 # ── launcher ───────────────────────────────────────────────────────────────────
 
 
