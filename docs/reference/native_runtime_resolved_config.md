@@ -1757,3 +1757,74 @@ PR-C3 是 Phase C 的第三個 PR（[Phase C scope](native_runtime_phase_c_scope
 另外 `tests/unit/test_shipping_package.py` 涵蓋 symlink member、`..` member、MANIFEST 改名、MANIFEST 格式錯誤、TARGET 為 dangling symlink 與 `install-trace` 的拒絕案例；這些在合成 package 上做，不在 3.7 GiB 的 package 上重做。
 
 **不做的**：FPS 或任何效能比較；host 經 launcher 的 parity 與 `sources`（tree 的位元組與 PR-C2 A4 正式 run 相同，第 4 條逐位元組確認）；PR-C2 的 CLI gate（6a–6d，entrypoint 沒有變）；PR-C1／C2 的 N1–N18、M1–M6（它們檢查的 tree、launcher、auditor、checker 都沒有變）；其他 GPU、其他主機、其他 glibc；minisign 簽章（PR-C4）；任何散佈（Phase C scope §4）。
+
+### 19.5 驗收
+
+同一台機器（RTX 5070 Ti Laptop，WSL2）。正式 run：commit `9217ed92`＝§19.4 的契約（`1f58aefe`）加上 runtime identity 的 republish（`chore/465-prc3-republish`；implementation 軸 286 → 287 個檔案，新增的只有 `shipping/package/install.sh`；probe 重跑，behavior `2dabed0b` 與 A4 出版相同），工作樹乾淨，契約早於任何量測。全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）；判定由 `evaluate.py` 從 run 的產物逐條讀出（`evaluation.json`）。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 工作樹乾淨；`check_runtime_identity_staleness.py --mode attested` exit 0；`git diff 1ae402c2 HEAD` 在 tree 的來源路徑上為空；operator library（`aa84cccd…`）與 pin 的 entrypoint（`92f74ef4…`）在 run 前後都等於 attestation 與 `entrypoint_pin.json`；`anchor` 與 `A_L_1` 7/7 相同，`oracle-rows` OK；安裝容器是 Ubuntu 24.04.4、glibc 2.39、`/bin/sh`＝dash、沒有 Python 與編譯器 |
+| 1 build 與安裝 | configure、build、install 都 exit 0 |
+| 2 靜態檢查 | 12 項 PASS |
+| 3 package | builder exit 0，`tree_clean: true`、`identity_current: true`；`tarball` 7 項 PASS（87 個 member、56 個檔案）；再產生一次，三個檔案逐位元組相同（tarball `21c9ac08…`，2,384,765,322 位元組；安裝器 `afa5d06a…`；digest 檔 `8876e3d3…`）；MANIFEST 的 `files` 與 `$R/tree` 逐項相同 |
+| 4 從 tarball 安裝到乾淨容器 | exit 0。`install-trace` 5 項 PASS：TARGET 只被一次 `renameat2("/install/.saccade-install.V3UXg2/x/<name>", "/install/saccade", RENAME_NOREPLACE) = 0` 碰到；其他 274 筆寫入性質的呼叫全部在 staging 之內；staging 已刪；0 筆 unresolved。安裝後的 tree：`static --manifest` 13 項 PASS，容器內 `install.sh --verify` exit 0，除 `MANIFEST.json` 外與 `$R/tree` 逐位元組相同 |
+| 5 乾淨容器執行（從 package 安裝的 tree） | exit 0；`EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7；`--against` PR-C2 A4 正式 run 的 `parity_bundle`：txt、trace、graph 計數 7/7 相同 |
+| 6 G2-2／G2-4 | `runtime` 三項 PASS；`EXACT`，與第 5 條 7/7 相同；兩次 run 的 `python_libraries_mapped` 都是空的 |
+| **verdict** | **`PASS`**（§19.4 第 1–6 條全部成立） |
+
+**安裝器負控制**（`negctl/`，全部照必須的結果）：
+
+| # | 結果 |
+|:--|:--|
+| P1 | exit 1，`sha256 is not the one in`；log 沒有 `extracting`；上層目錄不變，沒有 staging |
+| P2 | exit 1，`lib/vendor/libcublas.so.13: sha256 is not`；上層目錄不變；`tarball`：`manifest_exact`、`pinned_tree`、`metadata` 失敗 |
+| P3 | **安裝器 exit 0**（內部一致、digest 重算過的 package；digest 不是簽章）；`tarball`：`pinned_tree`、`metadata` 失敗；安裝後的 `static --manifest`：`vendor_set_pinned` 失敗 |
+| P4 | exit 1，訊息列出 `share/saccade/helper.py`；上層目錄不變 |
+| P5 | exit 1，訊息列出 `lib/vendor/libnvrtc.so.13`；上層目錄不變 |
+| P6a–d | 四種都 exit 2，`exists; nothing was changed`；上層目錄（含 TARGET 與 sentinel）不變，沒有 staging |
+| P7 | exit 1，tar 的 `No space left on device` 之後 `extraction failed`；`/install` 是空的 |
+| P8 | 5 秒 SIGTERM：最後一行是 `extracting`；上層目錄不變，沒有 staging（`timeout` exit 124） |
+| P9 | 第一個延遲（17 秒）就落在驗證期間（最後一行是 `checking 56 files against MANIFEST.json`）；上層目錄不變，沒有 staging |
+| P10a | 8 秒 SIGKILL：TARGET 不存在；staging `.saccade-install.Htt5Lc` 留下（1,769,617,041 位元組） |
+| P10b | exit 0，log 先有 `note: /install/.saccade-install.Htt5Lc is left from another installation`；那個 staging 的列表不變；`--verify` exit 0 |
+| P11 | 直接 `tar -xzf`：`install-trace` 的 `target_only_by_one_noreplace_rename`、`one_staging_directory`、`staging_removed` 失敗 |
+| P12 | `--verify` exit 1（`size is not`）；`static --manifest`：`manifest_tree`、`vendor_set_pinned` 失敗 |
+| P13a | exit 2，`no package digest` |
+| P13b | exit 1，`does not name … exactly once` |
+| P14 | exit 1，`the tarball does not hold exactly one directory` |
+| P15 | exit 2，`TARGET must not contain ':' or ';' (/install/a:b/saccade)`；上層目錄不變 |
+
+**評估器的修正（不是契約的修改）**：第一次評估（`evaluate.r1.py`）把 P10a 判成失敗：它用遞迴的列表找留下的 staging，把 staging 底下的子目錄也算成「留下的 staging」（6 筆）。§19.4 要的是 TARGET 不存在、staging 留下，這兩點在產物上都成立；`evaluate.py` 改成只看上層目錄那一層，其他判定沒有變。`evaluation.json` sha256：`6f8e1210…`。
+
+**PR-12 N2 的狀態**：package 的安裝路徑上，被拒絕的安裝不會在 TARGET 留下任何東西（P1、P2、P4、P5、P7、P8、P9、P13–P15），而成功的安裝在 TARGET 上只有一次不會取代既有項目的 rename（第 4 條）；直接解開的對照（P11）被同一個檢查抓到。`cmake --install` 仍然不是 atomic（開發路徑，§19.1）。
+
+結果目錄：`results/465_prc3_package/full_9217ed92/`（`run.sh`、`evaluate.py`、`evaluation.json`、`tree/`、`dist/`、`dist_again/`、`static*.json`、`package.json`、`install/`、`install_trace.json`、`installed/`、`anchor/`、`oracle_rows/`、`container_*`、`parity_*`、`runtime.json`、`negctl/`、`pins_before.txt`／`pins_after.txt`、`validity_*.txt`）；開發試做在 `results/465_prc3_dev/t1/`。不納入版本控制。
+
+### 19.6 限制
+
+- **digest 不是簽章**（P3）：安裝器擋得住損壞、被截斷、被改了一個檔案而 MANIFEST 沒跟著改的 package，擋不住一份重新包過而內部一致、digest 也重算的 package。抓到 P3 的是 `tarball` 檢查與 `static --manifest`（對照 repository 的 pin），使用者手上沒有它們；簽章是 PR-C4。
+- **安裝器驗不了自己**：`<name>.install.sh` 在 digest 裡，但驗證要由使用者做（`sha256sum -c`，PR-C4 之後是簽章）。
+- **安裝後的 `--verify` 信任 tree 裡的 MANIFEST**：同時改了檔案與 MANIFEST 的 tree 會通過 `--verify`（同上一點，要 PR-C4 簽 MANIFEST 或由 digest 對照）。
+- **digest 與解開讀 tarball 兩次**：在兩次讀取之間被換掉的 tarball，會以解開時的內容與它自己的 MANIFEST 比對。能在安裝期間改寫 tarball 的人通常也能改寫安裝器，這裡不宣稱防得住。
+- **SIGKILL 會留下 staging**（P10a）：TARGET 不受影響；staging（最多約 tree 的大小）要使用者自己刪，下一次安裝會指出它。
+- **`RENAME_NOREPLACE` 依賴檔案系統**：GNU coreutils 在檔案系統不支援時會退回「先檢查再 rename」，那時「TARGET 在安裝期間出現」的保護不是 atomic。本 run 只在 WSL2 的 ext4（bind mount）上確認是 `renameat2(…, RENAME_NOREPLACE) = 0`；其他檔案系統沒有驗證。
+- **安裝器只在 dash（容器）上正式驗證**：單元測試在 host 的 `sh`（bash 的 POSIX 模式）上跑；其他 sh 實作沒有驗證。
+- **決定性只在同一台機器上確認**：tarball 的 gzip 位元組依賴 Python 的 zlib；換一台機器重新產生不保證相同。發佈的是 digest 綁定的那一份。
+- **P9 的時機**：逐檔驗證在 page cache 熱的時候只有約 2 秒，P9 靠事先宣告的延遲清單命中；它證明的是「這次落在驗證期間的 SIGTERM」，不是任意時間點。
+- 其餘同 §17.6、§18.6：只支援 sm_120、只在這一台 WSL2 機器與 driver 上驗證；launcher 的 sh 不在保護範圍；package 約 2.2 GiB（tarball）／3.7 GiB（安裝後）；**沒有散佈**（Phase C scope §4 的授權確認之前不公開 package）。
+
+### 19.7 重現
+
+```bash
+cmake --install build-release --component shipping --prefix <tree>      # §18.7 configure + build
+.venv/bin/python scripts/native/build_shipping_package.py --tree <tree> --out <dist> --static-report static.json
+.venv/bin/python scripts/native/check_shipping_package.py tarball --dist <dist> --report package.json
+bash scripts/native/run_package_container.sh install-strace <dist> <parent>/saccade <out>
+.venv/bin/python scripts/native/check_shipping_package.py install-trace --strace-prefix <out>/strace/i \
+    --target /install/saccade --package <name> --report install_trace.json
+.venv/bin/python scripts/native/check_shipping_bundle.py static --tree <parent>/saccade --manifest --report static.json
+sh <dist>/<name>.install.sh <dist>/<name>.tar.gz <target>          # an end user's install
+sh <dist>/<name>.install.sh --verify <target>
+bash results/465_prc3_package/<label>/run.sh && .venv/bin/python results/465_prc3_package/<label>/evaluate.py
+```
