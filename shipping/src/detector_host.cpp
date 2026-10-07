@@ -84,10 +84,12 @@ std::string dims_text(const nvinfer1::Dims& d) {
     return o.str();
 }
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
 void next_ulp_inplace(at::Tensor t) {
     auto first = t.view({-1}).narrow(0, 0, 1);
     first.copy_(at::nextafter(first, at::full_like(first, INFINITY)));
 }
+#endif
 
 }  // namespace
 
@@ -110,6 +112,7 @@ void s2_run(const S2Level levels[3], int num_classes, int k, float sx, float sy,
                      class_idx.data_ptr<std::int64_t>(), k, sx, sy, raw, scaled, stream);
 }
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
 const char* detector_mutation_name(DetectorMutation m) {
     switch (m) {
         case DetectorMutation::None: return "none";
@@ -132,6 +135,7 @@ DetectorMutation parse_detector_mutation(const std::string& name) {
     }
     throw std::invalid_argument("unknown detector mutation " + name);
 }
+#endif
 
 std::vector<std::string> mapped_python_libraries() {
     std::ifstream maps("/proc/self/maps");
@@ -163,7 +167,10 @@ struct DetectorHost::Impl {
     float sx = 0.0f, sy = 0.0f;
     at::Tensor resized, feats[3], head_out[6], s2_raw, s2_scaled;
     DetectorStages stages;
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     DetectorMutation mutation = DetectorMutation::None;
+    bool stale_graph_input = false;
+#endif
 
     // Whole-detect graphs, keyed (frame h, frame w, image h, image w).
     struct Captured {
@@ -288,7 +295,11 @@ const HeadLoadReport& DetectorHost::load_report() const { return impl_->report; 
 
 const DetectorStages& DetectorHost::stages() const { return impl_->stages; }
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
 void DetectorHost::set_mutation_for_measurement(DetectorMutation m) { impl_->mutation = m; }
+
+void DetectorHost::set_stale_graph_input_for_measurement(bool on) { impl_->stale_graph_input = on; }
+#endif
 
 void DetectorHost::set_image_dims(int height, int width) {
     if (height <= 0 || width <= 0) run_error("image dims must be positive");
@@ -313,9 +324,9 @@ namespace {
 
 // _whole_graph_fn on the current (guarded) stream: resize -> engine -> head ->
 // S2 into m.s2_raw / m.s2_scaled (k rows). The eager mutations of the engine
-// and head outputs apply only when `mutate` is set.
+// and head outputs (measurement variant) apply only when `mutate` is set.
 template <class Impl>
-void whole_forward(Impl& m, const at::Tensor& frame, int k, bool mutate) {
+void whole_forward(Impl& m, const at::Tensor& frame, int k, [[maybe_unused]] bool mutate) {
     const DetectorPlan& p = m.plan;
     // resize: F.interpolate(frame[None], (img, img), mode="bilinear", align_corners=False).
     m.resized = at::upsample_bilinear2d(frame, at::IntArrayRef{p.img_size, p.img_size}, false,
@@ -334,7 +345,9 @@ void whole_forward(Impl& m, const at::Tensor& frame, int k, bool mutate) {
         }
     }
     if (!m.engine->enqueue_v3(m.raw_stream)) run_error("backbone enqueue failed");
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     if (mutate && m.mutation == DetectorMutation::BackboneUlp) next_ulp_inplace(m.feats[0]);
+#endif
 
     // head: the PR-1L artifact.
     const auto out = m.head.forward({m.feats[0], m.feats[1], m.feats[2]});
@@ -350,7 +363,9 @@ void whole_forward(Impl& m, const at::Tensor& frame, int k, bool mutate) {
         }
         m.head_out[i] = t;
     }
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     if (mutate && m.mutation == DetectorMutation::HeadUlp) next_ulp_inplace(m.head_out[0]);
+#endif
 
     // S2.
     S2Level levels[3];
@@ -376,7 +391,11 @@ DetectionRows DetectorHost::detect(const float* frame_chw, int height, int width
     const auto f32 = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA, 0);
     const at::Tensor frame =
         at::from_blob(const_cast<float*>(frame_chw), {1, 3, height, width}, f32);
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     const int k = m.mutation == DetectorMutation::S2TopK ? p.max_det - 1 : p.max_det;
+#else
+    const int k = p.max_det;
+#endif
     whole_forward(m, frame, k, /*mutate=*/true);
 
     std::vector<float> raw(static_cast<std::size_t>(k) * 6), scaled(raw.size());
@@ -391,6 +410,7 @@ DetectionRows DetectorHost::detect(const float* frame_chw, int height, int width
     if (cudaStreamSynchronize(m.raw_stream) != cudaSuccess) run_error("stream synchronize failed");
 
     int rows = k;
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     if (m.mutation != DetectorMutation::None && m.mutation != DetectorMutation::BackboneUlp &&
         m.mutation != DetectorMutation::HeadUlp && m.mutation != DetectorMutation::S2TopK) {
         if (m.mutation == DetectorMutation::S2Order && k >= 2) {
@@ -420,6 +440,7 @@ DetectionRows DetectorHost::detect(const float* frame_chw, int height, int width
         h2d(m.s2_raw, raw);
         h2d(m.s2_scaled, scaled);
     }
+#endif
 
     m.stages.resized = m.resized.data_ptr<float>();
     for (int i = 0; i < 3; ++i) m.stages.features[i] = m.feats[i].data_ptr<float>();
@@ -443,12 +464,14 @@ DetectionRows DetectorHost::detect(const float* frame_chw, int height, int width
 const WholeGraphStats& DetectorHost::graph_stats() const { return impl_->graph_stats; }
 
 int DetectorHost::detect_graphed(const float* frame_chw, int height, int width,
-                                 const DeviceRowsOut& out, bool refresh_input) {
+                                 const DeviceRowsOut& out) {
     Impl& m = *impl_;
     const DetectorPlan& p = m.plan;
     if (!m.scales_set) run_error("set_image_dims was not called");
     if (height <= 0 || width <= 0) run_error("frame dims must be positive");
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     if (m.mutation != DetectorMutation::None) run_error("detector mutations are eager-only");
+#endif
     if (out.capacity < p.max_det) run_error("row buffers smaller than max_det");
     if (!same(runtime_readback(), p.runtime)) run_error("runtime requirements changed after load");
     c10::cuda::CUDAStreamGuard guard(m.stream);
@@ -492,7 +515,11 @@ int DetectorHost::detect_graphed(const float* frame_chw, int height, int width,
         it = m.graphs.emplace(key, std::move(c)).first;
     }
     Impl::Captured& c = it->second;
-    if (refresh_input) c.static_in.copy_(frame);
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
+    if (!m.stale_graph_input) c.static_in.copy_(frame);
+#else
+    c.static_in.copy_(frame);
+#endif
     c.graph->replay();
     ++m.graph_stats.replays;
 

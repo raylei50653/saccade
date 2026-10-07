@@ -26,6 +26,7 @@ void cuda_check(cudaError_t e, const char* what) {
 
 }  // namespace
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
 const char* double_buffer_mutation_name(DoubleBufferMutation m) {
     switch (m) {
         case DoubleBufferMutation::None: return "none";
@@ -44,6 +45,7 @@ DoubleBufferMutation parse_double_buffer_mutation(const std::string& name) {
     }
     throw std::invalid_argument("unknown double-buffer mutation " + name);
 }
+#endif
 
 DoubleBufferRuntime::Stream::Stream() {
     cuda_check(cudaStreamCreateWithFlags(&s, cudaStreamNonBlocking), "stream");
@@ -170,7 +172,11 @@ SequenceRunResult DoubleBufferRuntime::run_sequence(const std::filesystem::path&
     IngestHost ingest(ingest_plan_, input, *decoder_, main, /*pools=*/2);
     const SequenceGeometry geometry{input.im_width, input.im_height};
     PostDetectorHost post(cfg_, geometry, *pipeline_, main, GraphMode::Captured);
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     post.set_stale_gmc_input_for_measurement(mutation_ == DoubleBufferMutation::StaleGmcInput);
+    detector_->set_stale_graph_input_for_measurement(mutation_ ==
+                                                     DoubleBufferMutation::StaleDetectorInput);
+#endif
     SequenceOutput output(output_plan_);
     for (bool& b : ev.normalize_pending) b = false;
 
@@ -204,8 +210,7 @@ SequenceRunResult DoubleBufferRuntime::run_sequence(const std::filesystem::path&
         cuda_check(cudaEventRecord(ev.normalized[p], detect), "normalized");
         ev.normalize_pending[p] = true;
         pd.rows = detector_->detect_graphed(ingest.frame_chw(p), ingest.height(), ingest.width(),
-                                            det_[p]->out(),
-                                            mutation_ != DoubleBufferMutation::StaleDetectorInput);
+                                            det_[p]->out());
         cuda_check(cudaEventRecord(ev.ready[p], detect), "ready");
         return pd;
     };
@@ -222,6 +227,7 @@ SequenceRunResult DoubleBufferRuntime::run_sequence(const std::filesystem::path&
             int read_parity = pd.parity;
             int rows = pd.rows;
             cuda_check(cudaStreamWaitEvent(main, ev.ready[pd.parity], 0), "ready");
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
             if (mutation_ == DoubleBufferMutation::SwappedDetectionParity) {
                 read_parity = 1 - pd.parity;
                 if (next) {
@@ -229,6 +235,7 @@ SequenceRunResult DoubleBufferRuntime::run_sequence(const std::filesystem::path&
                     rows = next->rows;
                 }
             }
+#endif
             (pd.path == DecodePath::HardwareBatched ? st.hardware_decodes : st.decoupled_decodes)++;
             const FrameResult r =
                 post.process(det_[read_parity]->view(rows), ingest.frame_chw(pd.parity));

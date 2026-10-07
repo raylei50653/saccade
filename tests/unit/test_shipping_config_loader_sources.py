@@ -116,6 +116,10 @@ _DETECTOR_OBJECTS = {"perception/trt_engine.hpp"}
 # double buffer (PR-10).
 _RUNTIME = {"serial_runtime.cpp", "double_buffer_runtime.cpp"}
 _RUNTIME_OBJECTS = {"tracking/pipeline.hpp"}
+# The shipping entrypoint and its developer build share their sequence loop,
+# trace and report (PR-C2: shipping/tools/track_driver.hpp).
+_TRACK_TOOLS = {"saccade_track.cpp", "saccade_track_measurement.cpp"}
+_TRACK_DRIVER = {"track_driver.hpp"}
 
 
 def test_shipping_sources_include_only_admitted_headers() -> None:
@@ -129,6 +133,7 @@ def test_shipping_sources_include_only_admitted_headers() -> None:
             | (_GPU_OBJECTS if p.name in _GPU_BUILDER else set())
             | (_DETECTOR_OBJECTS if p.name in _DETECTOR_HOST else set())
             | (_RUNTIME_OBJECTS if p.name in _RUNTIME else set())
+            | (_TRACK_DRIVER if p.name in _TRACK_TOOLS else set())
         )
         for line in p.read_text().splitlines():
             m = include.match(line)
