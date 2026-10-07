@@ -1490,3 +1490,45 @@ N10–N12 用的都是 N4 的 tree，被放進去的 `libcublas.so.13` 還在。
 - probe 只證明 auditor 能載入、`la_version` 推得出 `<prefix>`。auditor 的位元組沒有在執行時驗證，同 §17.6「auditor 只管路徑，不管位元組」。安裝後的完整性驗證留給 PR-C3 的 MANIFEST。
 
 結果目錄：`results/465_prc2_cli/full_036d6b95/`（`run.sh`、`tree/`、`static.json`、`ld_host/`、`sources.json`、`anchor/`、`oracle_rows/`、`parity_*`、`container_*`、`runtime.json`、`cli/`、`negctl/`、`pins_before.txt`／`pins_after.txt`、`validity_sources.txt`）；開發試做在 `results/465_prc1_dev/a2_71acc415/`。不納入版本控制。§17.5 與 §18.5 的結果保留原處，是舊 launcher 的紀錄。
+
+### 18.12 修正 A3：auditor 以真實路徑分類、trace 帶 fd 目標
+
+Review 在 `93f4de43`（#531 合入後的 #527 head）提出三點。都不是在正式 shipping run 裡觀察到的 parity 違反，是保護與證據的覆蓋缺口：
+
+- **auditor 可被 symlink 別名繞過**：`la_objopen` 先用請求路徑的 basename 分類，名字不屬於 bundle 集合也不是 operator library 就直接放行，不呼叫 `realpath`。真實 loader 的 CPU 控制：直接載入外部的 `libfoo.so` 會 exit 127；經 `payload → libfoo.so` 載入則 exit 0，執行了外部的函式。
+- **`runtime` 對不完整的 trace 仍回報 PASS**：parser 已經把 `openat(7, "payload", O_RDONLY) = 9` 這類紀錄標成 unresolved，但 `runtime` 的三項檢查都沒有看 unresolved。
+- **trace 收集沒有 `-yy`**：A2 正式 run 的 6,533 筆 open 都沒有 fd 目標，所以 alias 檢查在那份證據上沒有作用。
+
+**改了什麼**（`f1d98b93`、`06002566`）：
+
+- **auditor**：`la_objopen` 先 `realpath`，再用請求名與真實名兩個 basename 分類（bundle 名字、operator library、Python）。解析不了的物件（vDSO）只有在兩項檢查都不適用於它的請求名時才放行。
+- **`runtime`**：unresolved 紀錄讓 Python open 與 opened set 兩項失敗。
+- **`runtime`／`rejected` 預設要求 fd 目標**：成功的 open 沒有回傳 fd 的目標註記，就算 unresolved。`--legacy-plain-trace` 用來評估沒有 `-yy` 的歷史 log，報告會記下 alias 目標沒有被檢查。fd 目標若不是路徑（例如 `pipe:[N]`），也算有名字。
+- **fd 目標按 SONAME 家族分類**：`-yy` 把 base system 的 SONAME symlink 標成帶完整版本號的實體檔（`libstdc++.so.6` → `libstdc++.so.6.0.33`、`libz.so.1` → `libz.so.1.3`），所以分類時逐段去掉尾端的版本號，直到某個名字能分類。這跟 SONAME 本身一樣是按名字判斷，不是按位元組。名字像 base system、實際指向第三方物件的 alias 仍然算外來的。
+- **`run_shipping_container.sh bundle-strace`** 改成 `strace -ff -qq -yy`。PR-12 的 `strace` 模式不變。
+- **測試**：
+  - 真實 loader：經 `payload` alias 的外部 `libfoo.so`，exit 127，沒有輸出（舊 auditor 會印出外部的結果）。
+  - `runtime` 遇到 unresolved（dirfd 沒有註記、cwd 相對路徑、不完整、`-yy` 紀錄缺目標）時失敗。
+  - plain log 必須加 `--legacy-plain-trace` 才能評估。
+  - SONAME 家族分類。
+- **沒有動的**：launcher、entrypoint pin、operator library、engine、model root、`third_party_set.json`、安裝規則。
+
+**開發期間已經看到的**（`results/465_prc1_dev/a3_f1d98b93/`，不是正式 run）：
+
+- `static` 12 項通過。
+- `bundle-strace`（MOT17-05，`-yy`）exit 0。
+- 第一次 `runtime` 的 opened set 失敗：兩筆 base system 的版本號檔名被當成外來的（上面 SONAME 家族那一點的由來）。修正後三項 PASS，0 筆 unresolved。
+
+**契約修正**（正式 run 之前寫定）：正式 run＝§18.10 修正後的整個 run，在 A3 的乾淨 commit 上重跑，以下不同：
+
+- 第 5 條、N5、N9、N10–N12 的 `bundle-strace`，以及第 6a 條與 N9 直接呼叫的 strace，都帶 `-yy`。
+- `runtime` 與 `rejected` 不帶 `--legacy-plain-trace`。第 5 條要求另外成立：Python open 與 opened set 兩項的 `unresolved` 為空。
+- **新的負控制**：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N14 | 對 A2 正式 run（`full_036d6b95`）的 plain `container_strace` 跑 `runtime` | 不帶 `--legacy-plain-trace`：Python open、opened set 兩項失敗，`unresolved` 列出缺目標的 open；帶 `--legacy-plain-trace`：三項 PASS，報告 `legacy_plain_trace: true` |
+
+symlink alias 的控制只在 CPU 上的真實 loader 測試裡做（上面的測試）。在 shipping tree 上要做出「非 bundle 名字的 NEEDED 經 alias 指到外來 bundle 物件」，必須改 pin 的 ELF，所以不做。
+
+其他 gate、負控制、判準與「不做的」不變。結果放在 `results/465_prc2_cli/full_<A3 commit>/`；§18.11 的 A2 結果保留，作為沒有 `-yy` 的證據紀錄。
