@@ -216,9 +216,9 @@ def test_closure_reports_a_missing_vendor_object(tmp_path: Path) -> None:
 LOADER = (
     'execve("/lib64/ld-linux-x86-64.so.2", ["/lib64/ld-linux-x86-64.so.2", "--library-path", '
     '"/opt/saccade/lib/vendor", "--audit", "/opt/saccade/lib/saccade_loader_audit.so", "--argv0", '
-    '"/opt/saccade/bin/saccade_track", "/opt/saccade/libexec/saccade_track", "--config", "c"], 0x0 /* 3 vars */) = 0'
+    '"/opt/saccade/bin/saccade_track", "/opt/saccade/libexec/saccade_track", "--config", "/cfg/c.json"], 0x0 /* 3 vars */) = 0'
 )
-LAUNCHER = 'execve("/opt/saccade/bin/saccade_track", ["/opt/saccade/bin/saccade_track", "--config", "c"], 0x0 /* 3 vars */) = 0'
+LAUNCHER = 'execve("/opt/saccade/bin/saccade_track", ["/opt/saccade/bin/saccade_track", "--config", "/cfg/c.json"], 0x0 /* 3 vars */) = 0'
 
 
 def _runtime_tree(tmp_path: Path) -> tuple[Path, Path, list[str]]:
@@ -324,6 +324,33 @@ def test_runtime_rejects(tmp_path: Path, mutate: Any, check: str) -> None:
 # ── measurement surface (PR-C2) ────────────────────────────────────────────────
 
 SURFACE = REPO / "shipping" / "measurement_surface.json"
+
+
+@pytest.mark.parametrize(
+    ("line", "check", "target"),
+    [
+        (
+            'openat(AT_FDCWD</>, "/tmp/lib-alias", O_RDONLY) = '
+            "3</usr/lib/libpython3.12.so.1.0>",
+            "g2_2_g2_4_no_python_triton_open",
+            "/usr/lib/libpython3.12.so.1.0",
+        ),
+        (
+            'openat(AT_FDCWD</>, "/tmp/lib-alias", O_RDONLY|O_CLOEXEC) = '
+            "3</opt/saccade/nvidia/cu13/lib/libx.so.1>",
+            "opened_set_is_the_bundle",
+            "/opt/saccade/nvidia/cu13/lib/libx.so.1",
+        ),
+    ],
+)
+def test_runtime_checks_the_opened_target_of_an_alias(
+    tmp_path: Path, line: str, check: str, target: str
+) -> None:
+    _, _, opens = _runtime_tree(tmp_path)
+    r = _runtime(tmp_path, [LAUNCHER, LOADER, *opens, line])
+    assert not r["pass"] and not r["checks"][check]["pass"]
+    c = r["checks"][check]
+    assert target in c.get("attempted", c.get("foreign_opens", []))
 
 
 def test_measurement_surface_sees_one_token(tmp_path: Path) -> None:
@@ -532,7 +559,8 @@ def test_rejected_detects_surviving_output(tmp_path: Path, name: str) -> None:
 
 def test_rejected_checks_output_paths_from_argv(tmp_path: Path) -> None:
     loader = LOADER.replace(
-        '"--config", "c"', '"--config", "c", "--trace", "/out/custom_trace"'
+        '"--config", "/cfg/c.json"',
+        '"--config", "/cfg/c.json", "--trace", "/out/custom_trace"',
     )
     line = (
         'openat(AT_FDCWD, "/out/custom_trace/detector.bin", O_WRONLY|O_CREAT, 0666) = 8'
@@ -543,7 +571,9 @@ def test_rejected_checks_output_paths_from_argv(tmp_path: Path) -> None:
 
 def _with_args(*args: str) -> str:
     extra = ", ".join(f'"{a}"' for a in args)
-    return LOADER.replace('"--config", "c"', f'"--config", "c", {extra}')
+    return LOADER.replace(
+        '"--config", "/cfg/c.json"', f'"--config", "/cfg/c.json", {extra}'
+    )
 
 
 @pytest.mark.parametrize("option", ["--out", "--trace", "--report"])
@@ -624,6 +654,44 @@ def test_rejected_fails_closed_on_a_yy_open_without_its_target(
     assert not r["pass"]
     for check in ("no_model_root_open", "no_gpu_device_open", "no_output"):
         assert r["checks"][check]["unresolved"] == [line]
+
+
+@pytest.mark.parametrize(
+    ("args", "line"),
+    [
+        (
+            ("--model-root", "/tmp/models"),
+            'openat(AT_FDCWD</>, "/tmp/models/configs/shipping/'
+            'mamba_whole_graph.resolved.json", O_RDONLY) = 3</tmp/models/configs/'
+            "shipping/mamba_whole_graph.resolved.json>",
+        ),
+        (
+            ("--model-root", "models"),
+            'openat(AT_FDCWD</work>, "models/models/yolo/x.engine", O_RDONLY) = -1 ENOENT',
+        ),
+        (
+            (),
+            'openat(AT_FDCWD</>, "/cfg/c.json", O_RDONLY) = 3</cfg/c.json>',
+        ),
+    ],
+)
+def test_rejected_checks_the_model_inputs_named_by_argv(
+    tmp_path: Path, args: tuple[str, ...], line: str
+) -> None:
+    loader = _with_args(*args) if args else LOADER
+    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS, line], _REJECTED_LOG)
+    assert not r["pass"] and not r["checks"]["no_model_root_open"]["pass"]
+    assert r["checks"]["no_model_root_open"]["attempted"]
+
+
+def test_rejected_fails_closed_on_relative_model_root_without_a_cwd(
+    tmp_path: Path,
+) -> None:
+    loader = _with_args("--model-root", "models")
+    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS], _REJECTED_LOG)
+    c = r["checks"]["no_model_root_open"]
+    assert not r["pass"] and not c["pass"]
+    assert c["unresolved_inputs"] == ["--model-root models"]
 
 
 # ── launcher ───────────────────────────────────────────────────────────────────

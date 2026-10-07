@@ -398,6 +398,36 @@ _DIRFD_ANNOTATED = re.compile(r"^(?:AT_FDCWD|\d+)<")
 _CWD = re.compile(r"^AT_FDCWD<(/[^>]*)>,")
 
 
+def _accessed(o: dict[str, Any]) -> list[str]:
+    """The attempted path and, through a symlink or alias, the opened one."""
+    return [p for p in (o["path"], o.get("target")) if p]
+
+
+def _argv_paths(
+    execs: list[dict[str, Any]], options: tuple[str, ...], cwds: list[str]
+) -> tuple[set[str], list[str]]:
+    """Paths named by ``options`` in any exec's argv, as absolute paths.
+
+    A relative value names a path under the process cwd: it is resolved
+    against every cwd an AT_FDCWD annotation evidences. With none, its base
+    cannot be established and it is returned as unresolved.
+    """
+    paths: set[str] = set()
+    unresolved: list[str] = []
+    for e in execs:
+        for i, arg in enumerate(e["argv"][:-1]):
+            if arg not in options:
+                continue
+            value = e["argv"][i + 1]
+            if os.path.isabs(value):
+                paths.add(os.path.normpath(value))
+            elif cwds:
+                paths.update(os.path.normpath(os.path.join(c, value)) for c in cwds)
+            else:
+                unresolved.append(f"{arg} {value}")
+    return paths, unresolved
+
+
 def _within(path: str, root: str) -> bool:
     root = os.path.normpath(root)
     return path == root or path.startswith(root + "/")
@@ -498,7 +528,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
     checks: dict[str, Any] = {}
     checks["g2_2_g2_4_exec_chain"] = exec_chain(execs, mount)
     forbidden = sorted(
-        {o["path"] for o in opens if g2._FORBIDDEN_OPEN.search(o["path"])}
+        {p for o in opens for p in _accessed(o) if g2._FORBIDDEN_OPEN.search(p)}
     )
     checks["g2_2_g2_4_no_python_triton_open"] = {
         "pass": not forbidden,
@@ -514,13 +544,22 @@ def cmd_runtime(args: argparse.Namespace) -> int:
     auditor_sha = g2.sha256_file(tree / AUDITOR)
     opened: dict[str, str] = {}
     foreign: list[str] = []
-    for o in opens:
-        p = o["path"]
-        if o["rc"] < 0 or not g2._SHARED_OBJECT.search(os.path.basename(p)):
-            continue
-        norm = os.path.normpath(p)
+    for norm in sorted(
+        {
+            os.path.normpath(p)
+            for o in opens
+            if o["rc"] >= 0
+            for p in _accessed(o)
+            if g2._SHARED_OBJECT.search(os.path.basename(p))
+        }
+    ):
         if norm.startswith(mount + "/"):
-            opened[norm] = g2.sha256_file(tree / norm[len(mount) + 1 :])
+            local = tree / norm[len(mount) + 1 :]
+            if not local.is_file():
+                # Opened inside the mount but not in the inspected tree.
+                foreign.append(norm)
+                continue
+            opened[norm] = g2.sha256_file(local)
             if (
                 os.path.basename(norm) in bundled
                 and os.path.dirname(norm) != f"{mount}/{VENDOR}"
@@ -565,27 +604,30 @@ def cmd_rejected(args: argparse.Namespace) -> int:
     }
     checks["exec_chain"] = exec_chain(execs, mount)
     unresolved = [o["raw"] for o in opens if o["unresolved"]]
-    model_root = f"{mount}/{g2.MODEL_ROOT}"
-
-    def accessed(o: dict[str, Any]) -> list[str]:
-        """The attempted path and, through a symlink or alias, the opened one."""
-        return [p for p in (o["path"], o.get("target")) if p]
-
+    cwds = sorted({o["cwd"] for o in opens if o.get("cwd")})
+    # The mounted tree's model root, plus the model root and model inputs the
+    # run's own arguments name: a rejected run reads none of them.
+    model_inputs, unresolved_inputs = _argv_paths(
+        execs, ("--model-root", "--config", "--lineage", "--attestation"), cwds
+    )
+    model_inputs.add(f"{mount}/{g2.MODEL_ROOT}")
     touched = sorted(
         {
             p
             for o in opens
-            for p in accessed(o)
-            if _within(p, model_root)
+            for p in _accessed(o)
+            if any(_within(p, m) for m in model_inputs)
             or os.path.basename(p) == "libsaccade_scan_torchop.so"
         }
     )
     checks["no_model_root_open"] = {
-        "pass": not touched and not unresolved,
+        "pass": not touched and not unresolved and not unresolved_inputs,
+        "model_inputs": sorted(model_inputs),
         "attempted": touched,
         "unresolved": unresolved,
+        "unresolved_inputs": unresolved_inputs,
     }
-    devices = sorted({p for o in opens for p in accessed(o) if _GPU_DEVICE.match(p)})
+    devices = sorted({p for o in opens for p in _accessed(o) if _GPU_DEVICE.match(p)})
     checks["no_gpu_device_open"] = {
         "pass": not devices and not unresolved,
         "attempted": devices,
@@ -593,25 +635,10 @@ def cmd_rejected(args: argparse.Namespace) -> int:
     }
     # The container runner mounts out_dir at /out. Include paths named by
     # the actual entrypoint arguments as well as the runner's defaults.
-    # A relative argument names a path under the process cwd. Resolve it
-    # against every cwd an AT_FDCWD annotation evidences; with none, its
-    # base cannot be established and the check fails closed.
-    output_paths = {"/out/native", "/out/trace", "/out/track_report.json"}
-    cwds = sorted({o["cwd"] for o in opens if o.get("cwd")})
-    unresolved_outputs: list[str] = []
-    for e in execs:
-        for i, arg in enumerate(e["argv"][:-1]):
-            if arg not in ("--out", "--trace", "--report"):
-                continue
-            value = e["argv"][i + 1]
-            if os.path.isabs(value):
-                output_paths.add(os.path.normpath(value))
-            elif cwds:
-                output_paths.update(
-                    os.path.normpath(os.path.join(c, value)) for c in cwds
-                )
-            else:
-                unresolved_outputs.append(f"{arg} {value}")
+    output_paths, unresolved_outputs = _argv_paths(
+        execs, ("--out", "--trace", "--report"), cwds
+    )
+    output_paths |= {"/out/native", "/out/trace", "/out/track_report.json"}
     outputs = [
         str(args.out_dir / p.removeprefix("/out/"))
         for p in sorted(output_paths)
@@ -623,7 +650,7 @@ def cmd_rejected(args: argparse.Namespace) -> int:
             p
             for o in opens
             if o["write"]
-            for p in accessed(o)
+            for p in _accessed(o)
             if any(_within(p, q) for q in output_paths)
         }
     )
