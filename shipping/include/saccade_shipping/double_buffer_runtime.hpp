@@ -49,8 +49,10 @@
 
 namespace saccade::shipping {
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
 // Developer measurement only (the parity harness's negative controls): each
-// breaks one graph-ownership or parity rule above on purpose.
+// breaks one graph-ownership or parity rule above on purpose. Measurement
+// variant only (SACCADE_SHIPPING_MEASUREMENT_HOOKS, #465 PR-C2).
 enum class DoubleBufferMutation {
     None,
     StaleDetectorInput,      // the whole-detect graph replays without the frame copied in
@@ -60,6 +62,7 @@ enum class DoubleBufferMutation {
 };
 const char* double_buffer_mutation_name(DoubleBufferMutation m);
 DoubleBufferMutation parse_double_buffer_mutation(const std::string& name);
+#endif
 
 class DoubleBufferRuntime {
 public:
@@ -74,7 +77,7 @@ public:
 
     // As SerialRuntime::run_sequence. An observer gets each frame's detector
     // rows read back from the parity's detection buffer (an extra main-stream
-    // sync per frame; developer measurement only).
+    // sync per frame; saccade_track --trace).
     SequenceRunResult run_sequence(const std::filesystem::path& sequence_dir, int max_frames = 0,
                                    FrameObserver* observer = nullptr);
 
@@ -85,7 +88,9 @@ public:
     const WholeGraphStats& detector_graph_stats() const;
     int sequences_run() const { return sequences_run_; }
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     void set_mutation_for_measurement(DoubleBufferMutation m) { mutation_ = m; }
+#endif
 
 private:
     struct Stream {
@@ -109,7 +114,9 @@ private:
     std::unique_ptr<DetectorHost> detector_;
     std::unique_ptr<PerceptionPipeline> pipeline_;
     std::unique_ptr<DetectionBuffers> det_[2];
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     DoubleBufferMutation mutation_ = DoubleBufferMutation::None;
+#endif
     int sequences_run_ = 0;
 };
 

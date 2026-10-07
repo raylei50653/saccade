@@ -110,15 +110,18 @@ public:
     const PostDetectorPlan& plan() const { return plan_; }
     // Empty tracker updates run so far (the pre-roll); for tests.
     int pre_roll_updates_run() const { return pre_roll_run_; }
-    // Override the pre-roll count (developer measurement only; the shipping
-    // value is the plan's). Must be called before the first process().
-    void set_pre_roll_for_measurement(int updates);
 
     GraphMode graph_mode() const { return graphs_; }
     const PostGraphStats& graph_stats() const { return graph_stats_; }
-    // GraphMode::Captured only (developer measurement: a negative control):
-    // GMC replays without copying the frame into its captured input buffer.
+
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
+    // Measurement variant only (#465 PR-C2). Override the pre-roll count (the
+    // shipping value is the plan's); before the first process().
+    void set_pre_roll_for_measurement(int updates);
+    // GraphMode::Captured only (a negative control): GMC replays without
+    // copying the frame into its captured input buffer.
     void set_stale_gmc_input_for_measurement(bool on) { stale_gmc_input_ = on; }
+#endif
 
 private:
     struct DeviceBuffers;
@@ -139,7 +142,9 @@ private:
     GraphMode graphs_;
     std::unique_ptr<Graphs> g_;
     PostGraphStats graph_stats_;
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     bool stale_gmc_input_ = false;
+#endif
     bool pre_rolled_ = false;
     int pre_roll_run_ = 0;
 };

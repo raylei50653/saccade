@@ -1,0 +1,29 @@
+{
+  "schema": "saccade.shipping_measurement_surface/v1",
+  "reading": "Byte strings the shipping entrypoint must not contain (#465 Phase C PR-C2, docs/reference/native_runtime_resolved_config.md §18): the measurement hooks and the developer options live only in the _measurement variant of the runtime libraries and in saccade_track_measurement (SACCADE_SHIPPING_MEASUREMENT_HOOKS). Checked on saccade_track after every build (cmake/check_no_measurement_surface.cmake) and on the installed tree (scripts/native/check_shipping_bundle.py static, entrypoint_no_measurement_surface). 'Mutation', '_mutation', ' mutation' and 'mutation_' cover the mutation enums, their name / parse functions, the setters and members, and the error messages; '_for_measurement' the measurement setters; then the developer build's name and options and every mutation name. Not 'measurement' or 'mutation' alone: the tracker's Kalman filter names a 'measurement' and the config checks have 'PermutationOf' (both in a debug build of the shipping entrypoint). tests/unit/test_shipping_measurement_surface.py keeps the list complete against the sources.",
+  "forbidden": [
+    "Mutation",
+    "_mutation",
+    " mutation",
+    "mutation_",
+    "_for_measurement",
+    "saccade_track_measurement",
+    "--measurement-mutation",
+    "--schedule",
+    "--max-frames",
+    "shared_post_host",
+    "stale_image_dims",
+    "gmc_previous_frame",
+    "stale_detector_input",
+    "stale_gmc_input",
+    "swapped_detection_parity",
+    "stale_graph_input",
+    "backbone_ulp",
+    "head_ulp",
+    "s2_threshold",
+    "s2_topk",
+    "s2_order",
+    "box_ulp",
+    "force_decoupled"
+  ]
+}

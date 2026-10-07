@@ -13,6 +13,13 @@ counts vs the frames) must see a one-count difference, the oracle-log parser
 must attribute captures to the sequence block they fall in, and the
 double-buffer oracle (an ``anchor`` run) must fail closed on each validity
 field.
+
+Phase C PR-C2 splits the entrypoint: the shipping ``saccade_track`` gets its
+interface only and its report must carry no ``measurement`` record; the
+negative controls, the serial override and ``--max-frames`` run the developer
+build ``saccade_track_measurement``, whose report must echo exactly what was
+asked. The command line the harness builds for the shipping binary holds no
+developer option, and ``--against`` also compares the native graph counts.
 """
 
 # scope: system
@@ -116,9 +123,8 @@ def _good_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     }
     rep = {
         "format": T.TRACK_REPORT_FORMAT,
+        "entrypoint": "saccade_track",
         "schedule": "serial",
-        "mutation": "none",
-        "max_frames": 0,
         "python_libraries_mapped": [],
         "sequence_order": ["S1", "S2"],
         "detector": {
@@ -141,9 +147,13 @@ def _good_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     "path,value",
     [
         (("format",), "x"),
+        (("format",), "saccade.native_track_report/v1"),
+        (("entrypoint",), "saccade_track_measurement"),
         (("schedule",), "double_buffer"),
-        (("mutation",), "gmc_previous_frame"),
-        (("max_frames",), 30),
+        (
+            ("measurement",),
+            {"mutation": "none", "schedule_override": None, "max_frames": 0},
+        ),
         (("python_libraries_mapped",), ["libpython3.12.so"]),
         (("sequence_order",), ["S2", "S1"]),
         (("detector", "plan", "op_library", "from_attestation"), False),
@@ -158,21 +168,180 @@ def _good_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
 )
 def test_report_problems_fail_closed(path: tuple[str, ...], value: Any) -> None:
     rep, att, lineage = _good_report()
-    assert T.report_problems(rep, att, lineage, ["S1", "S2"], "none", None) == []
+    args = (att, lineage, ["S1", "S2"], "shipping", "none", None)
+    assert T.report_problems(rep, *args) == []
     bad = copy.deepcopy(rep)
     node = bad
     for k in path[:-1]:
         node = node[k]
     node[path[-1]] = value
-    assert T.report_problems(bad, att, lineage, ["S1", "S2"], "none", None) != []
+    assert T.report_problems(bad, *args) != []
 
 
 def test_report_problems_checks_the_schedule() -> None:
     rep, att, lineage = _good_report()
     rep["schedule"] = "double_buffer"
-    args = (att, lineage, ["S1", "S2"], "none", None)
+    args = (att, lineage, ["S1", "S2"], "shipping", "none", None)
     assert T.report_problems(rep, *args, "double_buffer") == []
     assert T.report_problems(rep, *args, "serial") != []
+
+
+def _measurement_report(
+    mutation: str, max_frames: int | None, schedule: str
+) -> dict[str, Any]:
+    rep, _, _ = _good_report()
+    rep["entrypoint"] = "saccade_track_measurement"
+    rep["schedule"] = schedule
+    rep["measurement"] = T.expected_measurement(mutation, max_frames, schedule)
+    return rep
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("mutation", "none"),
+        ("mutation", "stale_image_dims"),
+        ("schedule_override", None),
+        ("max_frames", 0),
+        ("max_frames", 31),
+    ],
+)
+def test_report_problems_measurement_record(key: str, value: Any) -> None:
+    _, att, lineage = _good_report()
+    rep = _measurement_report("gmc_previous_frame", 30, "serial")
+    args = (
+        att,
+        lineage,
+        ["S1", "S2"],
+        "measurement",
+        "gmc_previous_frame",
+        30,
+        "serial",
+    )
+    assert T.report_problems(rep, *args) == []
+    bad = copy.deepcopy(rep)
+    bad["measurement"][key] = value
+    assert T.report_problems(bad, *args) != []
+    # A measurement report never passes as a shipping one, and the reverse.
+    assert (
+        T.report_problems(
+            rep, att, lineage, ["S1", "S2"], "shipping", "none", None, "serial"
+        )
+        != []
+    )
+    ship, _, _ = _good_report()
+    assert T.report_problems(ship, *args) != []
+
+
+def _parity_args(tmp_path: Path, *extra: str) -> list[str]:
+    return [
+        "parity",
+        "--out",
+        str(tmp_path / "out"),
+        "--oracle-rows",
+        str(tmp_path),
+        "--oracle-txt",
+        str(tmp_path),
+        *extra,
+    ]
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ("--mutation", "stale_gmc_input"),
+        ("--schedule", "serial"),
+        ("--max-frames", "5"),
+    ],
+)
+def test_developer_options_need_the_measurement_entrypoint(
+    tmp_path: Path, extra: tuple[str, ...], capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as e:
+        T.main(_parity_args(tmp_path, *extra))
+    assert e.value.code == 2
+    assert "--entrypoint measurement" in capsys.readouterr().err
+
+
+def _run_track_cmd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **kw: Any
+) -> list[str]:
+    seen: list[list[str]] = []
+
+    class _Done:
+        returncode = 0
+
+    def fake_run(cmd: list[str], **_: Any) -> Any:
+        seen.append(cmd)
+        return _Done()
+
+    monkeypatch.setattr(T.subprocess, "run", fake_run)
+    args = T.argparse.Namespace(
+        model_root=Path("."),
+        track_binary=Path("bin/x"),
+        no_trace=False,
+        track_library_path=None,
+        sequences=["S1"],
+        **kw,
+    )
+    T.run_track(args, tmp_path)
+    return seen[0]
+
+
+def test_shipping_command_line_has_no_developer_option(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cmd = _run_track_cmd(
+        tmp_path,
+        monkeypatch,
+        entrypoint="shipping",
+        mutation="none",
+        schedule="double_buffer",
+        max_frames=None,
+    )
+    options = {a for a in cmd if a.startswith("--")}
+    assert options == {
+        "--config",
+        "--lineage",
+        "--attestation",
+        "--model-root",
+        "--out",
+        "--report",
+        "--trace",
+    }
+    m = _run_track_cmd(
+        tmp_path,
+        monkeypatch,
+        entrypoint="measurement",
+        mutation="gmc_previous_frame",
+        schedule="serial",
+        max_frames=30,
+    )
+    i = m.index("--measurement-mutation")
+    assert m[i + 1] == "gmc_previous_frame"
+    assert {"--schedule", "--max-frames"} <= set(m)
+
+
+def _per_seq(txt: str, graphs: dict[str, int] | None) -> dict[str, Any]:
+    out: dict[str, Any] = {"native_txt_sha256": txt, "native_trace_sha256": "t"}
+    if graphs is not None:
+        out["graph_captures"] = {"native": graphs}
+    return out
+
+
+def test_compare_against_graph_counts(tmp_path: Path) -> None:
+    g = {"detector_captures": 1, "nms_replays": 10}
+    prior = tmp_path / "prior.json"
+    prior.write_text(T.json.dumps({"per_sequence": {"S1": _per_seq("a", g)}}))
+    same = {"per_sequence": {"S1": _per_seq("a", dict(g))}}
+    assert T.compare_against(same, prior)["identical"]
+    one = {"per_sequence": {"S1": _per_seq("a", {**g, "nms_replays": 9})}}
+    r = T.compare_against(one, prior)
+    assert not r["identical"]
+    assert r["differing"] == [{"sequence": "S1", "key": "graph_captures.native"}]
+    # A prior without graph counts cannot vouch for them.
+    prior.write_text(T.json.dumps({"per_sequence": {"S1": _per_seq("a", None)}}))
+    assert not T.compare_against(same, prior)["identical"]
 
 
 def test_negative_controls_name_a_section_and_a_schedule() -> None:

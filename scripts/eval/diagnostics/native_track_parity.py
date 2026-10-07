@@ -21,7 +21,15 @@ functions, operator library bound by the realization attestation):
 
 The native side is ``build/shipping/saccade_track`` (own process, no Python):
 every requested sequence in one process, in the oracle run's order, with
-``--trace`` (each frame's detector rows) and ``--report``. Sections:
+``--trace`` (each frame's detector rows) and ``--report``. #465 Phase C PR-C2
+(docs §18): the shipping entrypoint has no developer option, so the harness
+gives it only its interface (config, lineage, attestation, model root, out,
+report, trace, sequences). Negative controls (``--mutation``), the serial
+override (``--schedule serial``) and ``--max-frames`` need ``--entrypoint
+measurement``: the developer build ``build/shipping/saccade_track_measurement``
+(the measurement variant of the runtime libraries; not installed). The report
+must name the entrypoint that was asked for, and a shipping report must carry
+no ``measurement`` record. Sections:
 
 ``detector``        native detector rows at the end-to-end wiring vs the
                     oracle's ``_run_detect`` rows, per frame, bit for bit;
@@ -41,11 +49,12 @@ No tolerance: ``EXACT`` only when every section is, on every sequence.
 ``--no-trace`` runs ``saccade_track`` without ``--trace`` (the shipping
 configuration: the trace reads each frame's rows back with an extra sync, which
 could hide a race) and reports ``detector`` as ``NOT_RUN``.
-``--mutation`` runs a ``saccade_track`` negative control of the schedule's
-runtime; ``--ref-edit`` changes one character of the first sequence's oracle
-txt in memory (comparator check); ``--against`` compares the native txt and
-trace hashes with an earlier report. ``--track-binary`` runs another build of
-the entrypoint (#465 PR-11: the ``-DSACCADE_WITH_OPENCV=OFF`` build).
+``--mutation`` runs a ``saccade_track_measurement`` negative control of the
+schedule's runtime; ``--ref-edit`` changes one character of the first
+sequence's oracle txt in memory (comparator check); ``--against`` compares the
+native txt and trace hashes, and (double buffer) the native graph counts, with
+an earlier report. ``--track-binary`` runs another build of the entrypoint
+(#465 PR-11: the ``-DSACCADE_WITH_OPENCV=OFF`` build).
 #465 PR-12 (the installed shipping tree, docs §16): ``--model-root`` runs it on
 the tree's model root (its config, lineage, attestation and the files they
 bind) and ``--track-library-path`` gives that process alone an
@@ -63,10 +72,13 @@ Usage (GPU, gpu0 lease; R=results/465_pr10_track/<label>)::
         oracle-rows --out $R/oracle_rows
     .venv/bin/python scripts/eval/diagnostics/native_track_parity.py \\
         parity --out $R/parity --oracle-rows $R/oracle_rows --oracle-txt $R/anchor \\
-        [--mutation M | --ref-edit] [--against $R/parity/report.json]
+        [--ref-edit] [--against $R/parity/report.json]
     .venv/bin/python scripts/eval/diagnostics/native_track_parity.py \\
-        parity --schedule serial --out $R/serial --oracle-rows $R/oracle_rows \\
-        [--sequences S,..] [--max-frames N]
+        parity --entrypoint measurement --out $R/negctl --oracle-rows $R/oracle_rows \\
+        --oracle-txt $R/anchor --mutation M
+    .venv/bin/python scripts/eval/diagnostics/native_track_parity.py \\
+        parity --entrypoint measurement --schedule serial --out $R/serial \\
+        --oracle-rows $R/oracle_rows [--sequences S,..] [--max-frames N] [--mutation M]
 
 Exit 0: EXACT / negative control caught; 1: a difference; 2: error.
 """
@@ -89,8 +101,14 @@ from typing import Any
 project_root = Path(__file__).resolve().parents[3]
 
 SCHEMA = "saccade.native_track_parity/v1"
-TRACK_REPORT_FORMAT = "saccade.native_track_report/v1"
+TRACK_REPORT_FORMAT = "saccade.native_track_report/v2"
 TRACK = "build/shipping/saccade_track"
+MEASUREMENT_TRACK = "build/shipping/saccade_track_measurement"
+# --entrypoint -> the name the report must carry, and the default binary.
+ENTRYPOINTS = {
+    "shipping": ("saccade_track", TRACK),
+    "measurement": ("saccade_track_measurement", MEASUREMENT_TRACK),
+}
 DETECTOR_HARNESS = "scripts/eval/diagnostics/native_detector_parity.py"
 INGEST_HARNESS = "scripts/eval/diagnostics/native_ingest_parity.py"
 DET_RECORD = struct.Struct("<3i")  # frame, n, is_tiled
@@ -314,11 +332,24 @@ def compare_graphs(
 # ── validity ───────────────────────────────────────────────────────────────────
 
 
+def expected_measurement(
+    mutation: str, max_frames: int | None, schedule: str
+) -> dict[str, Any]:
+    """The ``measurement`` record saccade_track_measurement writes for the
+    options run_track gives it."""
+    return {
+        "mutation": mutation,
+        "schedule_override": "serial" if schedule == "serial" else None,
+        "max_frames": max_frames or 0,
+    }
+
+
 def report_problems(
     rep: dict[str, Any],
     att: dict[str, Any],
     lineage: dict[str, Any],
     sequences: list[str],
+    entrypoint: str,
     mutation: str,
     max_frames: int | None,
     schedule: str = "serial",
@@ -329,12 +360,17 @@ def report_problems(
         problems.append(
             f"report {rep.get('format')!r} schedule {rep.get('schedule')!r}"
         )
-    if rep.get("mutation") != mutation:
+    name = ENTRYPOINTS[entrypoint][0]
+    if rep.get("entrypoint") != name:
+        problems.append(f"report entrypoint {rep.get('entrypoint')!r} != {name!r}")
+    if entrypoint == "shipping":
+        if "measurement" in rep:
+            problems.append("a shipping saccade_track report with a measurement record")
+    elif rep.get("measurement") != expected_measurement(mutation, max_frames, schedule):
         problems.append(
-            f"saccade_track mutation {rep.get('mutation')!r} != {mutation!r}"
+            f"saccade_track_measurement measurement {rep.get('measurement')!r} "
+            "differs from the request"
         )
-    if rep.get("max_frames") != (max_frames or 0):
-        problems.append("saccade_track max_frames differs from the request")
     if rep.get("python_libraries_mapped") != []:
         problems.append(
             f"Python mapped in saccade_track: {rep.get('python_libraries_mapped')}"
@@ -377,6 +413,7 @@ def report_problems(
 def run_track(args: argparse.Namespace, out: Path) -> tuple[int, Path]:
     report = out / "track_report.json"
     root = args.model_root
+    # The shipping interface (saccade_track has nothing else, PR-C2).
     cmd = [
         str(project_root / args.track_binary),
         "--config", str(root / det.RESOLVED_CONFIG),
@@ -385,14 +422,15 @@ def run_track(args: argparse.Namespace, out: Path) -> tuple[int, Path]:
         "--model-root", str(root),
         "--out", str(out / "native"),
         "--report", str(report),
-        "--measurement-mutation", args.mutation,
     ]  # fmt: skip
     if not args.no_trace:
         cmd += ["--trace", str(out / "trace")]
-    if args.schedule == "serial":
-        cmd += ["--schedule", "serial"]
-    if args.max_frames:
-        cmd += ["--max-frames", str(args.max_frames)]
+    if args.entrypoint == "measurement":
+        cmd += ["--measurement-mutation", args.mutation]
+        if args.schedule == "serial":
+            cmd += ["--schedule", "serial"]
+        if args.max_frames:
+            cmd += ["--max-frames", str(args.max_frames)]
     cmd += [str(Path(det.DATA_ROOT) / det.SPLIT / s) for s in args.sequences]
     env = None
     if args.track_library_path is not None:
@@ -414,6 +452,12 @@ def compare_against(report: dict[str, Any], prior_path: Path) -> dict[str, Any]:
                 continue
             if old is None or old.get(key) != cur[key]:
                 diffs.append({"sequence": seq, "key": key})
+        # The native graph capture / replay counts (double buffer, PR-C2).
+        if "graph_captures" in cur:
+            ours = cur["graph_captures"]["native"]
+            theirs = (old or {}).get("graph_captures", {}).get("native")
+            if ours != theirs:
+                diffs.append({"sequence": seq, "key": "graph_captures.native"})
     same_set = set(prior["per_sequence"]) == set(report["per_sequence"])
     return {
         "identical": same_set and not diffs,
@@ -503,6 +547,7 @@ def run_parity(args: argparse.Namespace) -> int:
             att,
             lineage,
             args.sequences,
+            args.entrypoint,
             args.mutation,
             args.max_frames,
             args.schedule,
@@ -636,6 +681,7 @@ def run_parity(args: argparse.Namespace) -> int:
         "git": det._git_state(),
         "attestation_sha256": det._sha256_file(project_root / det.ATTESTATION),
         "lineage_sha256": det._sha256_file(project_root / det.LINEAGE),
+        "entrypoint": args.entrypoint,
         "track_binary": str(args.track_binary),
         "track_binary_sha256": det._sha256_file(project_root / args.track_binary),
         "model_root": str(args.model_root),
@@ -724,10 +770,19 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--against", type=Path, default=None)
     q.add_argument("--no-trace", action="store_true")
     q.add_argument(
+        "--entrypoint",
+        choices=sorted(ENTRYPOINTS),
+        default="shipping",
+        help="shipping: saccade_track, its interface only; measurement: the "
+        "developer build saccade_track_measurement (needed for --mutation, "
+        "--schedule serial and --max-frames)",
+    )
+    q.add_argument(
         "--track-binary",
         type=Path,
-        default=Path(TRACK),
-        help="the saccade_track to run (relative to the repository root)",
+        default=None,
+        help="the binary to run (relative to the repository root; default: the "
+        "entrypoint's build/shipping/ target)",
     )
     q.add_argument(
         "--model-root",
@@ -750,6 +805,15 @@ def main(argv: list[str] | None = None) -> int:
         "running one; --track-binary names the binary that ran it",
     )
     args = ap.parse_args(sys.argv[1:] if argv is None else argv)
+    if args.entrypoint == "shipping" and (
+        args.mutation != "none" or args.schedule == "serial" or args.max_frames
+    ):
+        ap.error(
+            "--mutation, --schedule serial and --max-frames are not options of the "
+            "shipping saccade_track: use --entrypoint measurement"
+        )
+    if args.track_binary is None:
+        args.track_binary = Path(ENTRYPOINTS[args.entrypoint][1])
 
     args.out = args.out.resolve()
     if args.out.exists() and any(args.out.iterdir()):
@@ -772,12 +836,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.against is not None:
         args.against = args.against.resolve()
     if args.native_from is not None:
-        if args.mutation != "none" or args.no_trace:
-            ap.error("--native-from judges a plain traced run")
+        if args.entrypoint != "shipping" or args.no_trace:
+            ap.error("--native-from judges a plain traced shipping run")
         args.native_from = args.native_from.resolve()
     elif not (project_root / args.track_binary).exists():
         ap.error(
-            f"{args.track_binary} not built (cmake --build build --target saccade_track)"
+            f"{args.track_binary} not built (cmake --build build --target "
+            f"{ENTRYPOINTS[args.entrypoint][0]})"
         )
     from scripts.provenance.run_manifest import open_run
 

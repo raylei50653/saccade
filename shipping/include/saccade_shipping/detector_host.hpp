@@ -67,8 +67,11 @@ struct HeadLoadReport {
     std::string torch_version;
 };
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
 // Developer measurement only (the parity harness's negative controls): each
-// mutates one stage on purpose; never set by a shipping caller.
+// mutates one stage on purpose. Declared only in the measurement variant of
+// the library (SACCADE_SHIPPING_MEASUREMENT_HOOKS, #465 PR-C2); the shipping
+// objects have no mutation code.
 enum class DetectorMutation {
     None,
     BackboneUlp,  // p3 element 0 moved by one ulp after the engine
@@ -80,6 +83,7 @@ enum class DetectorMutation {
 };
 const char* detector_mutation_name(DetectorMutation m);
 DetectorMutation parse_detector_mutation(const std::string& name);
+#endif
 
 // Device destination of one frame's rows: boxes [n*4], scores [n], int32
 // classes [n], capacity >= max_det.
@@ -133,13 +137,16 @@ public:
     // One frame through the whole-detect graph (see above), enqueued on the
     // host's stream; does not synchronize. `frame_chw` must stay unchanged
     // until the stream has passed this call. Returns the row count (max_det).
-    // Mutations are eager-only: refused here. `refresh_input` false skips the
-    // static-input copy (developer measurement only: a negative control).
-    int detect_graphed(const float* frame_chw, int height, int width, const DeviceRowsOut& out,
-                       bool refresh_input = true);
+    // Mutations are eager-only: refused here.
+    int detect_graphed(const float* frame_chw, int height, int width, const DeviceRowsOut& out);
     const WholeGraphStats& graph_stats() const;
 
+#ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
     void set_mutation_for_measurement(DetectorMutation m);
+    // detect_graphed replays without copying the frame into the graph's
+    // static input (a negative control).
+    void set_stale_graph_input_for_measurement(bool on);
+#endif
 
 private:
     struct Impl;
