@@ -34,6 +34,8 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -228,6 +230,15 @@ PROBE = (
 )
 
 
+def _yy(line: str) -> str:
+    """A plain absolute-path open as strace -yy records it: the cwd on
+    AT_FDCWD and, when it succeeded, the opened file on the returned fd."""
+    m = re.match(r'^openat\(AT_FDCWD, "([^"]*)"(.*)\) = (\d+)$', line)
+    if m:
+        return f'openat(AT_FDCWD</>, "{m[1]}"{m[2]}) = {m[3]}<{os.path.normpath(m[1])}>'
+    return line.replace("openat(AT_FDCWD, ", "openat(AT_FDCWD</>, ", 1)
+
+
 def _runtime_tree(tmp_path: Path) -> tuple[Path, Path, list[str]]:
     tree = tmp_path / "tree"
     for d in ("lib/vendor", "share/saccade/configs/shipping", "share/saccade/build"):
@@ -251,7 +262,7 @@ def _runtime_tree(tmp_path: Path) -> tuple[Path, Path, list[str]]:
         'openat(AT_FDCWD, "/opt/saccade/share/saccade/build/libop.so", O_RDONLY|O_CLOEXEC) = 3',
         'openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3',
     ]
-    return tree, set_path, opens
+    return tree, set_path, [_yy(x) for x in opens]
 
 
 def _write_strace(st: Path, lines: list[str], probe: list[str] | None) -> None:
@@ -263,7 +274,10 @@ def _write_strace(st: Path, lines: list[str], probe: list[str] | None) -> None:
 
 
 def _runtime(
-    tmp_path: Path, lines: list[str], probe: list[str] | None = None
+    tmp_path: Path,
+    lines: list[str],
+    probe: list[str] | None = None,
+    plain: bool = False,
 ) -> dict[str, Any]:
     tree, set_path, _ = _runtime_tree(tmp_path)
     _write_strace(tmp_path / "st", lines, [PROBE] if probe is None else probe)
@@ -281,6 +295,7 @@ def _runtime(
             str(report),
             "--third-party-set",
             str(set_path),
+            *(["--legacy-plain-trace"] if plain else []),
         ]
     )
     return json.loads(report.read_text())
@@ -335,6 +350,49 @@ def test_runtime_rejects(tmp_path: Path, mutate: Any, check: str) -> None:
         (tmp_path / "tree/nvidia/cu13/lib/libx.so.1").write_bytes(b"y")
     r = _runtime(tmp_path, mutate([LAUNCHER, LOADER, *opens]))
     assert not r["checks"][check]["pass"]
+
+
+_PLAIN_OPENS = [
+    'openat(AT_FDCWD, "/opt/saccade/lib/saccade_loader_audit.so", O_RDONLY|O_CLOEXEC) = 3',
+    'openat(AT_FDCWD, "/opt/saccade/lib/vendor/libx.so.1", O_RDONLY|O_CLOEXEC) = 3',
+    'openat(AT_FDCWD, "/opt/saccade/share/saccade/build/libop.so", O_RDONLY|O_CLOEXEC) = 3',
+]
+
+
+def test_runtime_needs_fd_targets_unless_legacy(tmp_path: Path) -> None:
+    _runtime_tree(tmp_path)
+    r = _runtime(tmp_path, [LAUNCHER, LOADER, *_PLAIN_OPENS])
+    assert not r["pass"] and not r["legacy_plain_trace"]
+    for check in ("g2_2_g2_4_no_python_triton_open", "opened_set_is_the_bundle"):
+        assert r["checks"][check]["unresolved"] == _PLAIN_OPENS
+    legacy = _runtime(tmp_path, [LAUNCHER, LOADER, *_PLAIN_OPENS], plain=True)
+    assert legacy["pass"] and legacy["legacy_plain_trace"], legacy["checks"]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'openat(7, "payload", O_RDONLY) = 9',
+        'openat(AT_FDCWD, "payload", O_RDONLY) = 9',
+        'openat(7, "x.so", O_RDONLY <unfinished ...>',
+        'openat(AT_FDCWD</>, "/tmp/payload", O_RDONLY) = 9',
+    ],
+)
+def test_runtime_fails_closed_on_unresolved_open(tmp_path: Path, line: str) -> None:
+    _, _, opens = _runtime_tree(tmp_path)
+    for plain in (False, True):
+        r = _runtime(tmp_path, [LAUNCHER, LOADER, *opens, line], plain=plain)
+        assert not r["pass"]
+        for check in ("g2_2_g2_4_no_python_triton_open", "opened_set_is_the_bundle"):
+            assert not r["checks"][check]["pass"]
+            assert r["checks"][check]["unresolved"] == [line]
+
+
+def test_runtime_accepts_a_non_path_fd_target(tmp_path: Path) -> None:
+    _, _, opens = _runtime_tree(tmp_path)
+    line = 'openat(AT_FDCWD</>, "/proc/self/fd/0", O_RDONLY) = 9<pipe:[123]>'
+    r = _runtime(tmp_path, [LAUNCHER, LOADER, *opens, line])
+    assert r["pass"], r["checks"]
 
 
 _FAILED_PROBE = PROBE.removesuffix(" = 0") + " = -1 ENOENT"
@@ -440,6 +498,7 @@ def _rejected(
     log: list[str],
     outputs: bool = False,
     probe: list[str] | None = None,
+    plain: bool = False,
 ) -> dict[str, Any]:
     st = tmp_path / "st"
     _write_strace(st, lines, [PROBE] if probe is None else probe)
@@ -463,17 +522,19 @@ def _rejected(
             "/opt/saccade",
             "--report",
             str(report),
+            *(["--legacy-plain-trace"] if plain else []),
         ]
     )
     return json.loads(report.read_text())
 
 
 _REJECTED_LOG = ["saccade_track: unknown argument --measurement-mutation", "exit=2"]
-_REJECTED_OPENS = [
+_REJECTED_PLAIN = [
     'openat(AT_FDCWD, "/opt/saccade/lib/saccade_loader_audit.so", O_RDONLY|O_CLOEXEC) = 3',
     'openat(AT_FDCWD, "/opt/saccade/lib/vendor/libx.so.1", O_RDONLY|O_CLOEXEC) = 3',
     'openat(AT_FDCWD, "/usr/lib/wsl/lib/libcuda.so.1", O_RDONLY|O_CLOEXEC) = 3',
 ]
+_REJECTED_OPENS = [_yy(x) for x in _REJECTED_PLAIN]
 
 
 def test_rejected_pass(tmp_path: Path) -> None:
@@ -655,7 +716,9 @@ def test_rejected_fails_closed_on_relative_output_without_a_cwd(
 ) -> None:
     # Plain (non -yy) records carry no cwd: the argument's base is unknown.
     loader = _with_args("--trace", "custom_trace")
-    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS], _REJECTED_LOG)
+    r = _rejected(
+        tmp_path, [LAUNCHER, loader, *_REJECTED_PLAIN], _REJECTED_LOG, plain=True
+    )
     assert not r["pass"] and not r["checks"]["no_output"]["pass"]
     assert r["checks"]["no_output"]["unresolved_outputs"] == ["--trace custom_trace"]
 
@@ -739,7 +802,9 @@ def test_rejected_fails_closed_on_relative_model_root_without_a_cwd(
     tmp_path: Path,
 ) -> None:
     loader = _with_args("--model-root", "models")
-    r = _rejected(tmp_path, [LAUNCHER, loader, *_REJECTED_OPENS], _REJECTED_LOG)
+    r = _rejected(
+        tmp_path, [LAUNCHER, loader, *_REJECTED_PLAIN], _REJECTED_LOG, plain=True
+    )
     c = r["checks"]["no_model_root_open"]
     assert not r["pass"] and not c["pass"]
     assert c["unresolved_inputs"] == ["--model-root models"]
@@ -871,6 +936,46 @@ def test_auditor_fails_closed_on_a_planted_rpath_copy(tmp_path: Path) -> None:
         "foreign copy on the search path" in refused.stderr
         and "nvidia/libfoo.so" in refused.stderr
     )
+
+
+@_NEEDS_LOADER
+def test_auditor_classifies_a_symlink_alias_by_its_real_name(tmp_path: Path) -> None:
+    p = _audit_prefix(tmp_path)
+    # a foreign libfoo.so (no SONAME, so NEEDED is the link name) and an
+    # alias to it under a name that is not bundled
+    _cc("-shared", "-fPIC", "-o", str(p / "nvidia/libfoo.so"), str(p / "src/foo2.c"))
+    (p / "nvidia/payload").symlink_to("libfoo.so")
+    for name, lib in (("direct", "libfoo.so"), ("alias", "payload")):
+        _cc(
+            "-o",
+            str(p / f"libexec/{name}"),
+            str(p / "src/main.c"),
+            f"-L{p / 'nvidia'}",
+            f"-l:{lib}",
+            "-Wl,--disable-new-dtags,-rpath,$ORIGIN/../nvidia",
+        )
+
+    def run(name: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                str(LDSO),
+                "--library-path",
+                str(p / "lib/vendor"),
+                "--audit",
+                str(p / "lib/saccade_loader_audit.so"),
+                str(p / f"libexec/{name}"),
+            ],
+            capture_output=True,
+            text=True,
+            env={},
+        )
+
+    direct = run("direct")
+    assert direct.returncode == 127 and direct.stdout == "", direct.stderr
+    alias = run("alias")
+    # the foreign foo() must not run through the alias either
+    assert alias.returncode == 127 and alias.stdout == "", (alias.stdout, alias.stderr)
+    assert "bundled library mapped from outside lib/vendor" in alias.stderr
 
 
 def _launch(

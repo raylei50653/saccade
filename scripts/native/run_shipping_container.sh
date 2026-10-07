@@ -16,7 +16,10 @@
 # Bundle modes (PR-C1, docs §17): the tree carries its third-party set at
 # lib/vendor and bin/saccade_track is the launcher; no DEPS directory is
 # mounted and LD_LIBRARY_PATH is not set. CONTAINER_EXTRA (whitespace-split)
-# adds docker run arguments, for the negative controls.
+# adds docker run arguments, for the negative controls. bundle-strace records
+# with -yy (A3): every fd is annotated with the file it refers to, so the
+# checks see the object behind a symlink or alias, not only the path asked
+# for. The PR-12 strace mode is unchanged.
 #
 # Usage: run_shipping_container.sh pristine|strace TREE DEPS OUT [SEQUENCE...]
 #        run_shipping_container.sh bundle|bundle-strace TREE OUT [SEQUENCE...]
@@ -73,8 +76,10 @@ ARGS=(--config $M/configs/shipping/mamba_whole_graph.resolved.json
       --model-root $M --out /out/native --report /out/track_report.json --trace /out/trace)
 for s in "${SEQS[@]}"; do ARGS+=("/data/MOT17/train/$s"); done
 CMD=(/opt/saccade/bin/saccade_track "${ARGS[@]}")
-if [ "$MODE" = strace ] || [ "$MODE" = bundle-strace ]; then
+if [ "$MODE" = strace ]; then
     CMD=(strace -ff -qq -s 4096 -e trace=execve,execveat,open,openat -o /out/strace/s "${CMD[@]}")
+elif [ "$MODE" = bundle-strace ]; then
+    CMD=(strace -ff -qq -yy -s 4096 -e trace=execve,execveat,open,openat -o /out/strace/s "${CMD[@]}")
 fi
 DOCKER=(docker run --rm --network none --user "$(id -u):$(id -g)"
         --gpus all -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,video

@@ -13,10 +13,14 @@
  *                 if such a candidate exists on disk, the process exits 127.
  *                 Relative candidates (an empty RUNPATH entry is the working
  *                 directory) are treated the same for every name.
- *   la_objopen    every mapped object (its realpath) with a bundled name must
- *                 come from <prefix>/lib/vendor/, the operator library from
- *                 its model root path; nothing named libpython* /
- *                 libtorch_python*.
+ *   la_objopen    every mapped object is resolved (realpath) before it is
+ *                 classified, by its mapped name and by its real name, so a
+ *                 symlink alias (payload -> libfoo.so) is classified as
+ *                 libfoo.so (A3). A bundled name must come from
+ *                 <prefix>/lib/vendor/, the operator library from its model
+ *                 root path; nothing named libpython* / libtorch_python*. An
+ *                 object that cannot be resolved (the vDSO) passes only when
+ *                 neither check applies to its mapped name.
  *
  *   la_version    with SACCADE_AUDIT_PROBE=1, once <prefix> is derived,
  *                 writes kReady to stdout and exits 0 before the program
@@ -146,11 +150,15 @@ unsigned int la_objopen(struct link_map *map, Lmid_t lmid, uintptr_t *cookie) {
     const char *path = map->l_name;
     if (path == NULL || path[0] == '\0') return 0;
     const char *base = base_name(path);
-    if (is_python(base)) fail("Python library mapped", path);
-    int bundled = is_bundled(base), op = strcmp(base, base_name(g_op_library)) == 0;
-    if (!bundled && !op) return 0;
     char real[PATH_MAX];
-    if (realpath(path, real) == NULL) fail("cannot resolve a mapped object", path);
+    int resolved = realpath(path, real) != NULL;
+    const char *real_base = resolved ? base_name(real) : base;
+    if (is_python(base) || is_python(real_base)) fail("Python library mapped", path);
+    const char *op_base = base_name(g_op_library);
+    int bundled = is_bundled(base) || is_bundled(real_base);
+    int op = strcmp(base, op_base) == 0 || strcmp(real_base, op_base) == 0;
+    if (!bundled && !op) return 0;
+    if (!resolved) fail("cannot resolve a mapped object", path);
     if (bundled && !in_vendor(real)) fail("bundled library mapped from outside lib/vendor", path);
     if (op && strcmp(real, g_op_library) != 0) fail("operator library mapped from another path", path);
     return 0;

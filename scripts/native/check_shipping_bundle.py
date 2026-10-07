@@ -40,8 +40,12 @@ Subcommands:
              of the operator library or of a GPU device node, and no output
              (including trace files and failed write attempts). Relative
              opens require strace -yy dirfd/cwd annotations; unresolved or
-             incomplete opens fail closed. Historical absolute-path logs
-             remain usable.
+             incomplete opens fail closed.
+
+``runtime`` and ``rejected`` expect ``strace -yy`` logs (A3): a successful
+open without its returned-fd target is unresolved, since an alias cannot be
+ruled out. ``--legacy-plain-trace`` evaluates a historical plain log; the
+report records that alias targets were not checked.
 
 PR-C2 adds to ``static``: the entrypoint contains none of the byte strings in
 shipping/measurement_surface.json (no measurement hook, no developer option).
@@ -393,8 +397,9 @@ def _open_path(call: str, argstr: str, path: str) -> str | None:
 
 
 # strace -yy annotates a successful open's returned fd with the opened
-# object's path (a device adds a nested "<char M:N>").
-_FD_TARGET = re.compile(r"^<(/[^<>]*)(?:<[^<>]*>)?>")
+# object: a path (a device adds a nested "<char M:N>"), or a non-path object
+# such as "pipe:[N]" when /proc/self/fd/N is reopened.
+_FD_TARGET = re.compile(r"^<([^<>]*)(?:<[^<>]*>)?>")
 _DIRFD_ANNOTATED = re.compile(r"^(?:AT_FDCWD|\d+)<")
 _CWD = re.compile(r"^AT_FDCWD<(/[^>]*)>,")
 
@@ -435,9 +440,13 @@ def _within(path: str, root: str) -> bool:
 
 
 def strace_records(
-    prefix: Path,
+    prefix: Path, plain: bool = False
 ) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]]]:
-    """(log count, execve records, open records) of ``strace -ff -o prefix``."""
+    """(log count, execve records, open records) of ``strace -ff -o prefix``.
+
+    A successful open without a returned-fd target is unresolved unless
+    ``plain`` (a historical log without -yy) and its dirfd is not annotated.
+    """
     logs = sorted(prefix.parent.glob(prefix.name + ".*"))
     if not logs:
         raise g2.CheckError(f"no strace logs {prefix}.*")
@@ -475,13 +484,19 @@ def strace_records(
             else:
                 resolved = _open_path(call, argstr, rec["path"])
                 target = _FD_TARGET.match(rest) if rc >= 0 else None
-                rec["target"] = os.path.normpath(target.group(1)) if target else None
+                obj = target.group(1) if target else None
+                rec["target"] = (
+                    os.path.normpath(obj) if obj and obj.startswith("/") else None
+                )
+                rec["target_object"] = obj
                 cwd = _CWD.match(argstr)
                 rec["cwd"] = os.path.normpath(cwd.group(1)) if cwd else None
-                # An -yy record (annotated dirfd) that succeeded must name
-                # what it opened; without it an alias cannot be ruled out.
+                # A successful open must name what it opened; without it an
+                # alias cannot be ruled out.
                 rec["unresolved"] = resolved is None or (
-                    rc >= 0 and target is None and bool(_DIRFD_ANNOTATED.match(argstr))
+                    rc >= 0
+                    and target is None
+                    and (not plain or bool(_DIRFD_ANNOTATED.match(argstr)))
                 )
                 rec["raw"] = line.strip()
                 if resolved is not None:
@@ -540,16 +555,18 @@ def exec_chain(execs: list[dict[str, Any]], mount: str) -> dict[str, Any]:
 
 
 def cmd_runtime(args: argparse.Namespace) -> int:
-    n_logs, execs, opens = strace_records(args.strace_prefix)
+    n_logs, execs, opens = strace_records(args.strace_prefix, args.legacy_plain_trace)
     mount = args.tree_mount.rstrip("/")
     checks: dict[str, Any] = {}
     checks["g2_2_g2_4_exec_chain"] = exec_chain(execs, mount)
+    unresolved = [o["raw"] for o in opens if o["unresolved"]]
     forbidden = sorted(
         {p for o in opens for p in _accessed(o) if g2._FORBIDDEN_OPEN.search(p)}
     )
     checks["g2_2_g2_4_no_python_triton_open"] = {
-        "pass": not forbidden,
+        "pass": not forbidden and not unresolved,
         "attempted": forbidden,
+        "unresolved": unresolved,
     }
 
     tree = args.tree.resolve()
@@ -590,15 +607,17 @@ def cmd_runtime(args: argparse.Namespace) -> int:
     cur = set(opened.values())
     want = vendor_shas | {op_sha, auditor_sha}
     checks["opened_set_is_the_bundle"] = {
-        "pass": cur == want and not foreign,
+        "pass": cur == want and not foreign and not unresolved,
         "missing": sorted(want - cur),
         "extra": sorted(cur - want),
         "foreign_opens": sorted(set(foreign)),
+        "unresolved": unresolved,
     }
     report = {
         "schema": SCHEMA,
         "kind": "runtime",
         "logs": n_logs,
+        "legacy_plain_trace": args.legacy_plain_trace,
         "checks": checks,
         "pass": all(c["pass"] for c in checks.values()),
     }
@@ -609,7 +628,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
 
 
 def cmd_rejected(args: argparse.Namespace) -> int:
-    n_logs, execs, opens = strace_records(args.strace_prefix)
+    n_logs, execs, opens = strace_records(args.strace_prefix, args.legacy_plain_trace)
     mount = args.tree_mount.rstrip("/")
     log = args.log.read_text(errors="replace").splitlines()
     want = f"saccade_track: unknown argument {args.option}"
@@ -684,6 +703,7 @@ def cmd_rejected(args: argparse.Namespace) -> int:
     report = {
         "schema": SCHEMA,
         "kind": "rejected",
+        "legacy_plain_trace": args.legacy_plain_trace,
         "option": args.option,
         "logs": n_logs,
         "checks": checks,
@@ -774,6 +794,12 @@ def cmd_sources(args: argparse.Namespace) -> int:
     return 0 if not problems else 1
 
 
+_PLAIN_HELP = (
+    "evaluate a historical log recorded without strace -yy: successful opens "
+    "need no returned-fd target, so aliases are not checked (recorded in the report)"
+)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -786,12 +812,14 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--measurement-surface", type=Path, default=MEASUREMENT_SURFACE)
     r = sub.add_parser("runtime")
     r.add_argument("--strace-prefix", type=Path, required=True)
+    r.add_argument("--legacy-plain-trace", action="store_true", help=_PLAIN_HELP)
     r.add_argument("--tree", type=Path, required=True)
     r.add_argument("--tree-mount", required=True)
     r.add_argument("--report", type=Path, required=True)
     r.add_argument("--third-party-set", type=Path, default=THIRD_PARTY_SET)
     j = sub.add_parser("rejected")
     j.add_argument("--strace-prefix", type=Path, required=True)
+    j.add_argument("--legacy-plain-trace", action="store_true", help=_PLAIN_HELP)
     j.add_argument("--log", type=Path, required=True)
     j.add_argument("--out-dir", type=Path, required=True)
     j.add_argument("--option", required=True)
