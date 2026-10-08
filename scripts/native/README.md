@@ -18,6 +18,12 @@
   - #465 PR-C1：檢查 bundle 後的 shipping tree（layout、vendor 集合 pin、entrypoint pin、launcher、auditor、search-path containment、G2 檢查、exec chain），見 `docs/reference/native_runtime_resolved_config.md` §17。PR-C2 加 `entrypoint_no_measurement_surface`（`static`）與 `rejected`（被移除的選項在載入任何 model／GPU 之前被拒絕），見 §18。
 - `export_third_party_set.py`
   - #465 PR-C1：從 PR-12 正式 run 的 deps manifest 產生 `shipping/third_party_set.json` 與 `shipping/THIRD_PARTY.md`。
+- `build_shipping_package.py`
+  - #465 PR-C3：從通過 `static` 的 shipping tree 產生 package（`<name>.tar.gz`、`<name>.install.sh`、`<name>.sha256`），`MANIFEST.json` 由 source commit 的 repository 推出，見 `docs/reference/native_runtime_resolved_config.md` §19。
+- `check_shipping_package.py`
+  - #465 PR-C3：MANIFEST 格式（`install.sh` 以 `sed` 讀的那一種）與 `tarball` 檢查（release set、digest、member 規則、MANIFEST 與 pin）；`check_shipping_bundle.py static --manifest` 用它檢查安裝後的 tree。
+- `run_package_container.sh`
+  - #465 PR-C3：在乾淨的 Ubuntu 24.04 容器（dash、無 Python）以 `install.sh` 從 tarball 安裝；`install-strace` 記錄安裝期間的檔案系統呼叫。
 
 ## 說明
 
@@ -31,11 +37,14 @@
 | Script | Status | Usage | Function |
 |--------|--------|-------|----------|
 | `build_fpn_reid.py` | stable | - | Build the legacy FPN ReID CUDA extension with setuptools. |
+| `build_shipping_package.py` | active | cli | Build the shipping package from an installed shipping tree (#465 Phase C PR-C3). |
 | `check_shipping_bundle.py` | diagnostic | cli | Checks of the bundled shipping tree (#465 Phase C PR-C1). |
+| `check_shipping_package.py` | diagnostic | cli | Checks of the shipping package (#465 Phase C PR-C3). |
 | `check_shipping_tree.py` | diagnostic | cli | G2 checks of the installed shipping tree (#465 Phase B PR-12). |
 | `coverage_native.sh` | stable | - | Configure/build native targets with coverage instrumentation. |
 | `export_third_party_set.py` | active | cli | Export the bundled third-party set of the shipping package (#465 Phase C PR-C1). |
 | `rebuild.sh` | stable | - | Saccade C++/CUDA Extension Rebuild Script |
+| `run_package_container.sh` | diagnostic | cli | Install the shipping package in a clean Ubuntu 24.04 container (#465 Phase C PR-C3). |
 | `run_shipping_container.sh` | diagnostic | cli | Run the installed shipping tree in a clean Ubuntu 24.04 container (#465 PR-12, PR-C1). |
 | `verify_consumer_install.sh` | stable | cli | Fresh-consumer install test for the native extension (ADR 025). |
 
