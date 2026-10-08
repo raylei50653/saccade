@@ -2481,3 +2481,18 @@ bash results/547_licence/<label>/run.sh && .venv/bin/python results/547_licence/
 - **N7–N9**（單元測試，在同一 head 上跑）：`.bss` size 改變 ⇒ `section .bss differs`；全部 CLOSED 且 `public` 但沒有 `owner_confirmation` ⇒ `coverage` FAIL；非 local-only 的 MANIFEST 不帶 `--pubkey` ⇒ `metadata` FAIL。
 
 package 的 E3／E4 不重跑：builder、安裝器與安裝出的 tree 都沒有變（R1 檢查 tree 逐位元組相同）；`tarball` 只多了一條只在非 local-only 時生效的規則（N9）。
+
+### 22.9 Review 修正的重播結果
+
+head `cec6af39`＝review 修正 `16104f4e` 加上 republish（implementation `8e758b23…` → `3d85835c…`，只有 `install_third_party.cmake` 改了；probe `2dabed0b` 不變），工作樹乾淨，沒有 GPU 步驟。結果目錄 `results/547_licence/review_cec6af39/`（不納入版本控制）。
+
+| 項目 | 結果 |
+|:--|:--|
+| V | 工作樹乾淨；`--mode attested` exit 0；`git diff bcd6f833 HEAD -- shipping` 只有 `shipping/cmake/install_third_party.cmake` |
+| R1 | `cmake --install` exit 0；`static` 12 項 PASS；`r1_tree.sha256` 與正式 run 的 `e1_tree.sha256` 逐位元組相同（64 個檔案） |
+| R2 | `license_audit.py check` 七項 PASS，`complete: true` |
+| N6 | `cmake -P` exit 1：`supplied text licenses/libgomp/COPYING3 has repo_file ../outside/COPYING3, not shipping/licenses/libgomp/COPYING3`；`licenses/libgomp/COPYING3` 沒有寫出；`coverage` 也 FAIL（`repo_file '../outside/COPYING3' is not shipping/licenses/libgomp/COPYING3`） |
+| N7–N9 | 指定的單元測試 27 個 PASS（`.bss` size、`repo_file` 與 `..`、CLOSED 沒有結論、全部 CLOSED 的 public gate、非 local-only 的 package 必須簽章；local-only 與沒有 `licenses` 鍵的 package 可以不簽） |
+| **verdict** | **`PASS`** |
+
+所有 open item 仍是 OPEN，`distribution.status` 仍是 `local-only`。
