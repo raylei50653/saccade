@@ -2048,3 +2048,106 @@ PR-C4 是 Phase C 的最後一個 PR（[Phase C scope](native_runtime_phase_c_sc
 
 **順序**：本修訂 commit 之後，在新的乾淨 commit 上**從頭**重跑整個正式 run（r2），不沿用 r1 的任何產物。r1 的產物與它的 `FAIL` 保留，在 §20.5 照實記錄。
 
+
+### 20.5 驗收
+
+同一台機器（RTX 5070 Ti Laptop，WSL2，driver 616.92）。
+
+**r1**（`results/465_prc4_release/full_bfd086c7/`，commit `bfd086c7`）＝`FAIL`。
+
+- 唯一不成立的是 gate 4 原文的「四個檔案逐位元組相同」（§20.4a）。
+- 其他 gate、S1–S9、L1–L3 都照必須的結果。
+- r1 的產物不被 r2 使用。
+
+**r2** 是正式結果。
+- commit `bc75dcab`＝§20.4 的契約（`992213ee`）＋§20.4a 修訂（`f2ff5700`）＋runtime identity 的 republish（`chore/465-prc4-republish`）。republish 內容：
+  - implementation 軸 287 → 288 個檔案：新增 `shipping/license_audit.json`，改 `shipping/cmake/install_third_party.cmake` 與 `shipping/CMakeLists.txt`；
+  - probe 重跑，behavior `2dabed0b` 與 PR-C3 出版相同。
+- 工作樹乾淨，契約與修訂都早於 r2 的任何量測。
+- 全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。
+- 判定由 `evaluate.py` 從產物讀出（`evaluation.json` sha256 `daa17f1c…`）。
+- host minisign 0.12（Arch），容器 minisign 0.11（Ubuntu 24.04 apt）。
+- test key `52320762B09F4D86`；S5 用的第二把 `3D223A859A587302`。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 下列全部成立 |
+| 有效性：工作樹與 identity | 工作樹乾淨；`--mode attested` exit 0 |
+| 有效性：來源未變 | tree 的來源路徑對 `1ae402c2` 沒有 diff；`install.sh` 對 `9217ed92` 沒有 diff |
+| 有效性：pin | operator library 與 entrypoint pin 在 run 前後都等於 attestation 與 pin |
+| 有效性：oracle | `anchor` 與 `A_L_1` 7/7 相同；`oracle-rows` OK |
+| 有效性：容器 | 安裝與 verify 容器都是 Ubuntu 24.04.4、dash；安裝容器沒有 Python 與編譯器 |
+| 1 build 與安裝 | configure、build、install 都 exit 0 |
+| 2 靜態檢查 | 12 項 PASS（含 `README.txt` 的 layout 與位元組） |
+| 3 授權稽核 | `coverage`、`bundled_texts`、`official_terms`、`notice` 四項 PASS，`complete: true`；安裝的 `THIRD_PARTY.md` 等於 repository 的；狀態 17／6／3／1（§20.1），`distribution`＝`local-only` |
+| 4 package 與簽章 | builder exit 0，`tree_clean`、`identity_current` 為 true；`sign` exit 0 |
+| 4：`tarball --pubkey` | 8 項 PASS（88 個 member、57 個檔案）；`signature` 的 minisign exit 0、reader 無問題、trusted comment 相同 |
+| 4：決定性（§20.4a） | 三個 package 檔案逐位元組相同：tarball `c753496a…`（2,384,778,504 位元組）、安裝器 `afa5d06a…`（與 PR-C3 相同）、digest `9f3012d6…` |
+| 4：第二次簽章 | `dist_again` 的簽章以 minisign 與 reader 都驗證通過，trusted comment 相同；簽章檔本身不同（`bcf5ab8f…` 對 `6e1e2674…`，§20.4a） |
+| 4：MANIFEST | `files` 等於 `$R/tree`；`licenses` 等於稽核檔的 sha256 與 `local-only` |
+| 5 使用者端驗證 | 容器 exit 0：`Signature and comment signature verified`、trusted comment＝`package=<name> commit=bc75dcab… manifest_sha256=fcd200aa…`、tarball 與安裝器兩行 `OK` |
+| 6 從 tarball 安裝 | exit 0；`install-trace` 5 項 PASS：TARGET 只被一次 `renameat2(…, RENAME_NOREPLACE)` 碰到，其他 277 筆寫入性質的呼叫都在 staging 之內，staging 已刪，0 筆 incomplete |
+| 6：安裝後的 tree | `static --manifest` 13 項 PASS；`--verify` exit 0；除 MANIFEST 外與 `$R/tree` 逐位元組相同；**安裝後 `MANIFEST.json` 的 sha256（`fcd200aa…`）等於簽過的 `manifest_sha256`** |
+| 7 乾淨容器執行 | exit 0；`EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7；`--against` PR-C3 正式 run 的 `parity_bundle` 7/7 相同 |
+| 8 G2-2／G2-4 | `runtime` 三項 PASS；`EXACT`，與第 7 條 7/7 相同；兩次的 `python_libraries_mapped` 都是空的 |
+| **verdict** | **`PASS`**（§20.4 經 §20.4a 修訂後的第 1–8 條全部成立） |
+
+**簽章負控制**（`sigctl/`）：
+
+| # | 結果 |
+|:--|:--|
+| S1 | verify exit 1，`Signature verification failed`；`signature` FAIL（minisign exit 1、reader `the signature does not verify`） |
+| S2 | verify exit 1；`signature` FAIL（簽章與 trusted comment 都不對）。§19.6 的 P3（內部一致、digest 重算的重新包）被簽章擋下 |
+| S3 | verify exit 1；`signature`、`installer_exact`、`metadata` FAIL |
+| S4 | verify exit 1，`Comment signature verification failed`；`signature` FAIL（reader `the trusted comment's signature does not verify`） |
+| S5 | verify exit 1（key id 不同）；`signature` FAIL（reader：key id 不同、簽章與 comment 簽章都不成立） |
+| S6 | verify exit 1：先 `Signature and comment signature verified`，之後 tarball 那一行 `FAILED`。host 的 `tarball` exit 1，`package_digest`、`manifest_exact`、`pinned_tree`、`metadata` FAIL（被改的 gzip 讀得完，沒有到 exit 2） |
+| S7 | verify exit 2（沒有簽章檔）；`release_set`、`signature` FAIL |
+| S8 | **verify exit 0、minisign exit 0**（簽章本身有效，trusted comment 是 64 個 0 的 `manifest_sha256`）；`signature` FAIL（trusted comment 不同） |
+| S9 | `install.sh --verify` **exit 0**（§19.6 的限制照舊）；`sha256sum MANIFEST.json` 不等於簽過的 `manifest_sha256`；`static --manifest` 的 `vendor_set_pinned` FAIL |
+
+**授權稽核負控制**（`auditctl/`）：
+- **L1**：exit 1。`bundled_texts` FAIL，原因兩個：cuFile 的檔案 sha256 不是集合的；這份文本 Attachment A 列出 `libcufile.so`，與稽核的「沒列出」不同。
+- **L2**：exit 1。`official_terms` FAIL：`nvshmem_sla_3.4.5` 的 snapshot sha256 不同。
+- **L3**：exit 1。`bundled_texts` FAIL（`does not list 'libnvJitLink.so'`）；`notice` 也 FAIL，因為改過的稽核 render 出不同的 `THIRD_PARTY.md`。
+
+**這個 PR 對 §19.6 限制的處理**：
+- 「digest 不是簽章」：S2 被簽章擋下。
+- 「安裝器驗不了自己」：S3 被簽章擋下。
+- 「`--verify` 信任 tree 裡的 MANIFEST」：沒有消失（S9），但安裝後的 MANIFEST 現在可以對照簽過的 sha256（第 6 條、S9）。要做這個對照，使用者要有 release 公鑰，而它還沒有 commit。
+
+結果目錄：`results/465_prc4_release/full_bc75dcab/`（r2）與 `full_bfd086c7/`（r1），內容包括：
+- `run.sh`、`evaluate.py`、`evaluation.json`；
+- `tree/`、`dist/`、`dist_again/`、`testkey*/`、`license_sources/`、`license_audit.json`；
+- `verify/`、`install/`、`installed/`；
+- `container_*`、`parity_*`；
+- `sigctl/`、`auditctl/`。
+
+開發試做在 `results/465_prc4_dev/t1/`，授權 snapshot 在 `results/465_prc4_license/sources_20261008/`。都不納入版本控制。
+
+### 20.6 限制
+
+- **不是可以散佈的 release。**
+  - `distribution`＝`local-only`；§20.1 的四類 Open items 要 owner 決定。
+  - 稽核是對授權文本的讀法，不是法律意見。
+  - snapshot 是 2026-10-08 的網頁，NVIDIA 之後的修改不在裡面。
+- **沒有 release key。** 正式 run 與負控制只用一次性的 test key（無密碼，secret key 在結果目錄）。release 公鑰 `shipping/package/minisign.pub` 由 owner 產生並以另一支 PR 加入。README 已經指向這個路徑，在那之前它不存在。
+- **簽章不是決定性的**（minisign 0.12／libsodium 1.0.22，§20.4a）。同一份 digest 重簽會得到不同的 `.minisig`，發佈的是簽過的那一份。
+- **trusted comment 的比對要由使用者做**（S8）。minisign 只證明簽章有效，不比對內容。檢查器會比對，使用者流程則要看 minisign 印出的 trusted comment。
+- **`--verify` 仍信任 tree 裡的 MANIFEST**（S9）。要以簽過的 `manifest_sha256` 對照，README 有寫，但不是自動的。
+- **使用者要有 minisign。** Ubuntu 24.04 的 universe 有它（0.11），base system 沒有。安裝器本身仍只用 base system 工具。
+- **README 只描述這一台機器驗證過的事。** driver 下限引用 NVIDIA 對 CUDA 13.0 Update 2 的表，沒有在其他 driver 上執行過。
+- 其餘同 §19.6（只支援 sm_120、一台 WSL2 機器、`RENAME_NOREPLACE` 只在 ext4 上確認、SIGKILL 留下 staging 等）。
+
+### 20.7 重現
+
+```bash
+.venv/bin/python scripts/native/license_audit.py render --check             # THIRD_PARTY.md == rendering
+.venv/bin/python scripts/native/license_audit.py check --licenses <tree>/licenses --sources <snapshots> --report audit.json
+.venv/bin/python scripts/native/build_shipping_package.py --tree <tree> --out <dist> --static-report static.json
+.venv/bin/python scripts/native/sign_shipping_package.py sign --dist <dist> --secret-key <key>   # the owner's release key
+.venv/bin/python scripts/native/check_shipping_package.py tarball --dist <dist> --pubkey <pub> --report package.json
+bash scripts/native/run_package_container.sh verify <dist> <pub> <out>      # the user's check, Ubuntu 24.04
+minisign -Vm <dist>/<name>.sha256 -p <pub> && (cd <dist> && sha256sum -c <name>.sha256)   # an end user, before installing
+bash results/465_prc4_release/<label>/run.sh && .venv/bin/python results/465_prc4_release/<label>/evaluate.py
+```
