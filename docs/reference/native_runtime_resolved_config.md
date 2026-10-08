@@ -1985,7 +1985,7 @@ PR-C4 是 Phase C 的最後一個 PR（[Phase C scope](native_runtime_phase_c_sc
    - builder（不帶 `--trial`）exit 0，`tree_clean`、`identity_current` 為 true；MANIFEST 的 `licenses` 等於稽核檔的 sha256 與 `local-only`。
    - `sign` exit 0。
    - `tarball --pubkey $R/testkey/test.pub` 8 項 PASS：`release_set`（四個檔案）、`package_digest`、`installer_exact`、`tar_members`、`manifest_exact`、`pinned_tree`、`metadata`、`signature`（minisign exit 0、reader 無問題、trusted comment 相同）。
-   - **決定性**：同一個 tree、同一個 commit 再產生到 `$R/dist_again`，再以同一把 test key 簽，四個檔案逐位元組相同（Ed25519 簽章是決定性的）。
+   - **決定性**（§20.4a 修訂）：同一個 tree、同一個 commit 再產生到 `$R/dist_again`，三個 package 檔案（tarball、安裝器、digest）逐位元組相同；再以同一把 test key 簽，`dist_again` 的簽章在同一把公鑰下以 `minisign -V` 與 reader 都驗證通過，trusted comment 與 `dist` 的相同。簽章檔本身不要求逐位元組相同。
 5. **使用者端驗證**：`run_package_container.sh verify $R/dist $R/testkey/test.pub` exit 0；log 有 `Signature and comment signature verified`、等於第 4 條的 trusted comment、兩行 `: OK`。
 6. **從 tarball 安裝到乾淨容器**：同 §19.4 第 4 條（`install-strace` exit 0、`install-trace` 5 項、`static --manifest` 13 項、容器內 `--verify` exit 0、除 MANIFEST 外與 `$R/tree` 逐位元組相同），加上：安裝後 `MANIFEST.json` 的 sha256 等於 trusted comment 的 `manifest_sha256`。
 7. **乾淨容器執行**：`run_shipping_container.sh bundle $R/installed/saccade`：
@@ -2030,3 +2030,21 @@ PR-C4 是 Phase C 的最後一個 PR（[Phase C scope](native_runtime_phase_c_sc
 - 其他 GPU、主機、glibc；
 - release key 的產生與 commit（owner）；
 - 任何散佈（§20.1，`local-only`）。
+
+### 20.4a 契約修訂（r1 之後，2026-10-08）
+
+**r1 的結果**：正式 run r1（`results/465_prc4_release/full_bfd086c7/`，commit `bfd086c7`）依 §20.4 原文是 `FAIL`。其他部分都成立：
+- 有效性、gate 1–3、5–8 都成立；
+- gate 4 的 `tarball --pubkey` 8/8 PASS；
+- S1–S9、L1–L3 全部照必須的結果。
+
+唯一不成立的是 gate 4 的「四個檔案逐位元組相同」：三個 package 檔案相同，但兩個 `.minisig` 不同。
+
+**原因**：原文的前提「Ed25519 簽章是決定性的」對這台 host 的簽署工具不成立，是契約寫錯，不是 package 的問題。
+- 小檔案的對照：host 的 minisign 0.12（Arch，libsodium 1.0.22）同一把 key、同一個檔案簽兩次，簽章不同；容器裡的 minisign 0.11（Ubuntu 24.04）兩次相同。
+- `dist_again` 的簽章在同一把公鑰下以 `minisign -V` 與 reader 都驗證通過，trusted comment 與 `dist` 的相同。
+
+**修訂**：gate 4 的決定性改成上面那一條：三個 package 檔案逐位元組相同，第二次的簽章可驗證且 trusted comment 相同。其他條文不變。
+
+**順序**：本修訂 commit 之後，在新的乾淨 commit 上**從頭**重跑整個正式 run（r2），不沿用 r1 的任何產物。r1 的產物與它的 `FAIL` 保留，在 §20.5 照實記錄。
+
