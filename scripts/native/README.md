@@ -17,13 +17,17 @@
 - `check_shipping_bundle.py`
   - #465 PR-C1：檢查 bundle 後的 shipping tree（layout、vendor 集合 pin、entrypoint pin、launcher、auditor、search-path containment、G2 檢查、exec chain），見 `docs/reference/native_runtime_resolved_config.md` §17。PR-C2 加 `entrypoint_no_measurement_surface`（`static`）與 `rejected`（被移除的選項在載入任何 model／GPU 之前被拒絕），見 §18。
 - `export_third_party_set.py`
-  - #465 PR-C1：從 PR-12 正式 run 的 deps manifest 產生 `shipping/third_party_set.json` 與 `shipping/THIRD_PARTY.md`。
+  - #465 PR-C1：從 PR-12 正式 run 的 deps manifest 產生 `shipping/third_party_set.json`（PR-C4 起 `THIRD_PARTY.md` 改由 `license_audit.py render` 產生）。
+- `license_audit.py`
+  - #465 PR-C4：第三方集合的授權稽核（`shipping/license_audit.json`）：逐物件以它自己 wheel 的授權檔與版本對應的官方條款檢查宣稱，並 render `shipping/THIRD_PARTY.md`，見 `docs/reference/native_runtime_resolved_config.md` §20。
 - `build_shipping_package.py`
   - #465 PR-C3：從通過 `static` 的 shipping tree 產生 package（`<name>.tar.gz`、`<name>.install.sh`、`<name>.sha256`），`MANIFEST.json` 由 source commit 的 repository 推出，見 `docs/reference/native_runtime_resolved_config.md` §19。
 - `check_shipping_package.py`
-  - #465 PR-C3：MANIFEST 格式（`install.sh` 以 `sed` 讀的那一種）與 `tarball` 檢查（release set、digest、member 規則、MANIFEST 與 pin）；`check_shipping_bundle.py static --manifest` 用它檢查安裝後的 tree。
+  - #465 PR-C3：MANIFEST 格式（`install.sh` 以 `sed` 讀的那一種）與 `tarball` 檢查（release set、digest、member 規則、MANIFEST 與 pin）；`check_shipping_bundle.py static --manifest` 用它檢查安裝後的 tree。PR-C4 加 `--pubkey`（第四個檔案 `<name>.sha256.minisig` 與 `signature` 檢查）。
+- `sign_shipping_package.py`
+  - #465 PR-C4：以 minisign 簽 `<name>.sha256`（trusted comment＝package、commit、MANIFEST sha256），並有獨立的 minisign 格式 reader，見 §20。
 - `run_package_container.sh`
-  - #465 PR-C3：在乾淨的 Ubuntu 24.04 容器（dash、無 Python）以 `install.sh` 從 tarball 安裝；`install-strace` 記錄安裝期間的檔案系統呼叫。
+  - #465 PR-C3：在乾淨的 Ubuntu 24.04 容器（dash、無 Python）以 `install.sh` 從 tarball 安裝；`install-strace` 記錄安裝期間的檔案系統呼叫。PR-C4 加 `verify`（同一映像加 minisign：使用者安裝前的 `minisign -V` 與 `sha256sum -c`）。
 
 ## 說明
 

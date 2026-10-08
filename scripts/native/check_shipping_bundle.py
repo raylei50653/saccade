@@ -7,7 +7,7 @@ PR-C1 (docs/reference/native_runtime_resolved_config.md §17): the launcher
 ``bin/saccade_track``, the entrypoint ``libexec/saccade_track`` (the pinned
 bytes, shipping/entrypoint_pin.json), the loader provenance check ``lib/saccade_loader_audit.so``, the
 bundled third-party set ``lib/vendor/`` (shipping/third_party_set.json),
-``licenses/`` and the model root ``share/saccade/``. Developer tooling only
+``licenses/``, ``README.txt`` (PR-C4) and the model root ``share/saccade/``. Developer tooling only
 (``developer_build_debug``); the ELF and log readers are
 ``check_shipping_tree.py``'s (PR-12).
 
@@ -15,7 +15,7 @@ Subcommands:
 
 ``static``   layout (exactly the expected files), the vendor set's sha256, the
              entrypoint pin, the launcher's bytes, the auditor (libc only, no
-             RUNPATH), licenses, G2-3, G2-1 (NEEDED closure resolved the way
+             RUNPATH), licenses (and README.txt), G2-3, G2-1 (NEEDED closure resolved the way
              the launcher's loader invocation resolves it: complete inside the
              tree + base system + driver, no Python), search-path containment
              (every relative DT_RPATH / DT_RUNPATH entry of every ELF in the
@@ -89,6 +89,8 @@ ENTRYPOINT_PIN = REPO / "shipping/entrypoint_pin.json"
 MEASUREMENT_SURFACE = REPO / "shipping/measurement_surface.json"
 LAUNCHER_SOURCE = REPO / "shipping/launcher/saccade_track.sh"
 NOTICE_SOURCE = REPO / "shipping/THIRD_PARTY.md"
+README_SOURCE = REPO / "shipping/package/README.txt"
+README = "README.txt"
 LAUNCHER = "bin/saccade_track"
 ENTRYPOINT = "libexec/saccade_track"
 AUDITOR = "lib/saccade_loader_audit.so"
@@ -128,7 +130,7 @@ def _load(path: Path) -> dict[str, Any]:
 
 
 def expected_files(set_: dict[str, Any]) -> set[str]:
-    files = {LAUNCHER, ENTRYPOINT, AUDITOR}
+    files = {LAUNCHER, ENTRYPOINT, AUDITOR, README}
     files |= {f"{g2.MODEL_ROOT}/{f}" for f in MODEL_ROOT_FILES}
     files |= {f"{VENDOR}/{e['soname']}" for e in set_["entries"]}
     files |= {
@@ -295,6 +297,9 @@ def cmd_static(args: argparse.Namespace) -> int:
     notice = tree / "licenses/THIRD_PARTY.md"
     if not notice.is_file() or notice.read_bytes() != NOTICE_SOURCE.read_bytes():
         lic_bad.append("licenses/THIRD_PARTY.md")
+    readme = tree / README
+    if not readme.is_file() or readme.read_bytes() != README_SOURCE.read_bytes():
+        lic_bad.append(README)
     checks["licenses"] = {"pass": not lic_bad, "problems": lic_bad}
 
     py = g2.python_files(tree)

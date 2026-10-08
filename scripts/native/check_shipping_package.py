@@ -2,7 +2,7 @@
 """Checks of the shipping package (#465 Phase C PR-C3).
 
 The package is three files (docs/reference/native_runtime_resolved_config.md
-§19), written by ``build_shipping_package.py`` from a tree that passed
+§19; a fourth, the minisign signature of the digest, since PR-C4 §20), written by ``build_shipping_package.py`` from a tree that passed
 ``check_shipping_bundle.py static``:
 
 * ``<name>.tar.gz``: one directory ``<name>/`` holding the tree and
@@ -28,10 +28,16 @@ Subcommand:
              MANIFEST.json is canonical and lists exactly the other members with
              their sha256, size and mode; the tree inside is the expected layout
              with the pinned bytes (vendor set, entrypoint, launcher, operator
-             library, THIRD_PARTY.md); the name and metadata agree with the
+             library, THIRD_PARTY.md, README.txt); the name and metadata agree with the
              repository at the recorded source commit, which was clean and
              whose runtime-identity publication was current
              (``check_runtime_identity_staleness.py --mode attested``).
+
+             With ``--pubkey`` (PR-C4, §20) the release set is four files,
+             the fourth ``<name>.sha256.minisig``, and ``signature`` checks it:
+             ``minisign -V`` and ``sign_shipping_package``'s own reader both
+             verify it under the key, and its trusted comment is the one the
+             tarball's MANIFEST gives (package, commit, MANIFEST sha256).
 
 ``install-trace`` an installation recorded with ``strace -ff -yy``
              (``run_package_container.sh install-strace``): the target is
@@ -44,7 +50,7 @@ Subcommand:
 
 Usage::
 
-    check_shipping_package.py tarball --dist DIST --report package.json
+    check_shipping_package.py tarball --dist DIST --report package.json [--pubkey minisign.pub]
     check_shipping_package.py install-trace --strace-prefix DIR/i \
         --target /install/saccade --report trace.json
 
@@ -67,12 +73,34 @@ from typing import Any, Iterable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_shipping_tree as g2  # noqa: E402
+import sign_shipping_package as signing  # noqa: E402
 
 SCHEMA = "saccade.shipping_package_check/v1"
 MANIFEST_SCHEMA = "saccade.shipping_manifest/v1"
 MANIFEST = "MANIFEST.json"
 REPO = Path(__file__).resolve().parents[2]
 INSTALLER_SOURCE = REPO / "shipping/package/install.sh"
+LICENSE_AUDIT = REPO / "shipping/license_audit.json"
+# The MANIFEST "reading" as of a source commit: a commit before PR-C4 (no
+# licence audit) keeps the PR-C3 text, so its MANIFEST still derives exactly.
+READING_PRE_C4 = (
+    "The Saccade native tracker for Linux x86_64 (#465 Phase C, "
+    "docs/reference/native_runtime_resolved_config.md §19): the shipping "
+    "tree with its bundled third-party set. Every file of the package "
+    "is listed below with its sha256, size and mode; the installer "
+    "refuses a tree that differs. Not a signature: the package digest "
+    "<name>.sha256 is checked by the installer, signing is PR-C4."
+)
+READING = (
+    "The Saccade native tracker for Linux x86_64 (#465 Phase C, "
+    "docs/reference/native_runtime_resolved_config.md §19): the shipping "
+    "tree with its bundled third-party set. Every file of the package "
+    "is listed below with its sha256, size and mode; the installer "
+    "refuses a tree that differs. Not a signature: the package digest "
+    "<name>.sha256 is checked by the installer; its minisign signature "
+    "<name>.sha256.minisig (PR-C4, §20) names this file's sha256 in the "
+    "trusted comment."
+)
 RUNTIME_IDENTITY = "docs/reference/runtime_identity.generated.json"
 # The GPUs the package runs on: the operator library and the backbone engine
 # are sm_120 only (owner decision C-D2); the entrypoint carries more SASS.
@@ -414,7 +442,11 @@ def cmd_tarball(args: argparse.Namespace) -> int:
     tarball = dist / f"{name}.tar.gz"
     installer = dist / f"{name}.install.sh"
     digest = dist / f"{name}.sha256"
-    want = sorted([tarball.name, installer.name, digest.name])
+    signature = dist / f"{name}.sha256{signing.SIG_SUFFIX}"
+    want = sorted(
+        [tarball.name, installer.name, digest.name]
+        + ([signature.name] if args.pubkey else [])
+    )
     _check(
         checks,
         "release_set",
@@ -493,6 +525,7 @@ def cmd_tarball(args: argparse.Namespace) -> int:
     for rel, src in (
         (bundle.LAUNCHER, args.launcher_source),
         ("licenses/THIRD_PARTY.md", bundle.NOTICE_SOURCE),
+        (bundle.README, bundle.README_SOURCE),
     ):
         if files.get(rel, {}).get("sha256") != g2.sha256_file(src):
             p_bad.append(f"{rel}: not {src}")
@@ -530,12 +563,22 @@ def cmd_tarball(args: argparse.Namespace) -> int:
         )
     _check(checks, "metadata", md_bad, commit=source.get("commit"))
 
+    if args.pubkey:
+        sig = signing.check_signed_digest(dist, args.pubkey)
+        _check(
+            checks,
+            "signature",
+            sig.pop("problems"),  # type: ignore[arg-type]
+            **sig,
+        )
+
     report = {
         "schema": SCHEMA,
         "kind": "tarball",
         "dist": str(dist),
         "package": name,
         "sha256": sums,
+        "signed": bool(args.pubkey),
         "checks": checks,
         "pass": all(c["pass"] for c in checks.values()),
     }
@@ -611,17 +654,14 @@ def manifest_head(
     if entry(bundle.LAUNCHER)["sha256"] != sha256_bytes(launcher):
         raise PackageError(f"{bundle.LAUNCHER} is not the launcher at {commit[:12]}")
     rid = repo(RUNTIME_IDENTITY)
-    return {
+    try:
+        audit_bytes: bytes | None = repo(rel(LICENSE_AUDIT))
+    except subprocess.CalledProcessError:
+        audit_bytes = None  # a source commit before PR-C4: no "licenses" key
+    head: dict[str, Any] = {
         "schema": MANIFEST_SCHEMA,
         "package": package_name(version, wheels),
-        "reading": (
-            "The Saccade native tracker for Linux x86_64 (#465 Phase C, "
-            "docs/reference/native_runtime_resolved_config.md §19): the shipping "
-            "tree with its bundled third-party set. Every file of the package "
-            "is listed below with its sha256, size and mode; the installer "
-            "refuses a tree that differs. Not a signature: the package digest "
-            "<name>.sha256 is checked by the installer, signing is PR-C4."
-        ),
+        "reading": READING if audit_bytes is not None else READING_PRE_C4,
         "version": version,
         "platform": {
             **PLATFORM,
@@ -683,8 +723,16 @@ def manifest_head(
             "sha256": sha256_bytes(rid),
             "coordinate": json.loads(rid)["coordinate"],
         },
-        "file_count": len(files),
     }
+    if audit_bytes is not None:
+        head["licenses"] = {
+            "repo_file": rel(LICENSE_AUDIT),
+            "sha256": sha256_bytes(audit_bytes),
+            "distribution": json.loads(audit_bytes)["distribution"]["status"],
+            "notice": "licenses/THIRD_PARTY.md",
+        }
+    head["file_count"] = len(files)
+    return head
 
 
 # ---------------------------------------------------------------------------
@@ -956,6 +1004,11 @@ def main(argv: list[str] | None = None) -> int:
     t.add_argument("--entrypoint-pin", type=Path, default=bundle.ENTRYPOINT_PIN)
     t.add_argument("--launcher-source", type=Path, default=bundle.LAUNCHER_SOURCE)
     t.add_argument("--installer-source", type=Path, default=INSTALLER_SOURCE)
+    t.add_argument(
+        "--pubkey",
+        type=Path,
+        help="minisign public key: the release set must also hold <name>.sha256.minisig, which must verify (PR-C4)",
+    )
     it = sub.add_parser("install-trace")
     it.add_argument("--strace-prefix", type=Path, required=True)
     it.add_argument("--target", required=True, help="TARGET as the installer saw it")
@@ -966,7 +1019,13 @@ def main(argv: list[str] | None = None) -> int:
         return {"tarball": cmd_tarball, "install-trace": cmd_install_trace}[args.cmd](
             args
         )
-    except (PackageError, g2.CheckError, OSError, tarfile.TarError) as exc:
+    except (
+        PackageError,
+        signing.SignatureError,
+        g2.CheckError,
+        OSError,
+        tarfile.TarError,
+    ) as exc:
         print(f"check_shipping_package: {exc}", file=sys.stderr)
         return 2
 

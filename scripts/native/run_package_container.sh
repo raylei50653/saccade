@@ -21,15 +21,22 @@
 #   INSTALL_SIGNAL="<SIG> <seconds>"  run the installer under coreutils
 #                            timeout, which sends SIG to its process group.
 #
+# verify (PR-C4, §20): the user's check before installing, in the same image
+# plus minisign only: `minisign -Vm <name>.sha256 -p <key>` then `sha256sum -c
+# <name>.sha256` in /dist (read-only); PUBKEY is mounted read-only. OUT gets
+# verify.log (with exit=<rc>) and container.txt.
+#
 # Usage: run_package_container.sh install|install-strace DIST TARGET OUT
+#        run_package_container.sh verify DIST PUBKEY OUT
 set -euo pipefail
 
 IMAGE=ubuntu@sha256:786a8b558f7be160c6c8c4a54f9a57274f3b4fb1491cf65146521ae77ff1dc54
 STRACE_IMAGE=saccade-g2-strace:ubuntu24.04
+MINISIGN_IMAGE=saccade-minisign:ubuntu24.04
 
 usage() { sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//' | head -n -1; exit 2; }
 case "${1:-}" in
-    install|install-strace) [ $# -eq 4 ] || usage ;;
+    install|install-strace|verify) [ $# -eq 4 ] || usage ;;
     *) usage ;;
 esac
 MODE=$1
@@ -42,6 +49,38 @@ if [ ${#tars[@]} -ne 1 ] || [ ! -f "${tars[0]}" ]; then
     exit 2
 fi
 NAME=$(basename "${tars[0]}" .tar.gz)
+if [ "$MODE" = verify ]; then
+    PUBKEY=$(realpath "$3")
+    OUT=$4
+    mkdir -p "$OUT"
+    OUT=$(realpath "$OUT")
+    if [ -n "$(ls -A "$OUT")" ]; then
+        echo "$OUT is not empty" >&2
+        exit 2
+    fi
+    docker build --network host -q -t "$MINISIGN_IMAGE" - >/dev/null <<EOF
+FROM $IMAGE
+RUN apt-get update && apt-get install -y --no-install-recommends minisign && rm -rf /var/lib/apt/lists/*
+EOF
+    DOCKER=(docker run --rm --network none --user "$(id -u):$(id -g)"
+            -v "$DIST:/dist:ro" -v "$PUBKEY:/key/minisign.pub:ro" -w /dist)
+    {
+        echo "image: $MINISIGN_IMAGE ($(docker image inspect "$MINISIGN_IMAGE" --format '{{.Id}}'))"
+        "${DOCKER[@]}" "$MINISIGN_IMAGE" sh -c '
+            . /etc/os-release; echo "os: $PRETTY_NAME"
+            echo "sh: $(readlink -f /bin/sh)"
+            echo "minisign: $(minisign -v 2>&1 | head -1)"
+            echo "coreutils: $(sha256sum --version | head -1)"'
+    } > "$OUT/container.txt"
+    set +e
+    "${DOCKER[@]}" "$MINISIGN_IMAGE" sh -c \
+        'minisign -Vm "$1.sha256" -p /key/minisign.pub && sha256sum -c "$1.sha256"' sh "$NAME" \
+        > "$OUT/verify.log" 2>&1
+    rc=$?
+    set -e
+    echo "exit=$rc" >> "$OUT/verify.log"
+    exit $rc
+fi
 PARENT=$(realpath "$(dirname "$TARGET")")
 BASE=$(basename "$TARGET")
 if [ -z "${INSTALL_TMPFS:-}" ] && [ ! -d "$PARENT" ]; then

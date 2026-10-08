@@ -60,6 +60,7 @@ def _load(name: str) -> ModuleType:
 
 bundle = _load("check_shipping_bundle")
 export = _load("export_third_party_set")
+audit = _load("license_audit")
 SET = json.loads((REPO / "shipping" / "third_party_set.json").read_text())
 
 
@@ -88,8 +89,11 @@ def test_entrypoint_pin_is_well_formed() -> None:
     assert len(pin["sha256"]) == 64 and pin["bytes"] > 0
 
 
-def test_notice_is_the_exporters_output() -> None:
-    assert (REPO / "shipping" / "THIRD_PARTY.md").read_text() == export.notice(SET)
+def test_notice_is_the_audit_rendering() -> None:
+    audit_doc = json.loads((REPO / "shipping" / "license_audit.json").read_text())
+    assert (REPO / "shipping" / "THIRD_PARTY.md").read_text() == audit.render(
+        SET, audit_doc
+    )
 
 
 def test_export_maps_objects_to_wheels_and_refuses_other_bytes(tmp_path: Path) -> None:
@@ -1271,6 +1275,9 @@ def test_install_third_party_copies_the_pinned_set(tmp_path: Path) -> None:
         REPO / "shipping/THIRD_PARTY.md"
     ).read_bytes()
     assert (t / "licenses/saccade/LICENSE").is_file()
+    assert (t / "README.txt").read_bytes() == (
+        REPO / "shipping/package/README.txt"
+    ).read_bytes()
 
 
 @pytest.mark.skipif(not shutil.which("cmake"), reason="needs cmake")

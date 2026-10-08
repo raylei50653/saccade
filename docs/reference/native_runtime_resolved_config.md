@@ -1828,3 +1828,359 @@ sh <dist>/<name>.install.sh <dist>/<name>.tar.gz <target>          # an end user
 sh <dist>/<name>.install.sh --verify <target>
 bash results/465_prc3_package/<label>/run.sh && .venv/bin/python results/465_prc3_package/<label>/evaluate.py
 ```
+
+## 20. Release readiness：minisign 簽章、授權稽核、README（Phase C PR-C4）
+
+PR-C4 是 Phase C 的最後一個 PR（[Phase C scope](native_runtime_phase_c_scope.md) §6）：C-D5 的 minisign 簽章落地，§4 的授權讀法逐物件重新稽核並寫進 `THIRD_PARTY.md`，tree 多一份 `README.txt`，並以一次正式 run 從乾淨容器驗證「簽章可被驗證、竄改後驗證失敗、從最終 tarball 安裝後跑完 7-seq EXACT」。PR-C4 不改任何 stage 的計算、entrypoint（pin `92f74ef4…`）、operator library（`aa84cccd…`）、27 個第三方物件與 `third_party_set.json`、launcher、auditor、安裝器（`shipping/package/install.sh` 與 PR-C3 逐位元組相同）、SM 清單與 glibc baseline。
+
+| 項目 | 位置 |
+|:--|:--|
+| 授權稽核（逐物件的證據、條件、狀態、風險） | `shipping/license_audit.json` |
+| 稽核檢查與 `THIRD_PARTY.md` 的 render | `scripts/native/license_audit.py`（`check`、`render`） |
+| README（裝在 `<prefix>/README.txt`） | `shipping/package/README.txt` |
+| 簽章、trusted comment、minisign 格式 reader | `scripts/native/sign_shipping_package.py` |
+| package 檢查 | `check_shipping_package.py tarball --pubkey`（第四個檔案與 `signature` 檢查） |
+| 使用者端的驗證（容器） | `run_package_container.sh verify` |
+| 測試 | `tests/unit/test_license_audit.py`、`tests/unit/test_package_signature.py` |
+
+**owner 指示（2026-10-08）**：
+
+- §4：不把 nvJitLink、cuFile、nvshmem 一律判為不可再散布，也不直接放行公開發行。要重新稽核：逐一核對每個實際打包的 `.so`、它的來源 wheel 與版本、wheel 附帶的授權檔，以及版本對應的官方條款，判定是否適用。
+  - **不得以授權檔 sha256 相同推斷授權相同**。
+  - 證據未閉合前維持 local-only／no-public-distribution，PR-C4 的工程驗證可以繼續。
+  - `THIRD_PARTY.md` 逐項列出證據、適用條件與未解風險。
+- 金鑰：release key 由 owner 產生並保管，只 commit 公鑰；驗收與負控制用一次性的 test key，secret key 不經過 agent。
+- 驗證位置：使用者在安裝**之前**驗證（`minisign -V` 再 `sha256sum -c`）。安裝器維持只用 base system 工具，不改。
+
+### 20.1 設計決定
+
+**授權稽核**
+
+- `shipping/license_audit.json` 對 `third_party_set.json` 的 27 個物件各一筆，每筆記錄四件事。
+  - 來源 wheel，以及 release：wheel 版本與官方版本的對應，例如 CUDA wheel 對 CUDA 13.0 Update 2 release notes 的 component 表。
+  - wheel 附帶、隨 package 出貨的授權檔（`licenses/<wheel>/`）裡對這個物件的宣稱，三種之一：
+    - Attachment A 列出／沒列出它的名字；
+    - 一段逐字引用的條款；
+    - 某個字串不存在。
+  - 版本對應的官方條款裡對它的宣稱：URL、抓取時間、snapshot 的 sha256，以及 Attachment A、引用條款、或「與出貨的檔案相同」三種之一。
+  - 條件、狀態、風險。
+- 狀態四種：
+  - `grant_in_bundled_and_official`
+  - `grant_in_both_texts_differ`
+  - `grant_in_official_only`（出貨的文本沒提到它，版本對應的官方條款准許）
+  - `no_licence_text_shipped`
+- **每個物件以它自己 wheel 的檔案逐一檢查。** 10 個 CUDA 系列 wheel 與 nvshmem wheel 的 `License.txt` 位元組相同（`ad6f5853…`），但稽核不從這一點推論。檢查器讀每個物件自己 wheel 的檔案，找那個物件的名字；測試以兩個位元組相同的合成 wheel 確認：對 A 成立的宣稱不會延用到 B。
+- 「官方條款」是 NVIDIA／上游以版本標示的頁面（§20.8 review 修正後的規則）：
+  - docs 的 version switcher 值等於 wheel 版本；
+  - 或 release notes 的 component 表中**該物件那一列**的版本等於 wheel 版本（不是頁面上任何地方出現這個版本）；
+  - 或 URL 的 tag 等於該版本。
+  - **每一個准許散佈的官方宣稱**，它的來源要對應到這個物件已驗證的 release：同一個來源、或同版本的 archive 頁面（CUDA EULA `archive/13.0.2/` 對 release notes `archive/13.0.2/`）、或 switcher／tag 對得上。只供參考的頁面（目前版的 CUDA EULA、NVSHMEM 2.8.0）不能當依據。
+  - 狀態宣稱官方條款准許（三種 `grant_*`），就至少要有一個准許散佈的官方宣稱；出貨文本准許的物件不能標成 `grant_in_official_only`。
+  - 沒有版本的來源只在「它就是這個物件自己的 release 來源、而且風險已記錄」時接受，記成 `unmatched_releases`（不是通過的證據）；其他情況一律失敗。目前有兩筆：cuSPARSELt 的授權頁沒有版本；libgomp 的 GCC 版本不在物件裡。
+- snapshot 是抓取當時的 HTML／文字，放在 `results/465_prc4_license/sources_<date>/`，不納入版本控制。稽核記錄每個 snapshot 的 sha256，條款原文則以逐字引用記在 JSON 裡（只引用判定所需的句子）。
+- **稽核結果**（2026-10-08；讀法，不是法律結論）：
+
+  | 物件 | 狀態 | 依據 |
+  |:--|:--|:--|
+  | cudart、cufft、cublas、cublasLt、curand、cusparse、nvrtc、nvjpeg、cupti（9 個） | `grant_in_bundled_and_official` | wheel 的 CUDA EULA（2018 文本）與 CUDA 13.0 Update 2 EULA（docs archive，last updated 2025-01-07）的 Attachment A 都列出 |
+  | **libnvJitLink、libcufile** | `grant_in_official_only` | wheel 的 2018 文本**沒有**列出；CUDA 13.0 Update 2 EULA 的 Attachment A 列出 `libnvJitLink.so`、`libcufile.so`，而 13.0 Update 2 的 component 表正是這兩個 wheel 的版本（13.0.88、1.15.1.6） |
+  | **libnvshmem_host** | `grant_in_official_only` | wheel 附的是 CUDA EULA（不提 NVSHMEM）；NVSHMEM 3.4.5 文件（version switcher＝3.4.5）的 SLA supplement：「distributable under the Agreement: any portion of the SDK」 |
+  | cuDNN（5 個） | `grant_in_both_texts_differ` | wheel：「runtime files .so and .h, cudnn64_7.dll, and cudnn.lib」；9.19.0 文件：「runtime files .so and .dll」 |
+  | libnvinfer | `grant_in_both_texts_differ` | wheel 的 `LICENSE.txt` 是 NVIDIA Software License Agreement＋TensorRT Supplement §12.1（libnvinfer／plugin，一年期自動續約，下游須同等限制）；10.16.1 文件是 SDK agreement（v. May 24, 2021）＋supplement「runtime files .so and .dll」：兩份不同的協議 |
+  | cusparseLt | `grant_in_bundled_and_official` | wheel 與官方頁的 supplement 相同（v. October 12, 2020）；官方頁沒有版本 |
+  | NCCL | `grant_in_bundled_and_official` | BSD-3-Clause；wheel 的 `License.txt` 與 tag v2.28.9-1 的 `LICENSE.txt` 逐位元組相同 |
+  | torch 系列（6 個） | `grant_in_bundled_and_official` | wheel 的 `LICENSE` 開頭等於 tag v2.11.0 的 `LICENSE`（後面接 66 段 bundled 第三方），`NOTICE` 逐位元組相同 |
+  | **libgomp** | `no_licence_text_shipped` | GNU libgomp（字串帶 `../../../libgomp/`），上游為 GPL-3.0-or-later WITH GCC-exception-3.1；torch 的 `LICENSE`／`NOTICE` 都沒有提到它（`LICENSE` 裡的 GPL-3.0 全文屬於 `cpr/test`）。package 沒有附 GPL／exception 文本與 source offer，物件也沒有記錄 GCC 版本 |
+
+  分佈：17 筆 `grant_in_bundled_and_official`，6 筆 `grant_in_both_texts_differ`，3 筆 `grant_in_official_only`，1 筆 `no_licence_text_shipped`。`distribution.status`＝`local-only`，`owner_confirmation`＝null。
+- **仍待 owner 的項目**（`THIRD_PARTY.md` 的「Open items」逐物件列出）：
+  1. 出貨文本沒提到、官方版本對應條款准許的三個物件，哪一份文本適用於「以 wheel 取得」的物件。若要以官方條款為據，是否把那份條款文本也放進 `licenses/`。
+  2. libnvinfer、cuDNN 兩份文本不同時以哪一份為準；TensorRT wheel 文本的一年期與「下游同等限制」條件如何滿足。
+  3. libgomp：附上 GPL-3.0 與 GCC Runtime Library Exception 文本並決定 source 的提供方式，或改用其他處理。
+  4. NVIDIA 各條款共通的條件：「material additional functionality」、「only accessed by your application」、「不得使之受 open source license 約束」。package 已把它們標成第三方元件、不在 Apache-2.0 之下，但「是否滿足」是 owner 的判斷。
+
+  上述項目關閉之前不公開任何 package。這是 owner 的決定，不是 PR-C4 run 的 gate。
+- `THIRD_PARTY.md` 由 `license_audit.py render` 從 `third_party_set.json`＋`license_audit.json` 產生，不再由 `export_third_party_set.py` 產生（它的 `--notice` 移除；換第三方集合就要重做稽核）。MANIFEST 多一個 `licenses` 鍵，記錄稽核檔的 sha256 與 `distribution`（`local-only`），讓 package 自己帶著散佈狀態；source commit 早於 PR-C4（沒有稽核檔）時不寫這個鍵，所以舊 package 的 MANIFEST 仍然推得出來。
+
+**簽章**
+
+- **簽的是 `<name>.sha256`**（PR-C3 的 package digest，已經涵蓋 tarball 與安裝器），簽章檔是 `<name>.sha256.minisig`，release set 變成四個檔案。只簽一個檔案，使用者只要一次 `minisign -V`，安裝器的完整性也一起涵蓋（§19.6「安裝器驗不了自己」）。
+- **trusted comment**＝`package=<name> commit=<source commit> manifest_sha256=<MANIFEST.json 的 sha256>`，由 tarball 裡的 MANIFEST 推出（`sign_shipping_package.py trusted-comment`）。minisign 對 trusted comment 另有一個簽章，所以它也是被簽的內容。這一項處理 §19.6 的「安裝後的 `--verify` 信任 tree 裡的 MANIFEST」：使用者以 `sha256sum <prefix>/MANIFEST.json` 對照簽過的 `manifest_sha256`。
+- **使用者在安裝之前驗證**（owner 指示）：`minisign -Vm <name>.sha256 -p minisign.pub` 再 `sha256sum -c <name>.sha256`，之後才執行安裝器。安裝器不讀簽章、不需要 minisign，與 PR-C3 逐位元組相同，所以 runtime identity 的 installer pin 也不變。
+- **兩個獨立的驗證**：`tarball --pubkey` 的 `signature` 檢查同時要求兩者成立：
+  - `minisign -V`（外部程式）；
+  - `sign_shipping_package.py` 自己的 reader（`cryptography` 的 Ed25519；`ED`＝BLAKE2b-512 prehash，`Ed`＝legacy）；
+  - 另外，trusted comment 等於 tarball 的 MANIFEST 推出的那一個。
+
+  容器裡的使用者流程（`run_package_container.sh verify`）用 Ubuntu 24.04 apt 的 minisign 0.11，與 host 的 minisign 是不同的 build。
+- **金鑰管理**：
+  - 產生：release key 由 owner 以 `minisign -G`（有密碼）在自己的機器產生；secret key 不進 repository、CI 或 agent 的環境。
+  - 公開：只 commit 公鑰 `shipping/package/minisign.pub`（以 owner review 的 PR），key id 寫進本節。README 要求使用者從 repository 取得公鑰，不從下載 package 的地方取得。
+  - 簽署：`sign_shipping_package.py sign --dist <dist> --secret-key <key>`（呼叫 minisign，密碼由 minisign 詢問）。
+  - 輪替：新公鑰檔先以舊 key 簽（`minisign -S -m minisign.pub`），新舊公鑰與這個簽章一起 commit；之後的 release 只用新 key。
+  - 撤銷：key 外洩時，從 repository 移除公鑰並記錄撤銷，以新 key 重簽仍要提供的 release。
+  - **本 PR 沒有 commit release 公鑰**（owner 產生之後另以 PR 加入）；正式 run 只用 test key。
+- **README.txt** 裝在 `<prefix>/README.txt`（`install_third_party.cmake`），內容是：
+  - 需求：GPU＝sm_120；driver：CUDA 13.0 Update 2 的 ≥ 580.95.05（NVIDIA release notes），驗證過的是 WSL2 的 616.92（Linux UMD 615.71.09）；glibc ≥ 2.39；約 3.7 GiB；
+  - 驗證、安裝、`--verify` 的步驟；
+  - 執行的用法；
+  - named limits；
+  - 授權的位置與散佈狀態。
+
+  README 不寫版本字串（以 `<name>` 指 MANIFEST 的 `package`），所以換版本不必改它。`static` 的 `layout_exact` 與 `licenses`、`tarball` 的 `pinned_tree` 都把它算進去（與 repository 的檔案逐位元組相同）。
+- **runtime identity**：`shipping/**` 是 identity 的輸入（README、稽核、`THIRD_PARTY.md`、install 規則都在裡面），所以與 PR-C3 相同，**republish 在正式 run 之前**。
+
+### 20.2 改了什麼
+
+- 新檔案：
+  - `shipping/license_audit.json`、`shipping/package/README.txt`；
+  - `scripts/native/license_audit.py`、`scripts/native/sign_shipping_package.py`；
+  - `tests/unit/test_license_audit.py`、`tests/unit/test_package_signature.py`。
+- `shipping/THIRD_PARTY.md`：改由稽核 render，加上散佈狀態、每個物件的證據與狀態、Open items、條件原文、來源清單。
+- `shipping/cmake/install_third_party.cmake`：多裝 `README.txt`。`shipping/CMakeLists.txt` 只改註解。
+- `check_shipping_bundle.py`：layout 多 `README.txt`，`licenses` 也比對 README，項目數不變（12／13）。
+- `check_shipping_package.py`：
+  - `tarball --pubkey`（release set 四個檔案，多一項 `signature`）；
+  - `pinned_tree` 比對 README；
+  - MANIFEST 的 `licenses` 鍵；
+  - `reading` 改寫。
+- `run_package_container.sh verify`；`export_third_party_set.py` 去掉 `--notice`。
+- **沒有動的**：shipping 與 tracking 的 C++ 原始碼、`install.sh`、launcher、auditor、`third_party_set.json`、`entrypoint_pin.json`、model root、operator library。
+
+### 20.3 開發期間已經看到的（在本節 commit 之前）
+
+都是工作樹上的試做，不是正式 run（`results/465_prc4_dev/t1/`）：
+
+- `build-release/`（§18.4 的 configure，沒有重新 build）`cmake --install` 寫出含 `README.txt` 的 tree：`static` 12 項 PASS。
+- `license_audit.py check --licenses <tree>/licenses --sources results/465_prc4_license/sources_20261008`：四項 PASS。
+  - 第一次 `official_terms` 失敗：HTML 版 EULA 的 Attachment A 開頭是「The following CUDA Toolkit files may be distributed…」，不是 wheel 文本的「distributable under the Agreement」，取 section 的條件太窄。修正為「heading 到 Attachment B 之間最長的一段」。
+- `--trial` package：92 秒，tarball 2,384,777,133 位元組，安裝器 `afa5d06a…`（與 PR-C3 相同）。
+- host 沒有 minisign（Arch），所以試做的 test key 與簽章在 `saccade-minisign:ubuntu24.04` 容器裡以 minisign 0.11 產生（`-G -W`，演算法 `ED`）。之後：
+  - reader 驗證通過，trusted comment 等於 MANIFEST 推出的值；
+  - `run_package_container.sh verify` exit 0（`Signature and comment signature verified`、兩行 `OK`）。
+  - digest 第一個 hex 字元改掉（簽章不變）：容器 `Signature verification failed` exit 1，reader `the signature does not verify`。
+
+### 20.4 測量契約（正式 run 之前寫定）
+
+**順序**：本節 commit 之後先 republish runtime identity。正式 run 在 republish 之後的乾淨 commit 上執行；host 要有 `minisign`（`signature` 檢查與 `sign` 用它）。
+
+**組態**：同一台機器，與 §19.4 相同。差別：
+- `$R/tree` 由同一個 `build-release/` 安裝，多 `README.txt`；
+- test key 在 run 開始時以容器的 minisign 產生到 `$R/testkey/`（`-G -W`，不設密碼，標記為 TEST；secret key 留在結果目錄，不納入版本控制）；
+- 簽章以 host 的 `sign_shipping_package.py sign`；
+- 授權 snapshot 從 `results/465_prc4_license/sources_20261008/` 複製到 `$R/license_sources/`；
+- oracle 與容器同 §19.4。
+
+**有效性**（任一不成立 ⇒ 受影響的 gate 為 `UNRESOLVED`）：
+- 乾淨 commit；run 開始時 `check_runtime_identity_staleness.py --mode attested` exit 0。
+- operator library 與 entrypoint pin 檔案的 sha256 在 run 前後都等於 attestation 與 `entrypoint_pin.json`。
+- `git diff 1ae402c2 HEAD -- shipping/src shipping/include shipping/tools shipping/launcher shipping/third_party_set.json shipping/entrypoint_pin.json src include` 為空；`git diff 9217ed92 HEAD -- shipping/package/install.sh` 為空。
+- `anchor` 與 `A_L_1` 7/7 相同，`oracle-rows` 有效。
+- 容器顯示 Ubuntu 24.04、glibc 2.39；安裝容器 `/bin/sh`＝dash、沒有 Python 與編譯器；verify 容器只多 minisign。
+
+**PASS 驗收規則**：verdict 是 `PASS` 若且唯若下列全部成立，否則 `FAIL`（照 gate 分開報告）：
+
+1. **build 與安裝**：同 §19.4 第 1 條。
+2. **靜態檢查**：`check_shipping_bundle.py static` 對 `$R/tree` 12 項 PASS。
+3. **授權稽核**：`license_audit.py check --licenses $R/tree/licenses --sources $R/license_sources` exit 0，`coverage`、`bundled_texts`、`official_terms`、`notice` 四項 PASS，`complete: true`；`$R/tree/licenses/THIRD_PARTY.md` 與 render 相同。
+4. **package 與簽章**：
+   - builder（不帶 `--trial`）exit 0，`tree_clean`、`identity_current` 為 true；MANIFEST 的 `licenses` 等於稽核檔的 sha256 與 `local-only`。
+   - `sign` exit 0。
+   - `tarball --pubkey $R/testkey/test.pub` 8 項 PASS：`release_set`（四個檔案）、`package_digest`、`installer_exact`、`tar_members`、`manifest_exact`、`pinned_tree`、`metadata`、`signature`（minisign exit 0、reader 無問題、trusted comment 相同）。
+   - **決定性**（§20.4a 修訂）：同一個 tree、同一個 commit 再產生到 `$R/dist_again`，三個 package 檔案（tarball、安裝器、digest）逐位元組相同；再以同一把 test key 簽，`dist_again` 的簽章在同一把公鑰下以 `minisign -V` 與 reader 都驗證通過，trusted comment 與 `dist` 的相同。簽章檔本身不要求逐位元組相同。
+5. **使用者端驗證**：`run_package_container.sh verify $R/dist $R/testkey/test.pub` exit 0；log 有 `Signature and comment signature verified`、等於第 4 條的 trusted comment、兩行 `: OK`。
+6. **從 tarball 安裝到乾淨容器**：同 §19.4 第 4 條（`install-strace` exit 0、`install-trace` 5 項、`static --manifest` 13 項、容器內 `--verify` exit 0、除 MANIFEST 外與 `$R/tree` 逐位元組相同），加上：安裝後 `MANIFEST.json` 的 sha256 等於 trusted comment 的 `manifest_sha256`。
+7. **乾淨容器執行**：`run_shipping_container.sh bundle $R/installed/saccade`：
+   - 7 sequence、exit 0；
+   - `parity --native-from` `EXACT`（`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7）；
+   - `--against` PR-C3 正式 run 的 `results/465_prc3_package/full_9217ed92/parity_bundle/report.json` 7/7 相同。
+8. **G2-2／G2-4**：`bundle-strace`，`runtime` 三項 PASS；`EXACT` 且 `--against` 第 7 條 7/7 相同。
+
+沒有容差。
+
+**簽章負控制**：每一條都在自己的 dist 副本做（未改的檔案是 hard link），記錄兩項：
+- 容器 `verify`（minisign 0.11）的 `verify.log`；
+- host `tarball --pubkey` 的 `signature`（minisign＋reader）。
+
+「verify 失敗」＝`verify.log` 的 exit 不是 0。
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| S1 | `<name>.sha256` 第一個 hex 字元改掉（簽章不變） | verify 失敗（`Signature verification failed`）；`signature` FAIL（minisign 非 0、reader `the signature does not verify`） |
+| S2 | §19.4 P3 的重新包（`libcublas.so.13` 最後一個位元組反轉、MANIFEST 跟著改），digest 重算，簽章不變 | verify 失敗；`signature` FAIL。這一條是 §19.6「digest 不是簽章」被簽章擋下 |
+| S3 | 安裝器多一行註解，digest 重算，簽章不變 | verify 失敗；`signature` FAIL |
+| S4 | `.minisig` 的 trusted comment 的 `manifest_sha256` 改成 64 個 0 | verify 失敗（comment signature）；`signature` FAIL（reader `the trusted comment's signature does not verify`） |
+| S5 | 以另一把 test key（`$R/testkey2`）簽，trusted comment 正確 | verify 失敗；`signature` FAIL（key id） |
+| S6 | tarball 中間一個位元組反轉，digest **不**重算 | `verify.log` 有 `Signature and comment signature verified`（簽章本身有效），之後 `sha256sum -c` 的 tarball 那一行 `FAILED` ⇒ verify 失敗。這一條說明兩步都要做。host 的 `tarball` 讀不了被改的 gzip（exit 2）或 `package_digest` FAIL，照實記錄 |
+| S7 | 刪掉 `.minisig` | verify 失敗；`release_set`、`signature` FAIL |
+| S8 | 以 test key 對正確的 digest 簽，但 trusted comment 的 `manifest_sha256` 是 64 個 0 | **minisign 與 verify 通過**（簽章本身有效）；`signature` FAIL（trusted comment 不同）。這一條記錄 trusted comment 的比對要由使用者或檢查器做 |
+| S9 | 安裝後 tree 的副本（hard link）：`lib/vendor/libcudart.so.13` 換成多一個位元組的版本，MANIFEST 的那一行跟著改 | `install.sh --verify` **exit 0**（§19.6 的限制）；`sha256sum MANIFEST.json` 不等於 trusted comment 的 `manifest_sha256`；`static --manifest` 的 `vendor_set_pinned` FAIL |
+
+**授權稽核負控制**：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| L1 | `$R/tree/licenses` 的副本：`nvidia_cufile-1.15.1.6/License.txt` 換成 CUDA 13.0.2 EULA 的文字 snapshot（裡面列出 `libcufile.so`） | `bundled_texts` FAIL（sha256 不是集合的；`libcufile.so.0` 的「Attachment A 沒列出」不成立） |
+| L2 | `$R/license_sources` 的副本：`nvshmem_sla_3.4.5.html` 最後一個位元組改掉 | `official_terms` FAIL（snapshot sha256） |
+| L3 | 稽核檔的副本：`libnvJitLink.so.13` 的 `bundled.attachment_a.listed` 改成 true、狀態改成 `grant_in_bundled_and_official` | `bundled_texts` FAIL（`does not list 'libnvJitLink.so'`） |
+
+**不做的**：
+- FPS；
+- host 經 launcher 的 parity；
+- PR-C3 的安裝器負控制 P1–P15（安裝器沒有變）；
+- PR-C1／C2 的 N1–N18、M1–M6；
+- 其他 GPU、主機、glibc；
+- release key 的產生與 commit（owner）；
+- 任何散佈（§20.1，`local-only`）。
+
+### 20.4a 契約修訂（r1 之後，2026-10-08）
+
+**r1 的結果**：正式 run r1（`results/465_prc4_release/full_bfd086c7/`，commit `bfd086c7`）依 §20.4 原文是 `FAIL`。其他部分都成立：
+- 有效性、gate 1–3、5–8 都成立；
+- gate 4 的 `tarball --pubkey` 8/8 PASS；
+- S1–S9、L1–L3 全部照必須的結果。
+
+唯一不成立的是 gate 4 的「四個檔案逐位元組相同」：三個 package 檔案相同，但兩個 `.minisig` 不同。
+
+**原因**：原文的前提「Ed25519 簽章是決定性的」對這台 host 的簽署工具不成立，是契約寫錯，不是 package 的問題。
+- 小檔案的對照：host 的 minisign 0.12（Arch，libsodium 1.0.22）同一把 key、同一個檔案簽兩次，簽章不同；容器裡的 minisign 0.11（Ubuntu 24.04）兩次相同。
+- `dist_again` 的簽章在同一把公鑰下以 `minisign -V` 與 reader 都驗證通過，trusted comment 與 `dist` 的相同。
+
+**修訂**：gate 4 的決定性改成上面那一條：三個 package 檔案逐位元組相同，第二次的簽章可驗證且 trusted comment 相同。其他條文不變。
+
+**順序**：本修訂 commit 之後，在新的乾淨 commit 上**從頭**重跑整個正式 run（r2），不沿用 r1 的任何產物。r1 的產物與它的 `FAIL` 保留，在 §20.5 照實記錄。
+
+
+### 20.5 驗收
+
+同一台機器（RTX 5070 Ti Laptop，WSL2，driver 616.92）。
+
+**r1**（`results/465_prc4_release/full_bfd086c7/`，commit `bfd086c7`）＝`FAIL`。
+
+- 唯一不成立的是 gate 4 原文的「四個檔案逐位元組相同」（§20.4a）。
+- 其他 gate、S1–S9、L1–L3 都照必須的結果。
+- r1 的產物不被 r2 使用。
+
+**r2** 是正式結果。
+- commit `bc75dcab`＝§20.4 的契約（`992213ee`）＋§20.4a 修訂（`f2ff5700`）＋runtime identity 的 republish（`chore/465-prc4-republish`）。republish 內容：
+  - implementation 軸 287 → 288 個檔案：新增 `shipping/license_audit.json`，改 `shipping/cmake/install_third_party.cmake` 與 `shipping/CMakeLists.txt`；
+  - probe 重跑，behavior `2dabed0b` 與 PR-C3 出版相同。
+- 工作樹乾淨，契約與修訂都早於 r2 的任何量測。
+- 全部 GPU 步驟在 gpu0 lease 下依序執行（`run.sh`）。
+- 判定由 `evaluate.py` 從產物讀出（`evaluation.json` sha256 `daa17f1c…`）。
+- host minisign 0.12（Arch），容器 minisign 0.11（Ubuntu 24.04 apt）。
+- test key `52320762B09F4D86`；S5 用的第二把 `3D223A859A587302`。
+
+| 驗收項 | 結果 |
+|:--|:--|
+| 有效性 | 下列全部成立 |
+| 有效性：工作樹與 identity | 工作樹乾淨；`--mode attested` exit 0 |
+| 有效性：來源未變 | tree 的來源路徑對 `1ae402c2` 沒有 diff；`install.sh` 對 `9217ed92` 沒有 diff |
+| 有效性：pin | operator library 與 entrypoint pin 在 run 前後都等於 attestation 與 pin |
+| 有效性：oracle | `anchor` 與 `A_L_1` 7/7 相同；`oracle-rows` OK |
+| 有效性：容器 | 安裝與 verify 容器都是 Ubuntu 24.04.4、dash；安裝容器沒有 Python 與編譯器 |
+| 1 build 與安裝 | configure、build、install 都 exit 0 |
+| 2 靜態檢查 | 12 項 PASS（含 `README.txt` 的 layout 與位元組） |
+| 3 授權稽核 | `coverage`、`bundled_texts`、`official_terms`、`notice` 四項 PASS，`complete: true`；安裝的 `THIRD_PARTY.md` 等於 repository 的；狀態 17／6／3／1（§20.1），`distribution`＝`local-only` |
+| 4 package 與簽章 | builder exit 0，`tree_clean`、`identity_current` 為 true；`sign` exit 0 |
+| 4：`tarball --pubkey` | 8 項 PASS（88 個 member、57 個檔案）；`signature` 的 minisign exit 0、reader 無問題、trusted comment 相同 |
+| 4：決定性（§20.4a） | 三個 package 檔案逐位元組相同：tarball `c753496a…`（2,384,778,504 位元組）、安裝器 `afa5d06a…`（與 PR-C3 相同）、digest `9f3012d6…` |
+| 4：第二次簽章 | `dist_again` 的簽章以 minisign 與 reader 都驗證通過，trusted comment 相同；簽章檔本身不同（`bcf5ab8f…` 對 `6e1e2674…`，§20.4a） |
+| 4：MANIFEST | `files` 等於 `$R/tree`；`licenses` 等於稽核檔的 sha256 與 `local-only` |
+| 5 使用者端驗證 | 容器 exit 0：`Signature and comment signature verified`、trusted comment＝`package=<name> commit=bc75dcab… manifest_sha256=fcd200aa…`、tarball 與安裝器兩行 `OK` |
+| 6 從 tarball 安裝 | exit 0；`install-trace` 5 項 PASS：TARGET 只被一次 `renameat2(…, RENAME_NOREPLACE)` 碰到，其他 277 筆寫入性質的呼叫都在 staging 之內，staging 已刪，0 筆 incomplete |
+| 6：安裝後的 tree | `static --manifest` 13 項 PASS；`--verify` exit 0；除 MANIFEST 外與 `$R/tree` 逐位元組相同；**安裝後 `MANIFEST.json` 的 sha256（`fcd200aa…`）等於簽過的 `manifest_sha256`** |
+| 7 乾淨容器執行 | exit 0；`EXACT`：`detector` 5316/5316、`mot_txt` 7/7、`graph_captures` 7/7；`--against` PR-C3 正式 run 的 `parity_bundle` 7/7 相同 |
+| 8 G2-2／G2-4 | `runtime` 三項 PASS；`EXACT`，與第 7 條 7/7 相同；兩次的 `python_libraries_mapped` 都是空的 |
+| **verdict** | **`PASS`**（§20.4 經 §20.4a 修訂後的第 1–8 條全部成立） |
+
+**簽章負控制**（`sigctl/`）：
+
+| # | 結果 |
+|:--|:--|
+| S1 | verify exit 1，`Signature verification failed`；`signature` FAIL（minisign exit 1、reader `the signature does not verify`） |
+| S2 | verify exit 1；`signature` FAIL（簽章與 trusted comment 都不對）。§19.6 的 P3（內部一致、digest 重算的重新包）被簽章擋下 |
+| S3 | verify exit 1；`signature`、`installer_exact`、`metadata` FAIL |
+| S4 | verify exit 1，`Comment signature verification failed`；`signature` FAIL（reader `the trusted comment's signature does not verify`） |
+| S5 | verify exit 1（key id 不同）；`signature` FAIL（reader：key id 不同、簽章與 comment 簽章都不成立） |
+| S6 | verify exit 1：先 `Signature and comment signature verified`，之後 tarball 那一行 `FAILED`。host 的 `tarball` exit 1，`package_digest`、`manifest_exact`、`pinned_tree`、`metadata` FAIL（被改的 gzip 讀得完，沒有到 exit 2） |
+| S7 | verify exit 2（沒有簽章檔）；`release_set`、`signature` FAIL |
+| S8 | **verify exit 0、minisign exit 0**（簽章本身有效，trusted comment 是 64 個 0 的 `manifest_sha256`）；`signature` FAIL（trusted comment 不同） |
+| S9 | `install.sh --verify` **exit 0**（§19.6 的限制照舊）；`sha256sum MANIFEST.json` 不等於簽過的 `manifest_sha256`；`static --manifest` 的 `vendor_set_pinned` FAIL |
+
+**授權稽核負控制**（`auditctl/`）：
+- **L1**：exit 1。`bundled_texts` FAIL，原因兩個：cuFile 的檔案 sha256 不是集合的；這份文本 Attachment A 列出 `libcufile.so`，與稽核的「沒列出」不同。
+- **L2**：exit 1。`official_terms` FAIL：`nvshmem_sla_3.4.5` 的 snapshot sha256 不同。
+- **L3**：exit 1。`bundled_texts` FAIL（`does not list 'libnvJitLink.so'`）；`notice` 也 FAIL，因為改過的稽核 render 出不同的 `THIRD_PARTY.md`。
+
+**這個 PR 對 §19.6 限制的處理**：
+- 「digest 不是簽章」：S2 被簽章擋下。
+- 「安裝器驗不了自己」：S3 被簽章擋下。
+- 「`--verify` 信任 tree 裡的 MANIFEST」：沒有消失（S9），但安裝後的 MANIFEST 現在可以對照簽過的 sha256（第 6 條、S9）。要做這個對照，使用者要有 release 公鑰，而它還沒有 commit。
+
+結果目錄：`results/465_prc4_release/full_bc75dcab/`（r2）與 `full_bfd086c7/`（r1），內容包括：
+- `run.sh`、`evaluate.py`、`evaluation.json`；
+- `tree/`、`dist/`、`dist_again/`、`testkey*/`、`license_sources/`、`license_audit.json`；
+- `verify/`、`install/`、`installed/`；
+- `container_*`、`parity_*`；
+- `sigctl/`、`auditctl/`。
+
+開發試做在 `results/465_prc4_dev/t1/`，授權 snapshot 在 `results/465_prc4_license/sources_20261008/`。都不納入版本控制。
+
+### 20.6 限制
+
+- **不是可以散佈的 release。**
+  - `distribution`＝`local-only`；§20.1 的四類 Open items 要 owner 決定。
+  - 稽核是對授權文本的讀法，不是法律意見。
+  - snapshot 是 2026-10-08 的網頁，NVIDIA 之後的修改不在裡面。
+- **沒有 release key。** 正式 run 與負控制只用一次性的 test key（無密碼，secret key 在結果目錄）。release 公鑰 `shipping/package/minisign.pub` 由 owner 產生並以另一支 PR 加入。README 已經指向這個路徑，在那之前它不存在。
+- **簽章不是決定性的**（minisign 0.12／libsodium 1.0.22，§20.4a）。同一份 digest 重簽會得到不同的 `.minisig`，發佈的是簽過的那一份。
+- **trusted comment 的比對要由使用者做**（S8）。minisign 只證明簽章有效，不比對內容。檢查器會比對，使用者流程則要看 minisign 印出的 trusted comment。
+- **`--verify` 仍信任 tree 裡的 MANIFEST**（S9）。要以簽過的 `manifest_sha256` 對照，README 有寫，但不是自動的。
+- **使用者要有 minisign。** Ubuntu 24.04 的 universe 有它（0.11），base system 沒有。安裝器本身仍只用 base system 工具。
+- **README 只描述這一台機器驗證過的事。** driver 下限引用 NVIDIA 對 CUDA 13.0 Update 2 的表，沒有在其他 driver 上執行過。
+- 其餘同 §19.6（只支援 sm_120、一台 WSL2 機器、`RENAME_NOREPLACE` 只在 ext4 上確認、SIGKILL 留下 staging 等）。
+
+### 20.7 重現
+
+```bash
+.venv/bin/python scripts/native/license_audit.py render --check             # THIRD_PARTY.md == rendering
+.venv/bin/python scripts/native/license_audit.py check --licenses <tree>/licenses --sources <snapshots> --report audit.json
+.venv/bin/python scripts/native/build_shipping_package.py --tree <tree> --out <dist> --static-report static.json
+.venv/bin/python scripts/native/sign_shipping_package.py sign --dist <dist> --secret-key <key>   # the owner's release key
+.venv/bin/python scripts/native/check_shipping_package.py tarball --dist <dist> --pubkey <pub> --report package.json
+bash scripts/native/run_package_container.sh verify <dist> <pub> <out>      # the user's check, Ubuntu 24.04
+minisign -Vm <dist>/<name>.sha256 -p <pub> && (cd <dist> && sha256sum -c <name>.sha256)   # an end user, before installing
+bash results/465_prc4_release/<label>/run.sh && .venv/bin/python results/465_prc4_release/<label>/evaluate.py
+```
+
+### 20.8 Review 修正（`59de3f28` 的 review，2026-10-08）
+
+review 在 `59de3f28` 重現了三個稽核的假 PASS，以及一個舊 MANIFEST 推導的退化，四項都是 P2。四項都是檢查器的覆蓋缺口，不是 package 或 r2 結果的錯誤。修正在 `96bb41c0`，只改檢查器與測試（`scripts/native/*` 不是 runtime identity 的輸入）。
+- 修正後合併 head 的 `--mode attested` 仍然 exit 0；
+- `shipping/license_audit.json`、`THIRD_PARTY.md`、README、安裝規則都沒有改；
+- 所以 r2 的 package 與正式 run 仍然描述這個 source。
+
+| # | 缺口 | 修正 |
+|:--|:--|:--|
+| 1 | release notes 的版本比對是整頁子字串：`nvidia_cuda_runtime-13.0.88` 會借 NVRTC／nvJitLink 的 13.0.88 而通過（cudart 那一列是 13.0.96） | 只看該物件在 component 表的那一列（`RELNOTES_COMPONENT`，CUPTI 的列名是 `CUPTI`）；那一列的版本要恰好等於 wheel 版本，不認得的 wheel 失敗 |
+| 2 | 官方宣稱只檢查文字，不檢查它的來源是不是這個 release 的：cuFile 改用只供參考的目前版 CUDA EULA（13.4）仍然通過 | 每一個准許散佈的官方宣稱都要綁到已驗證的 release：同一個來源、同版本的 archive，或 switcher／tag 對得上。沒有版本的來源只在「它就是物件自己的 release 來源而且風險已記錄」時接受 |
+| 3 | `official` 清單被清空時，`grant_in_official_only` 照樣四項 PASS | 宣稱官方准許的狀態至少要有一個准許散佈的官方宣稱；出貨文本准許的物件不能標成 `grant_in_official_only` |
+| 4 | source commit 早於 PR-C4 時，`manifest_head` 不寫 `licenses`，卻用新的 `reading`，所以 PR-C3 的 MANIFEST（`9217ed92`）推導不出來，`metadata` 失敗 | 沒有稽核檔的 commit 用 PR-C3 的 `reading`（`READING_PRE_C4`） |
+
+**重播**（`results/465_prc4_release/review_fix_96bb41c0/replay.sh`，在 r2 的產物上執行，不產生新的 package、不用 GPU）。
+
+- gate 3：r2 的 tree 與 snapshot 在修正後的檢查器下仍是四項 PASS，`unmatched_releases` 兩筆：cuSPARSELt、libgomp，都有記錄風險。
+- L1–L3 照舊各自失敗：L1 `bundled_texts`，L2 `official_terms`，L3 `bundled_texts`＋`notice`。
+- review 的三個情境在真實稽核上重做，各自重新 render notice 與集合，所以只有宣稱不同：
+  - **R1**（cudart 宣稱為 13.0.88，授權目錄也跟著改名）：`official_terms` FAIL。
+    - release 列：`row 'CUDA Runtime (cudart)' gives ['13.0.96'], the wheel is 13.0.88`；
+    - 它的 EULA 也失去綁定。
+  - **R2**（cuFile 改用 `cuda_eula_current`）：`official_terms` FAIL：`terms cuda_eula_current is not tied to version 1.15.1.6`。
+  - **R3**（nvJitLink 的 `official` 清空）：`coverage` FAIL：`status grant_in_official_only without an official claim that grants distribution`。
+- **R4**：
+  - 以修正後的 `manifest_head` 推導 PR-C3 的 MANIFEST（`9217ed92`）與 r2 的（`bc75dcab`），兩者都逐欄相同。
+  - r2 的 `tarball --pubkey` 仍是 8 項 PASS。
+  - PR-C3 package 的 `tarball` 現在 `metadata` PASS。它的 `pinned_tree` 仍然 FAIL：目前 repository 的 layout 多了 `README.txt`，`THIRD_PARTY.md` 也不同了，這是預期的，`tarball` 一向以目前的 pin 檢查。
+
+測試：`tests/unit/test_license_audit.py` 加了 component 列（含 13.0.88 的借用）、terms 與 release 的綁定（同 archive／不同 archive／沒有版本），以及狀態與證據的一致性；`tests/unit/test_package_signature.py` 釘住 PR-C3 的 `reading`。原本一個合成測試改為較嚴的行為：沒有版本、也沒有記錄風險的 release，現在是失敗，不再只是 note。
