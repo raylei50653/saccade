@@ -2,7 +2,8 @@
 """Checks of the shipping package (#465 Phase C PR-C3).
 
 The package is three files (docs/reference/native_runtime_resolved_config.md
-§19; a fourth, the minisign signature of the digest, since PR-C4 §20), written by ``build_shipping_package.py`` from a tree that passed
+§19; an optional fourth, the minisign signature of the digest, PR-C4 §20 and
+#546 §21), written by ``build_shipping_package.py`` from a tree that passed
 ``check_shipping_bundle.py static``:
 
 * ``<name>.tar.gz``: one directory ``<name>/`` holding the tree and
@@ -38,6 +39,13 @@ Subcommand:
              ``minisign -V`` and ``sign_shipping_package``'s own reader both
              verify it under the key, and its trusted comment is the one the
              tarball's MANIFEST gives (package, commit, MANIFEST sha256).
+
+             The signature is optional for a local-only package (#546, §21):
+             without ``--pubkey`` every check above still runs, and the
+             report's ``authentication`` says ``none`` (integrity only; the
+             publisher is not authenticated). A ``.minisig`` next to the
+             package without ``--pubkey`` fails ``release_set``: a signature
+             is verified or refused, never ignored.
 
 ``install-trace`` an installation recorded with ``strace -ff -yy``
              (``run_package_container.sh install-strace``): the target is
@@ -447,11 +455,13 @@ def cmd_tarball(args: argparse.Namespace) -> int:
         [tarball.name, installer.name, digest.name]
         + ([signature.name] if args.pubkey else [])
     )
-    _check(
-        checks,
-        "release_set",
-        [] if present == want else [f"{dist} holds {present}, expected {want}"],
-    )
+    rs_bad = [] if present == want else [f"{dist} holds {present}, expected {want}"]
+    if not args.pubkey and signature.name in present:
+        rs_bad.append(
+            f"{signature.name} is present but no --pubkey was given: a signature "
+            "is verified or the check fails, never ignored (§21)"
+        )
+    _check(checks, "release_set", rs_bad)
 
     sums = {"tarball": g2.sha256_file(tarball)}
     if installer.is_file():
@@ -572,6 +582,7 @@ def cmd_tarball(args: argparse.Namespace) -> int:
             **sig,
         )
 
+    auth = authentication(bool(args.pubkey), checks.get("signature", {}).get("pass"))
     report = {
         "schema": SCHEMA,
         "kind": "tarball",
@@ -579,13 +590,38 @@ def cmd_tarball(args: argparse.Namespace) -> int:
         "package": name,
         "sha256": sums,
         "signed": bool(args.pubkey),
+        "authentication": auth,
         "checks": checks,
         "pass": all(c["pass"] for c in checks.values()),
     }
     g2._write(args.report, report)
     for key, c in checks.items():
         print(f"{key}: {'PASS' if c['pass'] else 'FAIL'}")
+    print(f"authentication: {auth['method']} ({auth['reading']})")
     return 0 if report["pass"] else 1
+
+
+def authentication(requested: bool, verified: bool | None) -> dict[str, Any]:
+    """What a ``tarball`` report says about the publisher (#546, §21). The
+    digest and the MANIFEST are integrity checks: they show the files are the
+    ones the digest names, not who made them. Only a signature that was asked
+    for and verified authenticates, and only as far as the key's origin."""
+    if not requested:
+        return {
+            "method": "none",
+            "publisher_authenticated": False,
+            "reading": "integrity only; the publisher is not authenticated",
+        }
+    return {
+        "method": "minisign",
+        "publisher_authenticated": bool(verified),
+        "reading": (
+            "the digest is signed by the --pubkey key; the key is the "
+            "publisher's only if it came from the publisher"
+            if verified
+            else "a signature was requested and did not verify"
+        ),
+    }
 
 
 def manifest_head(
@@ -1007,7 +1043,7 @@ def main(argv: list[str] | None = None) -> int:
     t.add_argument(
         "--pubkey",
         type=Path,
-        help="minisign public key: the release set must also hold <name>.sha256.minisig, which must verify (PR-C4)",
+        help="minisign public key: the release set must also hold <name>.sha256.minisig, which must verify (PR-C4); optional for a local-only package (§21)",
     )
     it = sub.add_parser("install-trace")
     it.add_argument("--strace-prefix", type=Path, required=True)

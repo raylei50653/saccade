@@ -15,7 +15,11 @@ synthetic tree in the ordinary pytest job:
   extra or missing file, a symlink or ``..`` member, a renamed package, a
   malformed MANIFEST line, an existing target (directory, empty directory,
   file, symlink) and a prefix with ``:`` all fail with the target never
-  created (or left as it was) and no staging directory left behind.
+  created (or left as it was) and no staging directory left behind;
+* the unsigned local install (#546, §21): the installer never reads a
+  signature, so an unsigned package installs through the same checks, a
+  ``.minisig`` (even a broken one) changes nothing, and its output claims no
+  authentication.
 """
 
 # scope: system
@@ -488,6 +492,33 @@ def test_prefix_with_a_colon_is_refused(tmp_path: Path) -> None:
     r = _install(dist, parent / "saccade")
     assert r.returncode == 2 and "must not contain" in r.stderr
     assert list(parent.iterdir()) == []
+
+
+@needs_sh
+def test_unsigned_local_install_claims_no_authentication(tmp_path: Path) -> None:
+    """#546 §21: signing is optional and the installer is integrity-only. It
+    installs an unsigned package through the same checks, a signature file
+    next to the package (here a broken one) changes nothing, and nothing it
+    prints claims a signature or an authenticated publisher."""
+    assert "minisig" not in INSTALLER.read_text()
+    outs = []
+    for signed in (False, True):
+        work = tmp_path / ("b" if signed else "a")
+        work.mkdir()
+        dist = _package(work)
+        if signed:
+            (dist / f"{NAME}.sha256.minisig").write_text("not a signature\n")
+        target = work / "opt" / "saccade"
+        target.parent.mkdir()
+        r = _install(dist, target)
+        assert r.returncode == 0, r.stderr
+        assert pkg.manifest_matches_tree(target)["pass"]
+        out = r.stderr.replace(str(work), "<work>")
+        assert "sign" not in out.lower() and "authentic" not in out.lower(), out
+        outs.append(out)
+    assert re.sub(r"saccade-install\.\w+", "S", outs[0]) == re.sub(
+        r"saccade-install\.\w+", "S", outs[1]
+    )
 
 
 def test_installer_has_no_test_hook() -> None:

@@ -28,20 +28,36 @@ Disk    About 3.7 GiB installed. The installer also needs room for a staging
 Verify, then install
 --------------------
 
-A release is four files: <name>.tar.gz, <name>.install.sh, <name>.sha256 and
-<name>.sha256.minisig.
+A release is three files: <name>.tar.gz, <name>.install.sh and <name>.sha256.
+A signed release has a fourth, <name>.sha256.minisig. Packages are local-only
+for now and need not be signed.
 
-1. Get the release public key from the Saccade repository
-   (shipping/package/minisign.pub), not from where you downloaded the package.
+What each check shows:
 
-2. Check the signature of the digest file, then the digest:
+  sha256 digest and MANIFEST.json   the files are the ones the digest names,
+                                    complete and unmodified (integrity).
+  minisign signature                the digest was signed by the holder of
+                                    the key you verify it with (publisher
+                                    authentication).
+
+A digest is not a signature: whoever can replace the tarball can replace
+<name>.sha256 too. An unsigned package is not authenticated, however its
+checks turn out; do not describe it as signed or verified.
+
+1. Signed release only. Get the release public key from the Saccade
+   repository (shipping/package/minisign.pub), not from where you downloaded
+   the package, and check the signature of the digest file:
 
      minisign -Vm <name>.sha256 -p minisign.pub
-     sha256sum -c <name>.sha256
 
    minisign prints the trusted comment:
      package=<name> commit=<source commit> manifest_sha256=<sha256 of MANIFEST.json>
-   The installer cannot verify itself. Step 2 is what covers it.
+   If it fails, stop: do not install. The installer cannot verify itself;
+   this step is what covers it.
+
+2. Check the digest (signed or not):
+
+     sha256sum -c <name>.sha256
 
 3. Install. TARGET must not exist, and its parent directory must exist. The
    path must not contain ':' or ';'.
@@ -51,16 +67,18 @@ A release is four files: <name>.tar.gz, <name>.install.sh, <name>.sha256 and
    The installer checks the digest, extracts to a staging directory next to
    TARGET, and checks every file against MANIFEST.json. It then renames the
    staging directory to TARGET in one step. On any failure TARGET is not
-   created.
+   created. It does the same for a signed and an unsigned package: it never
+   reads the signature.
 
 4. Later checks of an installed tree:
 
      sh <name>.install.sh --verify TARGET
      sha256sum TARGET/MANIFEST.json
 
-   --verify checks the tree against the MANIFEST.json inside it. The sha256
-   of that file must equal manifest_sha256 in the signed trusted comment.
-   Otherwise the MANIFEST itself is not vouched for.
+   --verify checks the tree against the MANIFEST.json inside it. For a signed
+   release, the sha256 of that file must equal manifest_sha256 in the signed
+   trusted comment; otherwise the MANIFEST itself is not vouched for. An
+   unsigned package has no such reference.
 
 
 Run

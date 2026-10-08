@@ -14,6 +14,7 @@
 | [native_runtime_resolved_config.md](native_runtime_resolved_config.md) | #465 Phase B PR-3：headline resolved shipping config（`configs/shipping/mamba_whole_graph.resolved.json`）的 schema、值的來源（執行 oracle 自身敘述＋native 替身）、fail-closed 覆蓋檢查、匯出時的發現與限制 |
 | [native_runtime_head_parity_declaration.md](native_runtime_head_parity_declaration.md) | #465 Phase B PR-2 預宣告：head parity 的凍結輸入、L1 tensor gross-error screen、L2 7-seq MOT 容差（以 `--no-compile` reference 定尺度，含 floor／cap）、validity gate 與窮盡 terminal |
 | [native_runtime_phase_c_scope.md](native_runtime_phase_c_scope.md) | #465 Phase C：owner 決策 C-D1–C-D4（bundle attested 第三方集合、只支援 sm_120、relocatable tarball、Ubuntu 24.04 baseline）、授權讀法、已知技術問題、PR-C1–C4 拆分 |
+| [native_runtime_closeout.md](native_runtime_closeout.md) | #465 收尾（#546）：`ENGINEERING_COMPLETE`／`PUBLIC_DISTRIBUTION_READY` 的定義、架構與信任邊界圖、宣稱 → PR／正式證據／限制／測試的驗收矩陣、公開散佈的未解項目與延後工作；建議 verdict `ENGINEERING_COMPLETE — PUBLIC_DISTRIBUTION_DEFERRED`（待 owner review） |
 | [math_model.md](math_model.md) | 現行 baseline 的全局數學模型：GMC、Kalman、成本、auction、bridge relink |
 | [math_model_implementation.md](math_model_implementation.md) | 修改模型時的實作流程、invariants、測試與文檔 checklist |
 | [PIPELINE_REFERENCE.md](PIPELINE_REFERENCE.md) | 2026-05 legacy pipeline snapshot / module delta ledger（非現行 baseline） |
