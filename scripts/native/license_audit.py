@@ -176,6 +176,46 @@ def _official_summary(claim: dict[str, Any], sources: dict[str, Any]) -> str:
 # ---------------------------------------------------------------- check
 
 
+# Statuses that assert a grant in the shipped text / in the official terms.
+SHIPPED_GRANT_STATUSES = ("grant_in_bundled_and_official", "grant_in_both_texts_differ")
+OFFICIAL_GRANT_STATUSES = (*SHIPPED_GRANT_STATUSES, "grant_in_official_only")
+# The row label of each CUDA component wheel in the release notes' "Component
+# Versions" table; a release-notes release is matched on that row only.
+RELNOTES_COMPONENT = {
+    "nvidia_cuda_runtime": "CUDA Runtime (cudart)",
+    "nvidia_cublas": "CUDA cuBLAS",
+    "nvidia_cufft": "CUDA cuFFT",
+    "nvidia_cufile": "CUDA cuFile",
+    "nvidia_curand": "CUDA cuRAND",
+    "nvidia_cusparse": "CUDA cuSPARSE",
+    "nvidia_nvjitlink": "CUDA nvJitLink",
+    "nvidia_nvjpeg": "CUDA nvJPEG",
+    "nvidia_cuda_nvrtc": "CUDA NVRTC",
+    "nvidia_cuda_cupti": "CUPTI",
+}
+
+
+def grants(claim: dict[str, Any]) -> bool:
+    """Whether an official claim asserts that the terms grant distribution:
+    a listed Attachment A name, a quoted clause, or upstream text identical to
+    (or the start of) the shipped grant text. A not-listed name does not."""
+    if "attachment_a" in claim:
+        return claim["attachment_a"]["listed"] is True
+    return any(
+        k in claim for k in ("clause", "identical_to_bundled", "prefix_of_bundled")
+    )
+
+
+def component_versions(text: str, label: str) -> list[str]:
+    """The versions in `label`'s row of the release notes' component table."""
+    start = text.find("Component Versions")
+    if start < 0:
+        return []
+    end = text.find("Table 2", start)
+    table = text[start : end if end > 0 else len(text)]
+    return re.findall(rf"(?<![\w(]){re.escape(label)} (\d[\d.]*)", table)
+
+
 def check_coverage(set_: dict[str, Any], audit: dict[str, Any]) -> list[str]:
     bad = []
     if audit.get("schema") != AUDIT_SCHEMA:
@@ -210,6 +250,17 @@ def check_coverage(set_: dict[str, Any], audit: dict[str, Any]) -> list[str]:
             and o["status"] != "grant_in_official_only"
         ):
             bad.append(f"{o['soname']}: shipped text silent but status {o['status']}")
+        shipped_grants = (
+            b.get("attachment_a", {}).get("listed") is True or "clause" in b
+        )
+        if shipped_grants and o["status"] not in SHIPPED_GRANT_STATUSES:
+            bad.append(f"{o['soname']}: shipped text grants but status {o['status']}")
+        if o["status"] in OFFICIAL_GRANT_STATUSES and not any(
+            grants(c) for c in o["official"]
+        ):
+            bad.append(
+                f"{o['soname']}: status {o['status']} without an official claim that grants distribution"
+            )
     for s in sorted(set(want) | set(got)):
         if s not in got:
             bad.append(f"{s}: in the third-party set but not in the audit")
@@ -284,6 +335,59 @@ def _switcher(data: bytes) -> str | None:
     return m.group(1).decode() if m else None
 
 
+def _archive(url: str) -> str | None:
+    m = re.search(r"/archive/(\d[\d.]*)/", url)
+    return m.group(1) if m else None
+
+
+def source_bound(
+    o: dict[str, Any],
+    source: str,
+    audit: dict[str, Any],
+    snap: dict[str, bytes],
+    release: bool,
+) -> tuple[bool | None, str]:
+    """Whether `source` is the terms (or release record) of this object's
+    version: True, False (a mismatch), or None (unversioned: accepted only as
+    the object's own release source, with a risk recorded; reported).
+
+    * a documentation version switcher: the wheel version starts with it;
+    * the release notes (the object's release): the wheel version is in the
+      object's own component row (RELNOTES_COMPONENT), not anywhere on the page;
+    * an archive URL ``/archive/<x>/``: the object's release source is an
+      archive page of the same <x> that matches by the rules above;
+    * a tag in the URL ``/v<version>[-n]/``: the wheel version."""
+    ver = version_of(o["wheel"])
+    url = audit["sources"][source]["url"]
+    data = snap[source]
+    who = f"{o['soname']}: {'release' if release else 'terms'} {source}"
+    sw = _switcher(data)
+    if sw is not None:
+        ok = ver.startswith(sw.lstrip("v"))
+        return ok, f"{who} is version {sw}, the wheel is {ver}"
+    if release and ("release-notes" in url or "relnotes" in source):
+        label = RELNOTES_COMPONENT.get(o["wheel"].rsplit("-", 1)[0])
+        if label is None:
+            return False, f"{who}: no component row known for {o['wheel']}"
+        rows = component_versions(page_text(data), label)
+        return rows == [ver], f"{who}: row {label!r} gives {rows}, the wheel is {ver}"
+    arch = _archive(url)
+    if arch is not None and not release:
+        rel_src = o["release"]["source"]
+        rel_ok, _ = source_bound(o, rel_src, audit, snap, release=True)
+        same = _archive(audit["sources"][rel_src]["url"]) == arch
+        return (
+            bool(rel_ok) and same,
+            f"{who} is archive {arch}; the release {rel_src} is "
+            f"{_archive(audit['sources'][rel_src]['url'])} (matched: {rel_ok})",
+        )
+    if re.search(rf"/v{re.escape(ver)}(-\d+)?/", url):
+        return True, f"{who} tag v{ver}"
+    if source == o["release"]["source"] and o["risks"]:
+        return None, f"{who} not matched to {ver} (unversioned; risk recorded)"
+    return False, f"{who} is not tied to version {ver}"
+
+
 def check_official(
     audit: dict[str, Any], sources_dir: Path, shipped: dict[str, list[bytes]] | None
 ) -> tuple[list[str], list[str]]:
@@ -316,23 +420,21 @@ def check_official(
                 match = any((f == data) if same else f.startswith(data) for f in names)
                 if not match:
                     bad.append(f"{who}: {key} {c[key]} does not hold")
-        rel = o["release"]
-        data = snap[rel["source"]]
-        ver = version_of(o["wheel"])
-        url = audit["sources"][rel["source"]]["url"]
-        sw = _switcher(data)
-        if sw is not None:
-            if not ver.startswith(sw.lstrip("v")):
-                bad.append(
-                    f"{o['soname']}: release {rel['source']} is version {sw}, the wheel is {ver}"
-                )
-        elif "release-notes" in url or "relnotes" in rel["source"]:
-            if ver not in page_text(data):
-                bad.append(f"{o['soname']}: {ver} is not in {rel['source']}")
-        elif re.search(rf"/v{re.escape(ver)}(-\d+)?/", url):
-            pass
-        else:
-            notes.append(f"{o['soname']}: release {rel['source']} not matched to {ver}")
+        rel_ok, rel_why = source_bound(
+            o, o["release"]["source"], audit, snap, release=True
+        )
+        if rel_ok is False:
+            bad.append(rel_why)
+        elif rel_ok is None:
+            notes.append(rel_why)
+        for c in o["official"]:
+            if not grants(c) or c["source"] == o["release"]["source"]:
+                continue
+            ok, why = source_bound(o, c["source"], audit, snap, release=False)
+            if ok is False:
+                bad.append(why)
+            elif ok is None:
+                notes.append(why)
     return bad, notes
 
 

@@ -81,6 +81,26 @@ MANIFEST = "MANIFEST.json"
 REPO = Path(__file__).resolve().parents[2]
 INSTALLER_SOURCE = REPO / "shipping/package/install.sh"
 LICENSE_AUDIT = REPO / "shipping/license_audit.json"
+# The MANIFEST "reading" as of a source commit: a commit before PR-C4 (no
+# licence audit) keeps the PR-C3 text, so its MANIFEST still derives exactly.
+READING_PRE_C4 = (
+    "The Saccade native tracker for Linux x86_64 (#465 Phase C, "
+    "docs/reference/native_runtime_resolved_config.md §19): the shipping "
+    "tree with its bundled third-party set. Every file of the package "
+    "is listed below with its sha256, size and mode; the installer "
+    "refuses a tree that differs. Not a signature: the package digest "
+    "<name>.sha256 is checked by the installer, signing is PR-C4."
+)
+READING = (
+    "The Saccade native tracker for Linux x86_64 (#465 Phase C, "
+    "docs/reference/native_runtime_resolved_config.md §19): the shipping "
+    "tree with its bundled third-party set. Every file of the package "
+    "is listed below with its sha256, size and mode; the installer "
+    "refuses a tree that differs. Not a signature: the package digest "
+    "<name>.sha256 is checked by the installer; its minisign signature "
+    "<name>.sha256.minisig (PR-C4, §20) names this file's sha256 in the "
+    "trusted comment."
+)
 RUNTIME_IDENTITY = "docs/reference/runtime_identity.generated.json"
 # The GPUs the package runs on: the operator library and the backbone engine
 # are sm_120 only (owner decision C-D2); the entrypoint carries more SASS.
@@ -641,16 +661,7 @@ def manifest_head(
     head: dict[str, Any] = {
         "schema": MANIFEST_SCHEMA,
         "package": package_name(version, wheels),
-        "reading": (
-            "The Saccade native tracker for Linux x86_64 (#465 Phase C, "
-            "docs/reference/native_runtime_resolved_config.md §19): the shipping "
-            "tree with its bundled third-party set. Every file of the package "
-            "is listed below with its sha256, size and mode; the installer "
-            "refuses a tree that differs. Not a signature: the package digest "
-            "<name>.sha256 is checked by the installer; its minisign signature "
-            "<name>.sha256.minisig (PR-C4, §20) names this file's sha256 in the "
-            "trusted comment."
-        ),
+        "reading": READING if audit_bytes is not None else READING_PRE_C4,
         "version": version,
         "platform": {
             **PLATFORM,

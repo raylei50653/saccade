@@ -283,3 +283,21 @@ def test_minisign_binary_and_reader_agree(tmp_path: Path) -> None:
     res = signing.check_signed_digest(dist, pub)
     assert res["minisign_exit"] != 0
     assert "reader: the signature does not verify" in res["problems"]
+
+
+def test_pre_pr_c4_manifest_keeps_its_reading() -> None:
+    """A source commit before PR-C4 (no licence audit) derives the PR-C3
+    MANIFEST reading, byte for byte (the PR-C3 package's MANIFEST)."""
+    assert hashlib.sha256(pkg.READING_PRE_C4.encode()).hexdigest() == (
+        hashlib.sha256(
+            (
+                "The Saccade native tracker for Linux x86_64 (#465 Phase C, "
+                "docs/reference/native_runtime_resolved_config.md \u00a719): the shipping "
+                "tree with its bundled third-party set. Every file of the package "
+                "is listed below with its sha256, size and mode; the installer "
+                "refuses a tree that differs. Not a signature: the package digest "
+                "<name>.sha256 is checked by the installer, signing is PR-C4."
+            ).encode()
+        ).hexdigest()
+    )
+    assert pkg.READING != pkg.READING_PRE_C4

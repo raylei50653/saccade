@@ -258,7 +258,12 @@ def test_official_terms_snapshot_clause_and_release(tmp_path: Path) -> None:
 
     a = copy.deepcopy(audit)
     a["sources"]["src"]["url"] = "https://example.invalid/r/latest/"
-    assert len(la.check_official(a, src, shipped)[1]) == 2
+    bad, notes = la.check_official(a, src, shipped)
+    # unversioned: a note where a risk is recorded (libbeta), a failure where not
+    assert notes == [
+        "libbeta.so.1: release src not matched to 1.0 (unversioned; risk recorded)"
+    ]
+    assert bad == ["libalpha.so.1: release src is not tied to version 1.0"]
 
 
 def test_switcher_version_must_be_the_wheels(tmp_path: Path) -> None:
@@ -291,3 +296,104 @@ def test_render_check_detects_a_hand_edit(tmp_path: Path) -> None:
     assert la.main(["render", "--out", str(out), "--check"]) == 0
     out.write_text(out.read_text() + "edit\n")
     assert la.main(["render", "--out", str(out), "--check"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# review (2026-10-08): release rows, terms bound to the release, grant evidence
+
+RELNOTES = (
+    "Table 1 CUDA 13.0 Update 2 Component Versions Component Name Version "
+    "CUDA Runtime (cudart) 13.0.96 x86_64 CUDA NVRTC 13.0.88 x86_64 CUDA nvJitLink 13.0.88 x86_64 "
+    "Windows CUPTI 13.0.85 x86_64 Table 2 driver"
+).encode()
+
+
+def _bound_audit(wheel: str, terms_url: str) -> tuple[dict, dict, dict[str, bytes]]:
+    obj = {
+        "soname": "libx.so",
+        "wheel": wheel,
+        "release": {"name": "CUDA 13.0 Update 2", "source": "rel"},
+        "official": [
+            {"source": "terms", "attachment_a": {"name": "libx.so", "listed": True}}
+        ],
+        "risks": [],
+    }
+    audit = {
+        "sources": {
+            "rel": {
+                "url": "https://docs.example/cuda/archive/13.0.2/cuda-toolkit-release-notes/index.html"
+            },
+            "terms": {"url": terms_url},
+        }
+    }
+    return obj, audit, {"rel": RELNOTES, "terms": b"terms"}
+
+
+@pytest.mark.parametrize(
+    ("wheel", "ok"),
+    [
+        ("nvidia_cuda_runtime-13.0.96", True),
+        # 13.0.88 is on the page (NVRTC, nvJitLink) but not in cudart's row
+        ("nvidia_cuda_runtime-13.0.88", False),
+        ("nvidia_cuda_cupti-13.0.85", True),
+        ("nvidia_unknown-13.0.96", False),
+    ],
+)
+def test_release_notes_match_the_components_row(wheel: str, ok: bool) -> None:
+    obj, audit, snap = _bound_audit(
+        wheel, "https://docs.example/cuda/archive/13.0.2/eula/index.html"
+    )
+    assert la.source_bound(obj, "rel", audit, snap, release=True)[0] is ok
+
+
+@pytest.mark.parametrize(
+    ("url", "ok"),
+    [
+        ("https://docs.example/cuda/archive/13.0.2/eula/index.html", True),
+        ("https://docs.example/cuda/archive/13.0.1/eula/index.html", False),
+        # current, unversioned terms are not the object's release's
+        ("https://docs.example/cuda/eula/index.html", False),
+    ],
+)
+def test_terms_are_bound_to_the_validated_release(url: str, ok: bool) -> None:
+    obj, audit, snap = _bound_audit("nvidia_cuda_runtime-13.0.96", url)
+    assert la.source_bound(obj, "terms", audit, snap, release=False)[0] is ok
+    # a release that does not match makes its archive's terms unbound too
+    obj, audit, snap = _bound_audit("nvidia_cuda_runtime-13.0.88", url)
+    assert la.source_bound(obj, "terms", audit, snap, release=False)[0] is False
+
+
+def _no_grant(a: dict) -> None:
+    o = next(o for o in a["objects"] if o["soname"] == "libnvJitLink.so.13")
+    o["official"] = []
+
+
+def _only_not_listed(a: dict) -> None:
+    o = next(o for o in a["objects"] if o["soname"] == "libnvJitLink.so.13")
+    o["official"] = [
+        {
+            "source": "cuda_eula_13.0.2",
+            "attachment_a": {"name": "libnvJitLink.so", "listed": False},
+        }
+    ]
+
+
+def _granting_but_official_only(a: dict) -> None:
+    o = next(o for o in a["objects"] if o["soname"] == "libcudart.so.13")
+    o["status"] = "grant_in_official_only"
+
+
+@pytest.mark.parametrize(
+    ("edit", "problem"),
+    [
+        (_no_grant, "without an official claim that grants distribution"),
+        (_only_not_listed, "without an official claim that grants distribution"),
+        (_granting_but_official_only, "shipped text grants but status"),
+    ],
+)
+def test_status_needs_matching_grant_evidence(edit, problem: str) -> None:
+    a = copy.deepcopy(AUDIT)
+    edit(a)
+    assert any(problem in p for p in la.check_coverage(SET, a)), la.check_coverage(
+        SET, a
+    )
