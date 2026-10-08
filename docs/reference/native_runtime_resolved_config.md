@@ -2403,3 +2403,54 @@ bash results/546_closeout/<label>/run.sh && .venv/bin/python results/546_closeou
 | N5 | 稽核副本：`distribution.status` 改為 `public`（open items 仍為 OPEN） | `coverage` FAIL（`while items are OPEN`） |
 
 **不做的**：GPU、parity、FPS；release key；source package 的公開 mirror；任何散佈；任何 open item 的關閉。
+
+### 22.4 驗收
+
+同一台機器，沒有 GPU 步驟。head `664208d1`＝§22.1–§22.3 的契約 commit `048034ec` 加上 republish（stacked，契約早於任何量測），工作樹乾淨。第一次執行在 E1 安裝途中中斷（主機磁碟滿，session 結束）；清掉該次的部分產物後，同一個 head 從頭重跑，以下是重跑的結果。判定由 `evaluate.py` 從產物讀出（`evaluation.json` sha256 `645940a1…`）。
+
+| 項目 | 結果 |
+|:--|:--|
+| V1 | 工作樹乾淨；`--mode attested` exit 0（implementation `8e758b23…`） |
+| V2 | operator library `aa84cccd…`＝attestation；entrypoint `92f74ef4…`＝pin |
+| V3 | `git diff 54be85ad HEAD -- shipping` 只有契約列出的檔案（12 個）；`install.sh` 對 `9217ed92` 沒有 diff |
+| E1 | `cmake --install` exit 0；`static` 12 項 PASS；64 個檔案。與 #546 的 tree 相比，只有 `README.txt`、`licenses/THIRD_PARTY.md` 的 sha256 不同，多出的恰好是 7 份 supplied texts |
+| E2 | `license_audit.py check` exit 0：`coverage`、`bundled_texts`、`supplied_texts`、`downstream_basis`、`official_terms`、`corresponding_source`、`notice` 七項 PASS，`complete: true`，`distribution`＝`local-only` |
+| E3 | builder exit 0；`tarball` 七項 PASS，`authentication`＝`none`／`publisher_authenticated: false`；安裝器 `afa5d06a…`（＝PR-C3）；tarball `3e7f0c5c…`；MANIFEST 的 `files` 等於 tree（64 個），`licenses.sha256`＝`1e884f44…`＝`shipping/license_audit.json`，`licenses.distribution`＝`local-only` |
+| E4 | 乾淨容器安裝 exit 0；`install-trace` 5 項 PASS；`static --manifest` 13 項 PASS；容器內 `--verify` exit 0（`64 files match`）；除 MANIFEST 外與 tree 逐位元組相同 |
+| **verdict** | **`PASS`** |
+
+**負控制**（`negctl/`）：
+
+| # | 結果 |
+|:--|:--|
+| N1 | `static` 的 `licenses` FAIL（`licenses/terms/cuda_eula_13.0.2.txt`）；稽核的 `supplied_texts` FAIL（`tree: … is not sha256 1762c8a0…`） |
+| N2 | `layout_exact` FAIL（missing `licenses/libgomp/SOURCE.txt`） |
+| N3 | `cmake -P install_third_party.cmake` exit 1（`CMake Error … COPYING3 sha256 … != …`）；`licenses/libgomp/COPYING3` 沒有寫出 |
+| N4 | `corresponding_source` FAIL（`source package is not sha256 c94dbbd2… / 65715094 bytes`） |
+| N5 | `coverage` FAIL（`distribution 'public' while items are OPEN`） |
+
+**這個 PASS 只表示**：補上的文本與證據都在 package 裡，而且可以重新驗證。**它不表示任何授權項目已經滿足。** L-1～L-4 與 M-1 全部仍是 OPEN。
+
+結果目錄：`results/547_licence/full_664208d1/`（`run.sh`、`evaluate.py`、`evaluation.json`、`tree/`、`dist/`、`install/`、`installed/`、`negctl/`、各 log）；republish 的捕捉在 `results/547_licence/republish/`；libgomp 的下載、repository metadata 與比對在 `results/547_l3_gomp/20261008/`；L-4 稽核在 `results/547_l4_audit/20261008T125352Z/`。以上都不納入版本控制。
+
+### 22.5 限制
+
+- **不是法律意見。** 三層紀錄中，`licence_interpretation` 只是條款文字的讀法；`legal_uncertainty` 是未解的問題，不是風險評估。
+- **libgomp 的對應關係是比對出來的，不是重建出來的。** source package 沒有被重新 build。AlmaLinux 簽章 key 的指紋沒有經獨立管道核對。
+- **source package 還沒有公開 mirror。** 規則已寫定（`corresponding_source.mirror`），位置取決於 owner 的發布決定。
+- **官方條款的文本是 2026-10-08 的 snapshot。** `terms_text` 抽取的是 article body 的文字，不保留原頁面的版面（表格一格一行）。cuSPARSELt 的官方頁沒有版本（PR-C4 的 risk 沿用）。
+- **下游條款只是草稿**，不在 package 裡、不生效；條文的措辭與是否「at least as restrictive」需要 owner 與法律意見。
+- **M-1（模型）只做了紀錄**，沒有稽核：權重血統與訓練資料的條款都沒有結論。
+- 其餘同 §20.6、§21.5。
+
+### 22.6 重現
+
+```bash
+.venv/bin/python scripts/native/license_audit.py render --check
+.venv/bin/python scripts/native/license_audit.py check --licenses <tree>/licenses \
+    --sources results/465_prc4_license/sources_20261008 \
+    --gomp-rpm <libgomp-8.5.0-28.el8_10.alma.1.x86_64.rpm> --srpm <gcc-8.5.0-28.el8_10.alma.1.src.rpm> --report audit.json
+bash results/547_licence/<label>/run.sh && .venv/bin/python results/547_licence/<label>/evaluate.py
+```
+
+兩個 package 的取得位置與 sha256 見 `shipping/license_audit.json` 的 `corresponding_source`。
