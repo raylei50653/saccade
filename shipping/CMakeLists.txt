@@ -258,6 +258,8 @@ if(TARGET saccade_tracking)
     #                             in third_party_set.json (owner decision C-D1)
     #   licenses/                 each wheel's license files, THIRD_PARTY.md,
     #                             Saccade's LICENSE / NOTICE
+    #   README.txt                requirements, verify / install / run, named
+    #                             limits (shipping/package/README.txt, PR-C4)
     #   share/saccade/...         the model root (install_model_root.cmake)
     # docs/reference/native_runtime_resolved_config.md §16 (tree), §17 (bundle),
     # §18 (CLI surface).

@@ -7,6 +7,8 @@
 # here, not at the first run. Each wheel's license files go to
 # licenses/<wheel>/ (hash-checked too), with THIRD_PARTY.md (the object ->
 # license table) and Saccade's own LICENSE / NOTICE under licenses/saccade/.
+# README.txt (requirements, verify / install / run, named limits; PR-C4) goes
+# to the top of the tree.
 foreach(_v SACCADE_REPO_ROOT SACCADE_PREFIX_DEST SACCADE_THIRD_PARTY_SET
            SACCADE_ROOT_purelib SACCADE_ROOT_nvjpeg_wheel)
     if(NOT DEFINED ${_v} OR "${${_v}}" STREQUAL "")
@@ -69,3 +71,5 @@ foreach(_f LICENSE NOTICE)
 endforeach()
 message(STATUS "Installing: ${SACCADE_PREFIX_DEST}/licenses/THIRD_PARTY.md")
 file(COPY_FILE "${SACCADE_REPO_ROOT}/shipping/THIRD_PARTY.md" "${SACCADE_PREFIX_DEST}/licenses/THIRD_PARTY.md" ONLY_IF_DIFFERENT)
+message(STATUS "Installing: ${SACCADE_PREFIX_DEST}/README.txt")
+file(COPY_FILE "${SACCADE_REPO_ROOT}/shipping/package/README.txt" "${SACCADE_PREFIX_DEST}/README.txt" ONLY_IF_DIFFERENT)
