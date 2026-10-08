@@ -2253,3 +2253,48 @@ review 在 `59de3f28` 重現了三個稽核的假 PASS，以及一個舊 MANIFES
 **沿用、不重跑的證據**：安裝器的 P1–P15（PR-C3 §19.5）與簽章的 S1–S9（PR-C4 §20.5）：安裝器與簽章檢查的邏輯沒有變（安裝器逐位元組相同；`signature` 的檢查函式沒有改）。stale identity 的拒絕：builder 不帶 `--trial` 時拒絕、`tarball` 的 `metadata` 對 `identity_current: false` 失敗（§19.1，單元測試）。
 
 **不做的**：GPU、parity、FPS；release key；任何散佈。
+
+### 21.4 驗收
+
+同一台機器。commit `c7581100`＝§21.1–§21.3（契約早於任何量測），工作樹乾淨，沒有 GPU 步驟。判定由 `evaluate.py` 從產物讀出（`evaluation.json` sha256 `2125347e…`）。host minisign 0.12，容器 minisign 0.11；test key `A26198D9D83803A0`，U4 的第二把 `4152F05B395B1E83`。
+
+| 項目 | 結果 |
+|:--|:--|
+| V1 | 工作樹乾淨；`--mode attested` exit 0 |
+| V2 | operator library `aa84cccd…`＝attestation；entrypoint `92f74ef4…`＝pin |
+| V3 | `git diff 24dab817 HEAD -- shipping` 只有 `shipping/package/README.txt`；`install.sh` 對 `9217ed92` 沒有 diff |
+| E1 | `cmake --install` exit 0；`static` 12 項 PASS；57 個檔案中只有 `README.txt` 的 sha256 與 r2 的 tree 不同 |
+| E2 | builder exit 0；`tarball` 七項 PASS，`signed: false`，`authentication`＝`none`／`publisher_authenticated: false`；安裝器 `afa5d06a…`（＝PR-C3）；MANIFEST 的 `files` 等於 tree（57 個），`licenses.distribution`＝`local-only` |
+| E3 | 乾淨容器（Ubuntu 24.04.4、glibc 2.39、dash，沒有 Python 與編譯器）安裝 exit 0；`install-trace` 5 項 PASS；`static --manifest` 13 項 PASS；容器內 `--verify` exit 0；除 MANIFEST 外與 tree 逐位元組相同 |
+| E4 | `sign` exit 0；`tarball --pubkey` 八項 PASS，`authentication`＝`minisign`／`publisher_authenticated: true`；容器 `verify` exit 0（`Signature and comment signature verified`、兩行 `OK`） |
+| **verdict** | **`PASS`** |
+
+**負控制**（`negctl/`）：
+
+| # | 結果 |
+|:--|:--|
+| U1 | `tarball` 只有 `package_digest` FAIL，`authentication`＝`none`；容器安裝器 exit 1（`sha256 is not the one in`），沒有 `extracting`；上層目錄是空的（沒有 TARGET、沒有 staging） |
+| U2 | `release_set` FAIL：`… .minisig is present but no --pubkey was given: a signature is verified or the check fails, never ignored`；沒有 `signature` 項；`authentication`＝`none` |
+| U3 | `signature` FAIL（minisign exit 1 `Signature verification failed`、reader `the signature does not verify`），`package_digest` 也 FAIL；`publisher_authenticated: false`；容器 `verify` exit 1 |
+| U4 | `signature` FAIL（minisign 與 reader 都是 key id `4152F05B395B1E83` ≠ `A26198D9D83803A0`）；`publisher_authenticated: false`；容器 `verify` exit 1 |
+| U5 | 容器安裝器 exit 2（`/install/saccade exists; nothing was changed`）；上層目錄（TARGET 與 sentinel）不變 |
+
+測試與 CI：`pre_push.sh` 在本 PR 的 head 上通過（lint、format、mypy、pytest）。
+
+結果目錄：`results/546_closeout/full_c7581100/`（`run.sh`、`evaluate.py`、`evaluation.json`、`tree/`、`dist/`、`dist_signed/`、`testkey*/`、`install/`、`installed/`、`e4_verify/`、`negctl/`、各 log），不納入版本控制。
+
+### 21.5 限制
+
+- **未簽的 package 不認證發行者**：這是 policy 本身，不是缺陷。integrity 檢查擋得住損壞與不一致；擋不住一份重新包過、digest 也重算過的 package（§19.6 P3）。local-only package 只應在信任來源的情況下使用。
+- **MANIFEST 的 `reading` 沒有跟著改**（§21.1）：它仍以 PR-C4 的句子提到 `.minisig`。是否認證以 `tarball` 報告與 README 為準；要改句子，需要一個依 source commit 選擇的新版本（closeout §7）。
+- **`install.sh` 標頭的註解「signing is PR-C4」過時**：改它會動 runtime identity 的輸入（`shipping/package/install.sh`），需要 republish；本節不改。
+- **只有 test key**：release 公鑰不存在（§20.6）；公開散佈時簽章是強制的（closeout §1 D2）。
+- 其餘同 §19.6、§20.6。
+
+### 21.6 重現
+
+```bash
+.venv/bin/python scripts/native/check_shipping_package.py tarball --dist <dist> --report package.json            # unsigned: authentication none
+.venv/bin/python scripts/native/check_shipping_package.py tarball --dist <dist> --pubkey <pub> --report package.json  # signed, opt in
+bash results/546_closeout/<label>/run.sh && .venv/bin/python results/546_closeout/<label>/evaluate.py
+```
