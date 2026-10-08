@@ -1,0 +1,811 @@
+{
+  "schema": "saccade.shipping_license_audit/v1",
+  "reading": "Per bundled object: the licence text its wheel carries (shipped under licenses/<wheel>/), the version-matched official terms, and whether each grants distribution of that object. A reading of licence texts, not a legal conclusion. Each object is checked against its own wheel's file; equal file bytes are not taken to mean equal terms. scripts/native/license_audit.py checks this file and renders shipping/THIRD_PARTY.md from it.",
+  "distribution": {
+    "status": "local-only",
+    "owner_confirmation": null,
+    "reading": "No public distribution until the owner closes the open items (Phase C scope §4). Engineering verification may proceed."
+  },
+  "statuses": {
+    "grant_in_bundled_and_official": "both the shipped text and the version-matched official terms grant distribution of the object",
+    "grant_in_both_texts_differ": "both grant distribution of the object, under texts that differ",
+    "grant_in_official_only": "the shipped text does not name the object; the version-matched official terms grant its distribution",
+    "no_licence_text_shipped": "the package carries no licence text for the object"
+  },
+  "conditions": {
+    "nvidia_sdk": [
+      "Your application must have material additional functionality, beyond the included portions of the SDK.",
+      "The distributable portions of the SDK shall only be accessed by your application.",
+      "The terms under which you distribute your application must be consistent with the terms of this Agreement",
+      "You may not use the SDK in any manner that would cause it to become subject to an open source software license."
+    ],
+    "tensorrt_wheel": [
+      "such distribution is solely in binary form to your licensees (“Customers”) only as a component of your own software products having additional material functionality beyond the TensorRT Licensed Software",
+      "you shall require in your agreements with your Customers that their distributions be on terms at least as restrictive as those applicable for your use of such TensorRT Licensed Software within a Licensee Application.",
+      "Each TensorRT Licensed Software is licensed to you for an initial duration of one year starting from the date of delivery or download."
+    ],
+    "bsd3": [
+      "Redistributions in binary form must reproduce the above copyright notice"
+    ]
+  },
+  "sources": {
+    "cuda_eula_13.0.2": {
+      "url": "https://docs.nvidia.com/cuda/archive/13.0.2/eula/index.html",
+      "snapshot": "cuda_eula_13.0.2.html",
+      "sha256": "845cf2a25f5705b8633393cd18e38bced16ced0914d468c707910df2190f4bc4",
+      "version": "CUDA Toolkit 13.0 Update 2 EULA (page: 'Last updated: January 7, 2025')",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "cuda_relnotes_13.0.2": {
+      "url": "https://docs.nvidia.com/cuda/archive/13.0.2/cuda-toolkit-release-notes/index.html",
+      "snapshot": "cuda_relnotes_13.0.2.html",
+      "sha256": "3a3f57bd564ba83038d35663ee5840dccb0503abf25d4716d8a30d2908cae03b",
+      "version": "CUDA 13.0 Update 2 release notes, Table 1 (component versions) and Table 3 (driver)",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "cuda_eula_current": {
+      "url": "https://docs.nvidia.com/cuda/eula/index.html",
+      "snapshot": "docs.nvidia.com_cuda_eula_index.html",
+      "sha256": "dae4884999a096f1e61e976336344e95a3705eca1a87caf519c3f70b6d859a06",
+      "version": "current CUDA EULA, v13.4 (page: 'Last updated: January 26, 2026'); not the bundled version, context only",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "nvshmem_sla_3.4.5": {
+      "url": "https://archive.docs.nvidia.com/nvshmem/api/3.4.5/sla.html",
+      "snapshot": "nvshmem_sla_3.4.5.html",
+      "sha256": "0478821af9fd8fd331b31a40884009c1b7f8bb7b1e7c0c35a3a98050f415b572",
+      "version": "NVSHMEM 3.4.5 documentation (version switcher '3.4.5'); NVSHMEM supplement '(v. July 11, 2019)'",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "nvshmem_sla_2.8.0": {
+      "url": "https://docs.nvidia.com/nvshmem/archives/nvshmem-280/sla/index.html",
+      "snapshot": "docs.nvidia.com_nvshmem_archives_nvshmem-280_sla_index.html",
+      "sha256": "1a0b0202d2d0972bfca1a9861f5b2045829929b0703410ab76d3e5d0ba47b6e8",
+      "version": "NVSHMEM 2.8.0 SLA ('Last updated October 10, 2023'); the version the owner cited, context only",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "cudnn_sla_9.19.0": {
+      "url": "https://docs.nvidia.com/deeplearning/cudnn/backend/v9.19.0/reference/eula.html",
+      "snapshot": "cudnn_sla_v9.19.0.html",
+      "sha256": "a28ad049b0fc356d7d9f7f5fa81d38d482f966eef95e7d6a276bc5c12f36cf23",
+      "version": "cuDNN backend v9.19.0 documentation (version switcher 'v9.19.0'); supplement '(v. February 22, 2022)'",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "tensorrt_sla_10.16.1": {
+      "url": "https://docs.nvidia.com/deeplearning/tensorrt/10.x.x/reference/sla.html",
+      "snapshot": "trt_sla_10.x.x.html",
+      "sha256": "9384c46f94e5fc76a9bb60fc47e6dcb70f17564c0c2268b0f127de6102acebc5",
+      "version": "TensorRT 10.x documentation (version switcher '10.16.1'); SDK agreement '(v. May 24, 2021)'",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "cusparselt_sla": {
+      "url": "https://docs.nvidia.com/cuda/cusparselt/license.html",
+      "snapshot": "cusparselt_license.html",
+      "sha256": "596ac591bebd55fecac68a164d64650e0f60739483ddbeab1c7a65be342a7a6b",
+      "version": "cuSPARSELt documentation (unversioned page, current); supplement '(v. October 12, 2020)'",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "nccl_license_2.28.9": {
+      "url": "https://raw.githubusercontent.com/NVIDIA/nccl/v2.28.9-1/LICENSE.txt",
+      "snapshot": "nccl_LICENSE_v2.28.9-1.txt",
+      "sha256": "0f0174a6b4e0b33ac26375bf729533075b32f4c51a5b6802a3d742d7dcdc9a76",
+      "version": "NCCL tag v2.28.9-1",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "torch_license_2.11.0": {
+      "url": "https://raw.githubusercontent.com/pytorch/pytorch/v2.11.0/LICENSE",
+      "snapshot": "torch_LICENSE_v2.11.0.txt",
+      "sha256": "bd018feef8825e88181c84eb7e3aa4eafb8f08a20d9fd6ef948569610c4a3e43",
+      "version": "PyTorch tag v2.11.0",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "torch_notice_2.11.0": {
+      "url": "https://raw.githubusercontent.com/pytorch/pytorch/v2.11.0/NOTICE",
+      "snapshot": "torch_NOTICE_v2.11.0.txt",
+      "sha256": "c2cc7bf0caec7652c2b460a8a470bea1677f241e4ab8e431df34cf17f5a9fec0",
+      "version": "PyTorch tag v2.11.0",
+      "fetched": "2026-10-08T08:41:39Z"
+    },
+    "gcc_runtime_exception_3.1": {
+      "url": "https://www.gnu.org/licenses/gcc-exception-3.1.html",
+      "snapshot": "gcc_runtime_exception_3.1.html",
+      "sha256": "d97c26b0fc53c12eac9e58822885b3e33506c5abcb6f5e5fc1235b557c10457c",
+      "version": "GCC Runtime Library Exception 3.1 (not tied to the object's GCC version, which is not recorded in the object)",
+      "fetched": "2026-10-08T08:41:39Z"
+    }
+  },
+  "objects": [
+    {
+      "soname": "libc10.so",
+      "wheel": "torch-2.11.0",
+      "release": {
+        "name": "PyTorch 2.11.0",
+        "source": "torch_license_2.11.0"
+      },
+      "bundled": {
+        "reading": "PyTorch LICENSE (BSD-3-Clause) followed by the third-party sections the wheel bundles, and NOTICE.",
+        "clause": "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:"
+      },
+      "official": [
+        {
+          "source": "torch_license_2.11.0",
+          "prefix_of_bundled": "LICENSE"
+        },
+        {
+          "source": "torch_notice_2.11.0",
+          "identical_to_bundled": "NOTICE"
+        }
+      ],
+      "conditions": "bsd3",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libc10_cuda.so",
+      "wheel": "torch-2.11.0",
+      "release": {
+        "name": "PyTorch 2.11.0",
+        "source": "torch_license_2.11.0"
+      },
+      "bundled": {
+        "reading": "PyTorch LICENSE (BSD-3-Clause) followed by the third-party sections the wheel bundles, and NOTICE.",
+        "clause": "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:"
+      },
+      "official": [
+        {
+          "source": "torch_license_2.11.0",
+          "prefix_of_bundled": "LICENSE"
+        },
+        {
+          "source": "torch_notice_2.11.0",
+          "identical_to_bundled": "NOTICE"
+        }
+      ],
+      "conditions": "bsd3",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libcublas.so.13",
+      "wheel": "nvidia_cublas-13.1.0.3",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libcublas.so",
+          "listed": true
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libcublas.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libcublasLt.so.13",
+      "wheel": "nvidia_cublas-13.1.0.3",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libcublasLt.so",
+          "listed": true
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libcublasLt.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libcudart.so.13",
+      "wheel": "nvidia_cuda_runtime-13.0.96",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libcudart.so",
+          "listed": true
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libcudart.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libcudnn.so.9",
+      "wheel": "nvidia_cudnn_cu13-9.19.0.56",
+      "release": {
+        "name": "cuDNN 9.19.0",
+        "source": "cudnn_sla_9.19.0"
+      },
+      "bundled": {
+        "reading": "cuDNN supplement in the wheel's License.txt.",
+        "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .h, cudnn64_7.dll, and cudnn.lib."
+      },
+      "official": [
+        {
+          "source": "cudnn_sla_9.19.0",
+          "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .dll."
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_both_texts_differ",
+      "risks": [
+        "The wheel's supplement and the 9.19.0 documentation's differ in the non-.so items; both name the runtime .so files. The package ships the wheel's text."
+      ]
+    },
+    {
+      "soname": "libcudnn_engines_precompiled.so.9",
+      "wheel": "nvidia_cudnn_cu13-9.19.0.56",
+      "release": {
+        "name": "cuDNN 9.19.0",
+        "source": "cudnn_sla_9.19.0"
+      },
+      "bundled": {
+        "reading": "cuDNN supplement in the wheel's License.txt.",
+        "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .h, cudnn64_7.dll, and cudnn.lib."
+      },
+      "official": [
+        {
+          "source": "cudnn_sla_9.19.0",
+          "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .dll."
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_both_texts_differ",
+      "risks": [
+        "The wheel's supplement and the 9.19.0 documentation's differ in the non-.so items; both name the runtime .so files. The package ships the wheel's text."
+      ]
+    },
+    {
+      "soname": "libcudnn_engines_runtime_compiled.so.9",
+      "wheel": "nvidia_cudnn_cu13-9.19.0.56",
+      "release": {
+        "name": "cuDNN 9.19.0",
+        "source": "cudnn_sla_9.19.0"
+      },
+      "bundled": {
+        "reading": "cuDNN supplement in the wheel's License.txt.",
+        "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .h, cudnn64_7.dll, and cudnn.lib."
+      },
+      "official": [
+        {
+          "source": "cudnn_sla_9.19.0",
+          "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .dll."
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_both_texts_differ",
+      "risks": [
+        "The wheel's supplement and the 9.19.0 documentation's differ in the non-.so items; both name the runtime .so files. The package ships the wheel's text."
+      ]
+    },
+    {
+      "soname": "libcudnn_graph.so.9",
+      "wheel": "nvidia_cudnn_cu13-9.19.0.56",
+      "release": {
+        "name": "cuDNN 9.19.0",
+        "source": "cudnn_sla_9.19.0"
+      },
+      "bundled": {
+        "reading": "cuDNN supplement in the wheel's License.txt.",
+        "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .h, cudnn64_7.dll, and cudnn.lib."
+      },
+      "official": [
+        {
+          "source": "cudnn_sla_9.19.0",
+          "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .dll."
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_both_texts_differ",
+      "risks": [
+        "The wheel's supplement and the 9.19.0 documentation's differ in the non-.so items; both name the runtime .so files. The package ships the wheel's text."
+      ]
+    },
+    {
+      "soname": "libcudnn_heuristic.so.9",
+      "wheel": "nvidia_cudnn_cu13-9.19.0.56",
+      "release": {
+        "name": "cuDNN 9.19.0",
+        "source": "cudnn_sla_9.19.0"
+      },
+      "bundled": {
+        "reading": "cuDNN supplement in the wheel's License.txt.",
+        "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .h, cudnn64_7.dll, and cudnn.lib."
+      },
+      "official": [
+        {
+          "source": "cudnn_sla_9.19.0",
+          "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .dll."
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_both_texts_differ",
+      "risks": [
+        "The wheel's supplement and the 9.19.0 documentation's differ in the non-.so items; both name the runtime .so files. The package ships the wheel's text."
+      ]
+    },
+    {
+      "soname": "libcufft.so.12",
+      "wheel": "nvidia_cufft-12.0.0.61",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libcufft.so",
+          "listed": true
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libcufft.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libcufile.so.0",
+      "wheel": "nvidia_cufile-1.15.1.6",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libcufile.so",
+          "listed": false
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libcufile.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_official_only",
+      "risks": [
+        "The License.txt the wheel carries (and the package ships) does not list libcufile.so in Attachment A; the CUDA 13.0 Update 2 EULA, whose component table names this wheel's version, does. Which text governs the wheel as received is not settled here.",
+        "The package ships the wheel's License.txt only; the CUDA 13.0 Update 2 EULA text is not in the package."
+      ]
+    },
+    {
+      "soname": "libcupti.so.13",
+      "wheel": "nvidia_cuda_cupti-13.0.85",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libcupti.so",
+          "listed": true
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libcupti.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libcurand.so.10",
+      "wheel": "nvidia_curand-10.4.0.35",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libcurand.so",
+          "listed": true
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libcurand.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libcusparse.so.12",
+      "wheel": "nvidia_cusparse-12.6.3.3",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libcusparse.so",
+          "listed": true
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libcusparse.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libcusparseLt.so.0",
+      "wheel": "nvidia_cusparselt_cu13-0.8.0",
+      "release": {
+        "name": "cuSPARSELt 0.8.0",
+        "source": "cusparselt_sla"
+      },
+      "bundled": {
+        "reading": "cuSPARSELt supplement in nvidia/cusparselt/LICENSE.txt.",
+        "clause": "The following portions of the SDK are distributable under the Agreement: the runtimes files ending with .so and .h as part of your application."
+      },
+      "official": [
+        {
+          "source": "cusparselt_sla",
+          "clause": "The following portions of the SDK are distributable under the Agreement: the runtimes files ending with .so and .h as part of your application."
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_bundled_and_official",
+      "risks": [
+        "The official page is not versioned; it was compared as current, not as the 0.8.0 text."
+      ]
+    },
+    {
+      "soname": "libgomp.so.1",
+      "wheel": "torch-2.11.0",
+      "release": {
+        "name": "GNU libgomp (GCC version not recorded in the object)",
+        "source": "gcc_runtime_exception_3.1"
+      },
+      "bundled": {
+        "reading": "The torch wheel's LICENSE and NOTICE do not mention libgomp.",
+        "absent": "gomp"
+      },
+      "official": [
+        {
+          "source": "gcc_runtime_exception_3.1",
+          "clause": "GCC RUNTIME LIBRARY EXCEPTION"
+        }
+      ],
+      "conditions": null,
+      "status": "no_licence_text_shipped",
+      "risks": [
+        "libgomp.so.1 is GNU libgomp (its strings carry GCC source paths '../../../libgomp/'); upstream it is GPL-3.0-or-later WITH GCC-exception-3.1. The package ships no GPL-3.0 or exception text for it and no source offer, and its GCC version is not recorded (no .comment section)."
+      ]
+    },
+    {
+      "soname": "libnccl.so.2",
+      "wheel": "nvidia_nccl_cu13-2.28.9",
+      "release": {
+        "name": "NCCL 2.28.9",
+        "source": "nccl_license_2.28.9"
+      },
+      "bundled": {
+        "reading": "BSD-3-Clause text in the wheel's License.txt.",
+        "clause": "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:"
+      },
+      "official": [
+        {
+          "source": "nccl_license_2.28.9",
+          "identical_to_bundled": "License.txt"
+        }
+      ],
+      "conditions": "bsd3",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libnvJitLink.so.13",
+      "wheel": "nvidia_nvjitlink-13.0.88",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libnvJitLink.so",
+          "listed": false
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libnvJitLink.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_official_only",
+      "risks": [
+        "The License.txt the wheel carries (and the package ships) does not list libnvJitLink.so in Attachment A; the CUDA 13.0 Update 2 EULA, whose component table names this wheel's version, does. Which text governs the wheel as received is not settled here.",
+        "The package ships the wheel's License.txt only; the CUDA 13.0 Update 2 EULA text is not in the package."
+      ]
+    },
+    {
+      "soname": "libnvinfer.so.10",
+      "wheel": "tensorrt_cu12_libs-10.16.1.11",
+      "release": {
+        "name": "TensorRT 10.16.1",
+        "source": "tensorrt_sla_10.16.1"
+      },
+      "bundled": {
+        "reading": "NVIDIA Software License Agreement with the TensorRT Supplement (§12.1) in the wheel's LICENSE.txt.",
+        "clause": "to distribute the libnvinfer and libnvinfer_plugin libraries when delivered to you as part of the TensorRT Licensed Software in source code form or binary form"
+      },
+      "official": [
+        {
+          "source": "tensorrt_sla_10.16.1",
+          "clause": "The following portions of the SDK are distributable under the Agreement: the runtime files .so and .dll."
+        }
+      ],
+      "conditions": "tensorrt_wheel",
+      "status": "grant_in_both_texts_differ",
+      "risks": [
+        "The wheel's LICENSE.txt and the 10.16.1 documentation are different agreements: the wheel's grants libnvinfer distribution for a one-year, automatically renewing term and requires downstream terms at least as restrictive; the documentation's is the SDK agreement ('runtime files .so'). Both grant distribution of libnvinfer.so; which governs is not settled here. The package ships the wheel's text."
+      ]
+    },
+    {
+      "soname": "libnvjpeg.so.13",
+      "wheel": "nvidia_nvjpeg-13.0.1.86",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libnvjpeg.so",
+          "listed": true
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libnvjpeg.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libnvrtc.so.13",
+      "wheel": "nvidia_cuda_nvrtc-13.0.88",
+      "release": {
+        "name": "CUDA 13.0 Update 2",
+        "source": "cuda_relnotes_13.0.2"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section.",
+        "attachment_a": {
+          "name": "libnvrtc.so",
+          "listed": true
+        }
+      },
+      "official": [
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libnvrtc.so",
+            "listed": true
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libnvshmem_host.so.3",
+      "wheel": "nvidia_nvshmem_cu13-3.4.5",
+      "release": {
+        "name": "NVSHMEM 3.4.5",
+        "source": "nvshmem_sla_3.4.5"
+      },
+      "bundled": {
+        "reading": "CUDA EULA text carried by the wheel (Supplement 'Release date: August 16, 2018'); Attachment A section. The wheel carries the CUDA EULA, not the NVSHMEM SLA.",
+        "attachment_a": {
+          "name": "libnvshmem",
+          "listed": false
+        }
+      },
+      "official": [
+        {
+          "source": "nvshmem_sla_3.4.5",
+          "clause": "The following portions of the SDK are distributable under the Agreement: any portion of the SDK."
+        },
+        {
+          "source": "cuda_eula_13.0.2",
+          "attachment_a": {
+            "name": "libnvshmem",
+            "listed": false
+          }
+        }
+      ],
+      "conditions": "nvidia_sdk",
+      "status": "grant_in_official_only",
+      "risks": [
+        "The wheel's License.txt is the CUDA EULA, which does not name NVSHMEM; the NVSHMEM 3.4.5 SLA (a separate agreement) makes any portion of the SDK distributable. Which agreement governs the wheel as received is not settled here.",
+        "The package ships the wheel's License.txt only; the NVSHMEM SLA text is not in the package."
+      ]
+    },
+    {
+      "soname": "libtorch.so",
+      "wheel": "torch-2.11.0",
+      "release": {
+        "name": "PyTorch 2.11.0",
+        "source": "torch_license_2.11.0"
+      },
+      "bundled": {
+        "reading": "PyTorch LICENSE (BSD-3-Clause) followed by the third-party sections the wheel bundles, and NOTICE.",
+        "clause": "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:"
+      },
+      "official": [
+        {
+          "source": "torch_license_2.11.0",
+          "prefix_of_bundled": "LICENSE"
+        },
+        {
+          "source": "torch_notice_2.11.0",
+          "identical_to_bundled": "NOTICE"
+        }
+      ],
+      "conditions": "bsd3",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libtorch_cpu.so",
+      "wheel": "torch-2.11.0",
+      "release": {
+        "name": "PyTorch 2.11.0",
+        "source": "torch_license_2.11.0"
+      },
+      "bundled": {
+        "reading": "PyTorch LICENSE (BSD-3-Clause) followed by the third-party sections the wheel bundles, and NOTICE.",
+        "clause": "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:"
+      },
+      "official": [
+        {
+          "source": "torch_license_2.11.0",
+          "prefix_of_bundled": "LICENSE"
+        },
+        {
+          "source": "torch_notice_2.11.0",
+          "identical_to_bundled": "NOTICE"
+        }
+      ],
+      "conditions": "bsd3",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libtorch_cuda.so",
+      "wheel": "torch-2.11.0",
+      "release": {
+        "name": "PyTorch 2.11.0",
+        "source": "torch_license_2.11.0"
+      },
+      "bundled": {
+        "reading": "PyTorch LICENSE (BSD-3-Clause) followed by the third-party sections the wheel bundles, and NOTICE.",
+        "clause": "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:"
+      },
+      "official": [
+        {
+          "source": "torch_license_2.11.0",
+          "prefix_of_bundled": "LICENSE"
+        },
+        {
+          "source": "torch_notice_2.11.0",
+          "identical_to_bundled": "NOTICE"
+        }
+      ],
+      "conditions": "bsd3",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    },
+    {
+      "soname": "libtorch_nvshmem.so",
+      "wheel": "torch-2.11.0",
+      "release": {
+        "name": "PyTorch 2.11.0",
+        "source": "torch_license_2.11.0"
+      },
+      "bundled": {
+        "reading": "PyTorch LICENSE (BSD-3-Clause) followed by the third-party sections the wheel bundles, and NOTICE.",
+        "clause": "Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:"
+      },
+      "official": [
+        {
+          "source": "torch_license_2.11.0",
+          "prefix_of_bundled": "LICENSE"
+        },
+        {
+          "source": "torch_notice_2.11.0",
+          "identical_to_bundled": "NOTICE"
+        }
+      ],
+      "conditions": "bsd3",
+      "status": "grant_in_bundled_and_official",
+      "risks": []
+    }
+  ]
+}
