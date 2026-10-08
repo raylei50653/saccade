@@ -1870,11 +1870,13 @@ PR-C4 是 Phase C 的最後一個 PR（[Phase C scope](native_runtime_phase_c_sc
   - `grant_in_official_only`（出貨的文本沒提到它，版本對應的官方條款准許）
   - `no_licence_text_shipped`
 - **每個物件以它自己 wheel 的檔案逐一檢查。** 10 個 CUDA 系列 wheel 與 nvshmem wheel 的 `License.txt` 位元組相同（`ad6f5853…`），但稽核不從這一點推論。檢查器讀每個物件自己 wheel 的檔案，找那個物件的名字；測試以兩個位元組相同的合成 wheel 確認：對 A 成立的宣稱不會延用到 B。
-- 「官方條款」是 NVIDIA／上游以版本標示的頁面：
+- 「官方條款」是 NVIDIA／上游以版本標示的頁面（§20.8 review 修正後的規則）：
   - docs 的 version switcher 值等於 wheel 版本；
-  - 或 release notes 的 component 表列出該版本；
+  - 或 release notes 的 component 表中**該物件那一列**的版本等於 wheel 版本（不是頁面上任何地方出現這個版本）；
   - 或 URL 的 tag 等於該版本。
-  - 對不上的另外記成 `unmatched_releases`，不算通過。目前有兩筆：cuSPARSELt 的授權頁沒有版本；libgomp 的 GCC 版本不在物件裡。
+  - **每一個准許散佈的官方宣稱**，它的來源要對應到這個物件已驗證的 release：同一個來源、或同版本的 archive 頁面（CUDA EULA `archive/13.0.2/` 對 release notes `archive/13.0.2/`）、或 switcher／tag 對得上。只供參考的頁面（目前版的 CUDA EULA、NVSHMEM 2.8.0）不能當依據。
+  - 狀態宣稱官方條款准許（三種 `grant_*`），就至少要有一個准許散佈的官方宣稱；出貨文本准許的物件不能標成 `grant_in_official_only`。
+  - 沒有版本的來源只在「它就是這個物件自己的 release 來源、而且風險已記錄」時接受，記成 `unmatched_releases`（不是通過的證據）；其他情況一律失敗。目前有兩筆：cuSPARSELt 的授權頁沒有版本；libgomp 的 GCC 版本不在物件裡。
 - snapshot 是抓取當時的 HTML／文字，放在 `results/465_prc4_license/sources_<date>/`，不納入版本控制。稽核記錄每個 snapshot 的 sha256，條款原文則以逐字引用記在 JSON 裡（只引用判定所需的句子）。
 - **稽核結果**（2026-10-08；讀法，不是法律結論）：
 
@@ -2151,3 +2153,34 @@ bash scripts/native/run_package_container.sh verify <dist> <pub> <out>      # th
 minisign -Vm <dist>/<name>.sha256 -p <pub> && (cd <dist> && sha256sum -c <name>.sha256)   # an end user, before installing
 bash results/465_prc4_release/<label>/run.sh && .venv/bin/python results/465_prc4_release/<label>/evaluate.py
 ```
+
+### 20.8 Review 修正（`59de3f28` 的 review，2026-10-08）
+
+review 在 `59de3f28` 重現了三個稽核的假 PASS，以及一個舊 MANIFEST 推導的退化，四項都是 P2。四項都是檢查器的覆蓋缺口，不是 package 或 r2 結果的錯誤。修正在 `96bb41c0`，只改檢查器與測試（`scripts/native/*` 不是 runtime identity 的輸入）。
+- 修正後合併 head 的 `--mode attested` 仍然 exit 0；
+- `shipping/license_audit.json`、`THIRD_PARTY.md`、README、安裝規則都沒有改；
+- 所以 r2 的 package 與正式 run 仍然描述這個 source。
+
+| # | 缺口 | 修正 |
+|:--|:--|:--|
+| 1 | release notes 的版本比對是整頁子字串：`nvidia_cuda_runtime-13.0.88` 會借 NVRTC／nvJitLink 的 13.0.88 而通過（cudart 那一列是 13.0.96） | 只看該物件在 component 表的那一列（`RELNOTES_COMPONENT`，CUPTI 的列名是 `CUPTI`）；那一列的版本要恰好等於 wheel 版本，不認得的 wheel 失敗 |
+| 2 | 官方宣稱只檢查文字，不檢查它的來源是不是這個 release 的：cuFile 改用只供參考的目前版 CUDA EULA（13.4）仍然通過 | 每一個准許散佈的官方宣稱都要綁到已驗證的 release：同一個來源、同版本的 archive，或 switcher／tag 對得上。沒有版本的來源只在「它就是物件自己的 release 來源而且風險已記錄」時接受 |
+| 3 | `official` 清單被清空時，`grant_in_official_only` 照樣四項 PASS | 宣稱官方准許的狀態至少要有一個准許散佈的官方宣稱；出貨文本准許的物件不能標成 `grant_in_official_only` |
+| 4 | source commit 早於 PR-C4 時，`manifest_head` 不寫 `licenses`，卻用新的 `reading`，所以 PR-C3 的 MANIFEST（`9217ed92`）推導不出來，`metadata` 失敗 | 沒有稽核檔的 commit 用 PR-C3 的 `reading`（`READING_PRE_C4`） |
+
+**重播**（`results/465_prc4_release/review_fix_96bb41c0/replay.sh`，在 r2 的產物上執行，不產生新的 package、不用 GPU）。
+
+- gate 3：r2 的 tree 與 snapshot 在修正後的檢查器下仍是四項 PASS，`unmatched_releases` 兩筆：cuSPARSELt、libgomp，都有記錄風險。
+- L1–L3 照舊各自失敗：L1 `bundled_texts`，L2 `official_terms`，L3 `bundled_texts`＋`notice`。
+- review 的三個情境在真實稽核上重做，各自重新 render notice 與集合，所以只有宣稱不同：
+  - **R1**（cudart 宣稱為 13.0.88，授權目錄也跟著改名）：`official_terms` FAIL。
+    - release 列：`row 'CUDA Runtime (cudart)' gives ['13.0.96'], the wheel is 13.0.88`；
+    - 它的 EULA 也失去綁定。
+  - **R2**（cuFile 改用 `cuda_eula_current`）：`official_terms` FAIL：`terms cuda_eula_current is not tied to version 1.15.1.6`。
+  - **R3**（nvJitLink 的 `official` 清空）：`coverage` FAIL：`status grant_in_official_only without an official claim that grants distribution`。
+- **R4**：
+  - 以修正後的 `manifest_head` 推導 PR-C3 的 MANIFEST（`9217ed92`）與 r2 的（`bc75dcab`），兩者都逐欄相同。
+  - r2 的 `tarball --pubkey` 仍是 8 項 PASS。
+  - PR-C3 package 的 `tarball` 現在 `metadata` PASS。它的 `pinned_tree` 仍然 FAIL：目前 repository 的 layout 多了 `README.txt`，`THIRD_PARTY.md` 也不同了，這是預期的，`tarball` 一向以目前的 pin 檢查。
+
+測試：`tests/unit/test_license_audit.py` 加了 component 列（含 13.0.88 的借用）、terms 與 release 的綁定（同 archive／不同 archive／沒有版本），以及狀態與證據的一致性；`tests/unit/test_package_signature.py` 釘住 PR-C3 的 `reading`。原本一個合成測試改為較嚴的行為：沒有版本、也沒有記錄風險的 release，現在是失敗，不再只是 note。
