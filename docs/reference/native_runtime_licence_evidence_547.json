@@ -1,0 +1,255 @@
+{
+  "schema": "saccade.native_runtime_evidence_record/v1",
+  "reading": "Tracked record of the #547 formal run (docs/reference/native_runtime_resolved_config.md §22.3-§22.4). The run's artifacts live under results/ (not versioned); this file keeps what identifies and re-checks them: the exact source commit and tree, the verdict, the sha256 of every artifact except the large trees (whose files are listed by sha256 in e1_tree.sha256, itself hashed here), the release files, and where the external inputs can be fetched again. The run is a local acceptance on one machine; it has not been replayed independently. PASS means the evidence is in the package and re-verifiable, not that any licence item is satisfied.",
+  "run": {
+    "results_dir": "results/547_licence/full_664208d1",
+    "commit": "664208d1b722748533d58bf9cc53412628712381",
+    "tree": "540c6a1454b5f88bef56977372755d4e8ffda2bf",
+    "commit_note": "The head of chore/547-republish before it was rebased onto the §22.4 docs commit; it is not on any pushed branch. The rebased head 91a7e61d and the merge bcd6f833 (PR #553 into #552) have tree 109dc801…, which differs from this tree only in docs/reference/native_runtime_resolved_config.md (+51 lines, §22.4-§22.6).",
+    "rebased_equivalent": {
+      "commit": "91a7e61d9ff5b1788ec6abf3cc970cbfdf7d6f8c",
+      "tree": "109dc801237eeaad70cbc562afb1fbdf3ac0fa47",
+      "diff_from_run_commit": [
+        "docs/reference/native_runtime_resolved_config.md"
+      ]
+    },
+    "contract_commit": "048034ec7ac4c0305bbcece036d836a4168d7b67",
+    "machine": "single WSL2 host; no GPU step in the run (the republish probe ran on gpu0)"
+  },
+  "verdict": "PASS",
+  "evaluation": {
+    "V1": true,
+    "V2": true,
+    "V3": {
+      "pass": true,
+      "changed": [
+        "shipping/DOWNSTREAM_TERMS.draft.md",
+        "shipping/THIRD_PARTY.md",
+        "shipping/cmake/install_third_party.cmake",
+        "shipping/license_audit.json",
+        "shipping/licenses/libgomp/COPYING.RUNTIME",
+        "shipping/licenses/libgomp/COPYING3",
+        "shipping/licenses/libgomp/SOURCE.txt",
+        "shipping/licenses/terms/cuda_eula_13.0.2.txt",
+        "shipping/licenses/terms/cudnn_sla_9.19.0.txt",
+        "shipping/licenses/terms/nvshmem_sla_3.4.5.txt",
+        "shipping/licenses/terms/tensorrt_sla_10.16.1.txt",
+        "shipping/package/README.txt"
+      ]
+    },
+    "E1": {
+      "pass": true,
+      "files": 64,
+      "changed": [
+        "./README.txt",
+        "./licenses/THIRD_PARTY.md"
+      ],
+      "added": [
+        "./licenses/libgomp/COPYING.RUNTIME",
+        "./licenses/libgomp/COPYING3",
+        "./licenses/libgomp/SOURCE.txt",
+        "./licenses/terms/cuda_eula_13.0.2.txt",
+        "./licenses/terms/cudnn_sla_9.19.0.txt",
+        "./licenses/terms/nvshmem_sla_3.4.5.txt",
+        "./licenses/terms/tensorrt_sla_10.16.1.txt"
+      ],
+      "static": {
+        "layout_exact": true,
+        "vendor_set_pinned": true,
+        "entrypoint_pinned": true,
+        "launcher_exact": true,
+        "licenses": true,
+        "g2_3_no_python_files": true,
+        "produced_elves": true,
+        "search_path_containment": true,
+        "g2_1_needed_closure": true,
+        "entrypoint_no_measurement_surface": true,
+        "sm_ptx_entrypoint": true,
+        "glibc_baseline": true
+      }
+    },
+    "E2": {
+      "pass": true,
+      "checks": {
+        "coverage": true,
+        "bundled_texts": true,
+        "supplied_texts": true,
+        "downstream_basis": true,
+        "official_terms": true,
+        "corresponding_source": true,
+        "notice": true
+      },
+      "complete": true
+    },
+    "E3": {
+      "pass": true,
+      "checks": {
+        "release_set": true,
+        "package_digest": true,
+        "installer_exact": true,
+        "tar_members": true,
+        "manifest_exact": true,
+        "pinned_tree": true,
+        "metadata": true
+      },
+      "authentication": {
+        "method": "none",
+        "publisher_authenticated": false,
+        "reading": "integrity only; the publisher is not authenticated"
+      }
+    },
+    "E4": {
+      "pass": true,
+      "trace": {
+        "one_staging_directory": true,
+        "target_only_by_one_noreplace_rename": true,
+        "other_mutations_in_staging": true,
+        "staging_removed": true,
+        "trace_complete": true
+      },
+      "static_manifest": {
+        "layout_exact": true,
+        "vendor_set_pinned": true,
+        "entrypoint_pinned": true,
+        "launcher_exact": true,
+        "licenses": true,
+        "g2_3_no_python_files": true,
+        "produced_elves": true,
+        "search_path_containment": true,
+        "g2_1_needed_closure": true,
+        "entrypoint_no_measurement_surface": true,
+        "sm_ptx_entrypoint": true,
+        "glibc_baseline": true,
+        "manifest_tree": true
+      }
+    },
+    "N1": true,
+    "N2": true,
+    "N3": true,
+    "N4": true,
+    "N5": true,
+    "verdict": "PASS"
+  },
+  "release_files": {
+    "saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.install.sh": "afa5d06a1c4d4280ccb393e81470689ad60ee0636e9a8f3de84ca130e6871579",
+    "saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.sha256": "849ef1aa06e357a6c99c5703df632dbfcdf931aa6c6f9d9d2895fba25d2710ca",
+    "saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.tar.gz": "3e7f0c5ca90e047cf12fcb1b860071965ea74356778e09889e4e40d840684ba4"
+  },
+  "artifacts_sha256": {
+    "dist/saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.install.sh": "afa5d06a1c4d4280ccb393e81470689ad60ee0636e9a8f3de84ca130e6871579",
+    "dist/saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.sha256": "849ef1aa06e357a6c99c5703df632dbfcdf931aa6c6f9d9d2895fba25d2710ca",
+    "done.txt": "d117fa006ba9208500b2930ce69cbde436c647afa917cb7396a9bc9111a46dd2",
+    "e1_install.log": "e5795291344ec09c974cb41bd735174659ad81de7ec80ff6bedc62003ac0af45",
+    "e1_static.log": "311b5d4ed8e4888883d26c53c189d202f0bf307da6a0ef761b49116073c1373b",
+    "e1_tree.sha256": "7b1b90383dfc49374fb214cd14b300930d9cc2eb7492ef0370413563d5893542",
+    "e1_tree_vs_546.diff": "a78225483ebab30caa88965d7d67c03cb1a82bcbaa84c8f5b2be28c697636a7f",
+    "e2_audit.json": "6b77d965e478f8cb364d4dbc632ec3108b8578485566e111843b3299d4444327",
+    "e2_audit.log": "8fe17c99351136856016777f3614a5560ec3e394b3c678ceba02ed7a30194d30",
+    "e3_build.log": "003a38959f0583a598d17c52396100a60e8e6a11fc356c033cd2d6f6165a0ced",
+    "e3_dist.sha256": "ac744d0b98f551666bc5e2563a23694588d6d4a7fccf19a88e6c7bf99fe7c7f0",
+    "e3_manifest_tree.log": "02e33468ab14303ed6fad07cd1f4d06576d406a4653f8c2ad5f56da62bd28d1a",
+    "e3_package.json": "c041d1dd75f9d8e9f8024cf460e21b95b8fcda8b7b8d48bb4a9500195957d590",
+    "e3_tarball.log": "c81673721275c21c059254fd0d7e3884df3e476453ca8985e5e7bf52e7af2c03",
+    "e4_equal.txt": "3a8bf8fda3e8a3395e9eb12d55d34a2e157acdd6352b543e1e8c4e2669f40c24",
+    "e4_install.log": "19eaf43821a7660ec323a87c8457bf74823beb296c39f5e01aa8a683aa50f061",
+    "e4_installed.sha256": "7b1b90383dfc49374fb214cd14b300930d9cc2eb7492ef0370413563d5893542",
+    "e4_static.log": "f5fba7145b3a7b2ed55058f8667ee2776d8dc6a75a21f97c2b6ec44fdb782bc4",
+    "e4_trace.log": "4f009b9b4f0fc7ac6b45c09f86509d7eca5f96eed0da44c55a4da264e01978cf",
+    "e4_verify.log": "50a66a12e7683a688da2b8b903b6b5c7a0aa39929184f53cf90c2e442848469e",
+    "evaluate.py": "d23c4bb330bf40b5f38d759e69e145b5808ca67f5d6dac5b617d6f851fc1deb4",
+    "evaluation.json": "645940a19e004937548d1598ee2bf282593d91b0cce7a5e49ac6cb0cf364c136",
+    "git_head.txt": "7fbbc8edfb25d162df6e754deb2133b9365d7d9207251d6344e79bcbfeb671ee",
+    "git_status.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "install_trace.json": "7f5d32e3f067929c652346b0cd27af370f9772a9b7799d8bde684fd50e60c767",
+    "negctl/n1_audit.json": "3b38fbd3f9ed4ce19da45fcaaf3c5f9bad98d33e81aad256d7fade4a7e8ed04c",
+    "negctl/n1_audit.log": "68004e4312e53bb6455b11da48d3139128ca315e1ad25d932672f641ca7b9102",
+    "negctl/n1_static.json": "bf0541babdc9c16fbac69c3c020eab72d5de1d721366373961e39561a3fdc50d",
+    "negctl/n1_static.log": "7f7ef60b3ab991d4131ffee4dc49acd6cafc048d6101954c0501a38b575f06c2",
+    "negctl/n2_static.json": "39e7d481c7936ee63584f5c43aa48f63af28b504a5405a2a7023b0a6fb36cd55",
+    "negctl/n2_static.log": "640c90c8fc11638c96ac43dcc98d3fb30c5858470e880a79c9e448a2e6d3024b",
+    "negctl/n3_dest.txt": "d27e779df3ae42fb14dac6b5bec8cf7e8dca7ba46d2ff1586ac3ffc0afe732fa",
+    "negctl/n3_install.log": "a81b1a289c68c406a6f12d135d70377e7bf5b430c705084374070bb28d0c810f",
+    "negctl/n3_set.json": "1cd9379b5e8d9377cf9eab3d32cc09c9f64f0723d588e3ae3938315a70d6cae1",
+    "negctl/n3_set.log": "19eaf43821a7660ec323a87c8457bf74823beb296c39f5e01aa8a683aa50f061",
+    "negctl/n4_audit.json": "5e2e801efdf94556e4e56ae21ee6a496c4d09cfef97678fc13ed89e6b485e393",
+    "negctl/n4_audit.log": "4eba90f75ba5b7d69d29be03c685421cd1ede17f4a1455354582cfb4c2037935",
+    "negctl/n5_audit.json": "46056aa2071211c581a89fea3654bda05436ba4b303397094c3a5389db9d516c",
+    "negctl/n5_check.json": "fad5dff97eda0c14aefad54fd64a6d5db9a22015bcbbf66e2930987cea5cc318",
+    "negctl/n5_check.log": "3f2a60cc6c4881e88a8fa05895d4380ba4e5311723cd4e10efce6c92d7e59eee",
+    "negctl/n5_edit.log": "19eaf43821a7660ec323a87c8457bf74823beb296c39f5e01aa8a683aa50f061",
+    "package_static.json": "9cf227b7b12e1c1b8cd2e16d910cb295e5792251297ff77919855718e09e06d3",
+    "pins.txt": "7745f3f57fb615624a86ca3fb61bd25bc4e37ab52838de77ab3b2119179c20d2",
+    "run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "run.sh": "a1d3aeb39d115640ce2d9b843e72186cb86917e1cb1730dc4a813e47622aaf79",
+    "static.json": "9cf227b7b12e1c1b8cd2e16d910cb295e5792251297ff77919855718e09e06d3",
+    "static_installed.json": "aa7f80f22cd27c83d76617e711499e33c3d345d8b5a2f6f064bb5987fc9ffe9d",
+    "tools.txt": "75c9e614ac54bd64606793e912648eb4679a1f1d8139bf51461c7799f80d7938",
+    "validity_identity.txt": "af6850b5bfee720bac63a1a40e9de04e12d7ec73ca1dee94e409d9691fbc4296",
+    "validity_sources.txt": "0bfff130b7bb67a0a38c42e348a894faf2b8b3aa5869cad75bd0fc6efaff500e"
+  },
+  "external_inputs": {
+    "official_terms_snapshots": {
+      "dir": "results/465_prc4_license/sources_20261008",
+      "sha256": {
+        "cuda_eula_13.0.2": "845cf2a25f5705b8633393cd18e38bced16ced0914d468c707910df2190f4bc4",
+        "cuda_relnotes_13.0.2": "3a3f57bd564ba83038d35663ee5840dccb0503abf25d4716d8a30d2908cae03b",
+        "cuda_eula_current": "dae4884999a096f1e61e976336344e95a3705eca1a87caf519c3f70b6d859a06",
+        "nvshmem_sla_3.4.5": "0478821af9fd8fd331b31a40884009c1b7f8bb7b1e7c0c35a3a98050f415b572",
+        "nvshmem_sla_2.8.0": "1a0b0202d2d0972bfca1a9861f5b2045829929b0703410ab76d3e5d0ba47b6e8",
+        "cudnn_sla_9.19.0": "a28ad049b0fc356d7d9f7f5fa81d38d482f966eef95e7d6a276bc5c12f36cf23",
+        "tensorrt_sla_10.16.1": "9384c46f94e5fc76a9bb60fc47e6dcb70f17564c0c2268b0f127de6102acebc5",
+        "cusparselt_sla": "596ac591bebd55fecac68a164d64650e0f60739483ddbeab1c7a65be342a7a6b",
+        "nccl_license_2.28.9": "0f0174a6b4e0b33ac26375bf729533075b32f4c51a5b6802a3d742d7dcdc9a76",
+        "torch_license_2.11.0": "bd018feef8825e88181c84eb7e3aa4eafb8f08a20d9fd6ef948569610c4a3e43",
+        "torch_notice_2.11.0": "c2cc7bf0caec7652c2b460a8a470bea1677f241e4ab8e431df34cf17f5a9fec0",
+        "gcc_runtime_exception_3.1": "d97c26b0fc53c12eac9e58822885b3e33506c5abcb6f5e5fc1235b557c10457c"
+      },
+      "urls": {
+        "cuda_eula_13.0.2": "https://docs.nvidia.com/cuda/archive/13.0.2/eula/index.html",
+        "cuda_relnotes_13.0.2": "https://docs.nvidia.com/cuda/archive/13.0.2/cuda-toolkit-release-notes/index.html",
+        "cuda_eula_current": "https://docs.nvidia.com/cuda/eula/index.html",
+        "nvshmem_sla_3.4.5": "https://archive.docs.nvidia.com/nvshmem/api/3.4.5/sla.html",
+        "nvshmem_sla_2.8.0": "https://docs.nvidia.com/nvshmem/archives/nvshmem-280/sla/index.html",
+        "cudnn_sla_9.19.0": "https://docs.nvidia.com/deeplearning/cudnn/backend/v9.19.0/reference/eula.html",
+        "tensorrt_sla_10.16.1": "https://docs.nvidia.com/deeplearning/tensorrt/10.x.x/reference/sla.html",
+        "cusparselt_sla": "https://docs.nvidia.com/cuda/cusparselt/license.html",
+        "nccl_license_2.28.9": "https://raw.githubusercontent.com/NVIDIA/nccl/v2.28.9-1/LICENSE.txt",
+        "torch_license_2.11.0": "https://raw.githubusercontent.com/pytorch/pytorch/v2.11.0/LICENSE",
+        "torch_notice_2.11.0": "https://raw.githubusercontent.com/pytorch/pytorch/v2.11.0/NOTICE",
+        "gcc_runtime_exception_3.1": "https://www.gnu.org/licenses/gcc-exception-3.1.html"
+      }
+    },
+    "libgomp_binary_package": {
+      "name": "libgomp-8.5.0-28.el8_10.alma.1.x86_64.rpm",
+      "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/Packages/libgomp-8.5.0-28.el8_10.alma.1.x86_64.rpm",
+      "sha256": "fba0574d69f6a946696c031e834312f428fe585a4a7842906fc4353ca317b6f0"
+    },
+    "libgomp_source_package": {
+      "name": "gcc-8.5.0-28.el8_10.alma.1.src.rpm",
+      "urls": [
+        "https://vault.almalinux.org/8.10/BaseOS/Source/Packages/gcc-8.5.0-28.el8_10.alma.1.src.rpm"
+      ],
+      "sha256": "c94dbbd2cd6d5d01a5a6822ea18f8ce34942c25a80e17b4682d547d5e652dbd0",
+      "bytes": 65715094
+    },
+    "libgomp_repository_metadata": {
+      "reading": "Both packages' sha256 appear in AlmaLinux's repository metadata (primary.xml), whose checksum is in repomd.xml, which carries a detached signature that verified with the key below (gpg, 2026-10-08). The key file was fetched from repo.almalinux.org itself; its fingerprint was not checked against an independent channel.",
+      "key": "BC5EDDCADF502C077F1582882AE81E8ACED7258B (AlmaLinux OS 8 <packager@almalinux.org>)",
+      "binary_repomd": {
+        "url": "https://repo.almalinux.org/almalinux/8.10/BaseOS/x86_64/os/repodata/repomd.xml",
+        "sha256": "3eeb00fef66a4db29df971b3c0e4ae381401240880dacd9f4bd5320a83d65f24"
+      },
+      "source_repomd": {
+        "url": "https://vault.almalinux.org/8.10/BaseOS/Source/repodata/repomd.xml",
+        "sha256": "77e2f21b7b87e342e8a94666e7d5a0f79445b24054f4f645aad35124edbdd95e"
+      },
+      "evidence": "results/547_l3_gomp/20261008/ (downloads, repo_metadata, gpg output in the #547 run)"
+    }
+  },
+  "recheck": [
+    "git checkout <commit>; cmake --install build-release --component shipping --prefix T",
+    "compare T against e1_tree.sha256 (its sha256 is in artifacts_sha256)",
+    "fetch the two packages (urls above), check their sha256",
+    "license_audit.py check --licenses T/licenses --sources <snapshots> --gomp-rpm <rpm> --srpm <srpm>"
+  ]
+}

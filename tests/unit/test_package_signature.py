@@ -137,7 +137,7 @@ def test_reader_refuses() -> None:
 # a synthetic signed release
 
 
-def _dist(tmp: Path) -> Path:
+def _dist(tmp: Path, distribution: str | None = None) -> Path:
     tree = tmp / "tree"
     (tree / "bin").mkdir(parents=True)
     (tree / "bin/saccade_track").write_bytes(b"#!/bin/sh\n")
@@ -148,8 +148,10 @@ def _dist(tmp: Path) -> Path:
         "schema": pkg.MANIFEST_SCHEMA,
         "package": NAME,
         "source": {"commit": COMMIT, "commit_time": 1_700_000_000, "tree_clean": True},
-        "file_count": len(files),
     }
+    if distribution is not None:
+        head["licenses"] = {"distribution": distribution}
+    head["file_count"] = len(files)
     out = tmp / "dist"
     out.mkdir()
     builder.write_package(tree, out, head, files, INSTALLER.read_bytes())
@@ -393,3 +395,34 @@ def test_pre_pr_c4_manifest_keeps_its_reading() -> None:
         ).hexdigest()
     )
     assert pkg.READING != pkg.READING_PRE_C4
+
+
+# ---------------------------------------------------------------------------
+# #547: only a local-only package may be unsigned
+
+
+def _unsigned_problem(report: dict) -> list[str]:
+    return [
+        p for p in report["checks"]["metadata"]["problems"] if "must be signed" in p
+    ]
+
+
+@pytest.mark.parametrize("distribution", ["public", "released"])
+def test_a_package_that_is_not_local_only_must_be_signed(
+    tmp_path: Path, no_binary: None, distribution: str
+) -> None:
+    dist = _dist(tmp_path, distribution)
+    unsigned = _tarball_report(dist, tmp_path, None)
+    assert _unsigned_problem(unsigned) and not unsigned["pass"]
+    key = _sign_dist(dist)
+    signed = _tarball_report(dist, tmp_path, key)
+    assert signed["checks"]["signature"]["pass"]
+    assert _unsigned_problem(signed) == []
+
+
+@pytest.mark.parametrize("distribution", ["local-only", None])
+def test_a_local_only_package_may_be_unsigned(
+    tmp_path: Path, no_binary: None, distribution: str | None
+) -> None:
+    report = _tarball_report(_dist(tmp_path, distribution), tmp_path, None)
+    assert _unsigned_problem(report) == []

@@ -45,7 +45,10 @@ Subcommand:
              report's ``authentication`` says ``none`` (integrity only; the
              publisher is not authenticated). A ``.minisig`` next to the
              package without ``--pubkey`` fails ``release_set``: a signature
-             is verified or refused, never ignored.
+             is verified or refused, never ignored. A package whose MANIFEST
+             ``licenses.distribution`` is not ``local-only`` fails
+             ``metadata`` without ``--pubkey`` (#547): only a local-only
+             package may be unsigned.
 
 ``install-trace`` an installation recorded with ``strace -ff -yy``
              (``run_package_container.sh install-strace``): the target is
@@ -573,6 +576,14 @@ def cmd_tarball(args: argparse.Namespace) -> int:
     if source.get("identity_current") is not True:
         md_bad.append(
             "the runtime-identity publication did not describe the source commit"
+        )
+    # #547: only a local-only package may be unsigned (closeout §1 D2). A
+    # MANIFEST without the licenses key predates the audit and was local-only.
+    distribution = (doc.get("licenses") or {}).get("distribution", "local-only")
+    if distribution != "local-only" and not args.pubkey:
+        md_bad.append(
+            f"licenses.distribution is {distribution!r}: a package that is not "
+            "local-only must be signed and checked with --pubkey"
         )
     _check(checks, "metadata", md_bad, commit=source.get("commit"))
 

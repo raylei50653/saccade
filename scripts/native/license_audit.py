@@ -26,10 +26,15 @@ Subcommands:
             that rendering.
 ``check``   ``coverage``: the audit names exactly the set's objects, each with
             its wheel, a known status, known sources and conditions; the
-            supplied texts, open items (three non-empty layers; while one is
-            OPEN the distribution is local-only with no owner confirmation),
-            downstream terms (a draft; clauses scoped to NVIDIA objects) and
-            corresponding-source records are well formed;
+            supplied texts (each from ``shipping/<file>``), open items
+            (three non-empty layers; a CLOSED item carries the owner's
+            conclusion; while one is OPEN the distribution is local-only
+            with no owner confirmation), the public gate (a status other
+            than local-only needs the owner's confirmation, every item
+            CLOSED, the corresponding sources published and the downstream
+            terms adopted), downstream terms (a draft while local-only;
+            clauses scoped to NVIDIA objects) and corresponding-source
+            records are well formed;
             ``supplied_texts``: the repo files (and with ``--licenses`` the
             tree's) carry the recorded bytes and each object's claims about
             them hold; ``bundled_texts`` (``--licenses DIR``: a tree's
@@ -47,7 +52,8 @@ Subcommands:
             re-derived; ``corresponding_source`` (``--gomp-rpm`` + ``--srpm``):
             the packages have the recorded sha256, the binary package's
             SOURCERPM is the source package, the shipped object matches the
-            package's file section by section except the recorded rewrite, and
+            package's file section by section (bytes and size) except the
+            recorded rewrite, and
             the supplied COPYING texts are the source package's; ``notice``:
             the committed renderings are current. A check that was not given
             its inputs is reported as ``skipped``, not passed.
@@ -661,9 +667,16 @@ def check_supplied_records(audit: dict[str, Any]) -> list[str]:
         if f in seen:
             bad.append(f"supplied text {f}: listed twice")
         seen.add(f)
-        if not f.startswith(SUPPLIED_DIRS) or ".." in f:
+        if not re.fullmatch(r"licenses/(terms|libgomp)/[^/]+", f) or f.split("/")[
+            -1
+        ] in (".", ".."):
             bad.append(f"supplied text {f}: not under {' or '.join(SUPPLIED_DIRS)}")
-        repo_file = REPO / t.get("repo_file", "")
+        if t.get("repo_file") != f"shipping/{f}":
+            bad.append(
+                f"supplied text {f}: repo_file {t.get('repo_file')!r} is not shipping/{f}"
+            )
+            continue
+        repo_file = REPO / t["repo_file"]
         data = repo_file.read_bytes() if repo_file.is_file() else b""
         if _sha256(data) != t.get("sha256"):
             bad.append(
@@ -715,12 +728,44 @@ def check_open_items(audit: dict[str, Any]) -> list[str]:
             bad.append(f"{who}: unknown objects {unknown}")
         if not it.get("objects") and not it.get("scope"):
             bad.append(f"{who}: names neither objects nor a scope")
+        if it.get("status") == "CLOSED" and not (
+            isinstance(it.get("owner_conclusion"), str)
+            and it["owner_conclusion"].strip()
+        ):
+            bad.append(
+                f"{who}: CLOSED without the owner's conclusion (owner_conclusion)"
+            )
+    dist = audit["distribution"]
     if any(it.get("status") == "OPEN" for it in items):
-        dist = audit["distribution"]
         if dist.get("status") != "local-only":
             bad.append(f"distribution {dist.get('status')!r} while items are OPEN")
         if dist.get("owner_confirmation") is not None:
             bad.append("owner_confirmation is set while items are OPEN")
+    bad += check_public_gate(audit)
+    return bad
+
+
+def check_public_gate(audit: dict[str, Any]) -> list[str]:
+    """A distribution status other than local-only is a public release. It
+    needs, independently of the open items: the owner's confirmation, every
+    item CLOSED, every corresponding source published, and the downstream
+    terms adopted. (A public package must also be signed; the package check
+    enforces that from the MANIFEST's licenses.distribution.) Closing every
+    item does not by itself open distribution."""
+    dist = audit["distribution"]
+    if dist.get("status") == "local-only":
+        return []
+    who = f"distribution {dist.get('status')!r}"
+    bad = []
+    if not dist.get("owner_confirmation"):
+        bad.append(f"{who} without owner_confirmation")
+    if any(it.get("status") != "CLOSED" for it in audit.get("open_items", [])):
+        bad.append(f"{who} while an item is not CLOSED")
+    for so, cs in audit.get("corresponding_source", {}).items():
+        if cs.get("mirror", {}).get("status") != "published":
+            bad.append(f"{who} while the corresponding source of {so} is not published")
+    if audit.get("downstream_terms", {}).get("status") != "adopted":
+        bad.append(f"{who} while the downstream terms are not adopted")
     return bad
 
 
@@ -731,7 +776,8 @@ def check_downstream_records(audit: dict[str, Any]) -> list[str]:
     d = audit.get("downstream_terms")
     if d is None:
         return ["downstream_terms: missing"]
-    if d.get("status") != "draft":
+    public = audit["distribution"].get("status") != "local-only"
+    if d.get("status") not in (("draft", "adopted") if public else ("draft",)):
         bad.append(
             f"downstream_terms: status {d.get('status')!r}; only the owner adopts terms"
         )
@@ -1022,7 +1068,13 @@ def check_corresponding(
         bad.append(f"{so}: sections not accounted for: {extra}")
     for n in [*corr["identical_sections"], *corr["moved_sections"]]:
         x, y = mine.get(n), theirs.get(n)
-        if x is None or y is None or x["sha256"] != y["sha256"]:
+        # size as well as bytes: a SHT_NOBITS section (.bss, .tbss) has no
+        # bytes, so its sha256 is that of b"" whatever its size
+        if (
+            x is None
+            or y is None
+            or (x["sha256"], x["size"]) != (y["sha256"], y["size"])
+        ):
             bad.append(f"{so}: section {n} differs")
         elif n in corr["identical_sections"] and x["addr"] != y["addr"]:
             bad.append(f"{so}: section {n} moved")

@@ -500,6 +500,71 @@ def _supplied_status_without_text(a: dict) -> None:
     o["supplied"] = []
 
 
+def _cuda_text(a: dict) -> dict:
+    return next(
+        t for t in a["supplied_texts"] if t["file"].endswith("cuda_eula_13.0.2.txt")
+    )
+
+
+def _repo_file_escapes(a: dict) -> None:
+    _cuda_text(a)["repo_file"] = "../../outside/cuda_eula_13.0.2.txt"
+
+
+def _repo_file_elsewhere(a: dict) -> None:
+    _cuda_text(a)["repo_file"] = "docs/cuda_eula_13.0.2.txt"
+
+
+def _file_dotdot(a: dict) -> None:
+    t = _cuda_text(a)
+    t["file"], t["repo_file"] = "licenses/terms/..", "shipping/licenses/terms/.."
+
+
+def _close_all(a: dict) -> None:
+    for it in a["open_items"]:
+        it["status"] = "CLOSED"
+        it["owner_conclusion"] = "owner: closed on legal advice"
+
+
+def _closed_without_conclusion(a: dict) -> None:
+    _item(a, "L-1")["status"] = "CLOSED"
+
+
+def _all_closed_public_unconfirmed(a: dict) -> None:
+    _close_all(a)
+    a["distribution"]["status"] = "public"
+
+
+def _all_closed_public_unpublished_source(a: dict) -> None:
+    _close_all(a)
+    a["distribution"].update(status="public", owner_confirmation="2026-12-01 owner")
+
+
+def _all_closed_public_draft_terms(a: dict) -> None:
+    _all_closed_public_unpublished_source(a)
+
+
+def test_closing_every_item_does_not_open_distribution() -> None:
+    """All items CLOSED (with conclusions) is allowed while local-only; it is
+    the distribution status that needs the public gate, not the items."""
+    a = copy.deepcopy(AUDIT)
+    _close_all(a)
+    assert la.check_open_items(a) == []
+    assert la.check_public_gate(a) == []
+    a["distribution"]["status"] = "public"
+    gate = la.check_public_gate(a)
+    assert len(gate) == 3 and all(p.startswith("distribution 'public'") for p in gate)
+    a["distribution"]["owner_confirmation"] = "2026-12-01 owner"
+    a["corresponding_source"]["libgomp.so.1"]["mirror"]["status"] = "published"
+    a["downstream_terms"]["status"] = "adopted"
+    assert la.check_public_gate(a) == []
+    assert la.check_downstream_records(a) == []
+    # adopted terms are refused while local-only
+    a["distribution"]["status"] = "local-only"
+    assert any(
+        "only the owner adopts terms" in p for p in la.check_downstream_records(a)
+    )
+
+
 @pytest.mark.parametrize(
     ("edit", "problem"),
     [
@@ -520,6 +585,16 @@ def _supplied_status_without_text(a: dict) -> None:
             _supplied_status_without_text,
             "needs an absent wheel text and a supplied text",
         ),
+        (_repo_file_escapes, "is not shipping/licenses/terms/cuda_eula_13.0.2.txt"),
+        (_repo_file_elsewhere, "is not shipping/licenses/terms/cuda_eula_13.0.2.txt"),
+        (_file_dotdot, "not under licenses/terms/"),
+        (_closed_without_conclusion, "CLOSED without the owner's conclusion"),
+        (_all_closed_public_unconfirmed, "without owner_confirmation"),
+        (
+            _all_closed_public_unpublished_source,
+            "corresponding source of libgomp.so.1 is not published",
+        ),
+        (_all_closed_public_draft_terms, "downstream terms are not adopted"),
     ],
 )
 def test_coverage_rejects_547(edit, problem: str) -> None:
@@ -684,6 +759,22 @@ def test_corresponding_source_on_the_real_packages() -> None:
     assert la.check_corresponding(
         AUDIT, "libgomp.so.1", bytes(flipped), rpm, srpm, texts
     ) == ["libgomp.so.1: section .text differs"]
+    # a SHT_NOBITS section has no bytes: its size is what must match
+    import struct
+
+    shoff = struct.unpack_from("<Q", data, 0x28)[0]
+    shentsize, shnum, shstrndx = struct.unpack_from("<HHH", data, 0x3A)
+    stro = struct.unpack_from("<Q", data, shoff + shstrndx * shentsize + 0x18)[0]
+    grown = bytearray(data)
+    for i in range(shnum):
+        h = shoff + i * shentsize
+        name = struct.unpack_from("<I", data, h)[0]
+        if data[stro + name : stro + name + 5] == b".bss\0":
+            size = struct.unpack_from("<Q", data, h + 0x20)[0]
+            struct.pack_into("<Q", grown, h + 0x20, size + 64)
+    assert la.check_corresponding(
+        AUDIT, "libgomp.so.1", bytes(grown), rpm, srpm, texts
+    ) == ["libgomp.so.1: section .bss differs"]
     t = dict(texts)
     t["licenses/libgomp/COPYING.RUNTIME"] = b"other"
     assert la.check_corresponding(AUDIT, "libgomp.so.1", data, rpm, srpm, t) == [

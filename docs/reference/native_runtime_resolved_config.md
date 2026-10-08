@@ -2454,3 +2454,30 @@ bash results/547_licence/<label>/run.sh && .venv/bin/python results/547_licence/
 ```
 
 兩個 package 的取得位置與 sha256 見 `shipping/license_audit.json` 的 `corresponding_source`。
+
+### 22.7 Review 修正（#552 的合併前審查，2026-10-09）
+
+審查沒有發現 P0／P1；以下四項照審查處理。本節不改 §22.4 的判定。
+
+| # | 審查項目 | 修正 |
+|:--|:--|:--|
+| R-1 | `check_corresponding` 比對 `identical_sections` 時只看 sha256 與位址；`SHT_NOBITS`（`.bss`、`.tbss`）沒有位元組，sha256 恆為空字串的值，改了 size 也比不出來 | 一併比對 `size`。負控制：把 shipped 物件的 `.bss` section header 的 size 加 64，必須得到 `section .bss differs`（`test_corresponding_source_on_the_real_packages`）。整檔 sha256 pin 本來就擋得住改過的物件，所以這不是封裝完整性的繞過，而是對應關係檢查自己的缺口 |
+| R-2 | `supplied_texts` 只限制 package 內的 `file`，沒有限制來源 `repo_file`；安裝的 cmake 直接讀 `${SACCADE_REPO_ROOT}/${repo_file}` | checker 與 `install_third_party.cmake` 都要求 `repo_file == "shipping/" + file`，`file` 的最後一段不得是 `.`／`..`。負控制：`../../outside/…`、`docs/…`、`licenses/terms/..` 都被 `coverage` 拒絕；cmake 對逸出的 `repo_file` 以 FATAL_ERROR 中止（§22.8 N6） |
+| R-3 | `check_open_items` 只在有 OPEN 項目時才檢查散佈狀態；全部改為 CLOSED 後，沒有 `owner_confirmation` 也不會失敗 | 新增 `check_public_gate`：`distribution.status` 不是 `local-only` 就要求 `owner_confirmation`、每一項 CLOSED、每個 corresponding source 的 `mirror.status`＝`published`、`downstream_terms.status`＝`adopted`。這個 gate 與 open items 無關：全部 CLOSED 但仍是 `local-only` 是允許的，關閉項目本身不打開散佈。CLOSED 的項目必須帶非空的 `owner_conclusion`（工具不會寫它）。`downstream_terms` 只有在非 local-only 時才可以是 `adopted`。簽章：`check_shipping_package.py tarball` 對 MANIFEST `licenses.distribution` 不是 `local-only` 而沒帶 `--pubkey` 的 package 判 `metadata` FAIL（closeout §1 D2）。沒有 `licenses` 鍵的 MANIFEST（PR-C4 之前）視為 local-only |
+| R-4 | 正式 run 的 head `664208d1` 不在任何推上去的 branch（chore branch 之後 rebase 到 §22.4 的 docs commit 上），產物在不納入版本控制的 `results/` | `docs/reference/native_runtime_licence_evidence_547.json` 記錄完整的 commit／tree（`664208d1b722…`／`540c6a14…`）、與 rebase 後 head（`91a7e61d`，tree `109dc801…`）的差異（只有本文件 §22.4–§22.6 的 51 行）、`evaluation.json`、50 個產物的 sha256（大 tree 以 `e1_tree.sha256` 間接涵蓋）、release 檔案的 sha256，以及外部輸入（條款 snapshot、兩個 RPM）的 URL 與 sha256 和重新檢查的步驟。這仍是單機的本機驗收，沒有獨立重播 |
+
+另外：#547 的 checklist 加上 M-1（model root 的授權）作為公開發行的 blocker。
+
+`install_third_party.cmake` 是 implementation 軸的輸入，所以 R-2 又要一次 republish（stacked PR）。其餘修改在 `scripts/native/`、`tests/`、`docs/`，不在軸上。
+
+### 22.8 Review 修正的重播契約（量測之前寫定）
+
+在 republish 之後的乾淨 head 上，結果目錄 `results/547_licence/review_<commit>/`：
+
+- **V**：工作樹乾淨；`--mode attested` exit 0；`git diff bcd6f833 HEAD -- shipping` 只動 `shipping/cmake/install_third_party.cmake`。
+- **R1 tree**：`cmake --install build-release --component shipping` 到 `$R/tree`，`static` 12 項 PASS，每個檔案的 sha256 與正式 run 的 `e1_tree.sha256` 相同（64 個，沒有差異）。
+- **R2 稽核**：`license_audit.py check --licenses $R/tree/licenses --sources … --gomp-rpm … --srpm …` exit 0，七項 PASS，`complete: true`。
+- **N6**：最小 repo root 副本，稽核中 `licenses/libgomp/COPYING3` 的 `repo_file` 改為 `../outside/COPYING3`（該處放一份正確 sha256 的檔案），以 `cmake -P install_third_party.cmake` 安裝 ⇒ exit 非 0，訊息含 `not shipping/licenses/libgomp/COPYING3`，`licenses/libgomp/COPYING3` 沒有寫出。
+- **N7–N9**（單元測試，在同一 head 上跑）：`.bss` size 改變 ⇒ `section .bss differs`；全部 CLOSED 且 `public` 但沒有 `owner_confirmation` ⇒ `coverage` FAIL；非 local-only 的 MANIFEST 不帶 `--pubkey` ⇒ `metadata` FAIL。
+
+package 的 E3／E4 不重跑：builder、安裝器與安裝出的 tree 都沒有變（R1 檢查 tree 逐位元組相同）；`tarball` 只多了一條只在非 local-only 時生效的規則（N9）。
