@@ -532,6 +532,9 @@ def cmd_tarball(args: argparse.Namespace) -> int:
             p_bad.append(f"{rel}: not the pinned {e['sha256']}")
     if files.get(bundle.ENTRYPOINT, {}).get("sha256") != pin["sha256"]:
         p_bad.append(f"{bundle.ENTRYPOINT}: not the pinned {pin['sha256']}")
+    for t in bundle.supplied_texts():
+        if files.get(t["file"], {}).get("sha256") != t["sha256"]:
+            p_bad.append(f"{t['file']}: not the audit's {t['sha256']}")
     for rel, src in (
         (bundle.LAUNCHER, args.launcher_source),
         ("licenses/THIRD_PARTY.md", bundle.NOTICE_SOURCE),

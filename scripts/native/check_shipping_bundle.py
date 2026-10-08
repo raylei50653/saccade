@@ -15,7 +15,7 @@ Subcommands:
 
 ``static``   layout (exactly the expected files), the vendor set's sha256, the
              entrypoint pin, the launcher's bytes, the auditor (libc only, no
-             RUNPATH), licenses (and README.txt), G2-3, G2-1 (NEEDED closure resolved the way
+             RUNPATH), licenses (wheel files, supplied texts, README.txt), G2-3, G2-1 (NEEDED closure resolved the way
              the launcher's loader invocation resolves it: complete inside the
              tree + base system + driver, no Python), search-path containment
              (every relative DT_RPATH / DT_RUNPATH entry of every ELF in the
@@ -89,6 +89,7 @@ ENTRYPOINT_PIN = REPO / "shipping/entrypoint_pin.json"
 MEASUREMENT_SURFACE = REPO / "shipping/measurement_surface.json"
 LAUNCHER_SOURCE = REPO / "shipping/launcher/saccade_track.sh"
 NOTICE_SOURCE = REPO / "shipping/THIRD_PARTY.md"
+LICENSE_AUDIT = REPO / "shipping/license_audit.json"
 README_SOURCE = REPO / "shipping/package/README.txt"
 README = "README.txt"
 LAUNCHER = "bin/saccade_track"
@@ -129,8 +130,17 @@ def _load(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text())
 
 
-def expected_files(set_: dict[str, Any]) -> set[str]:
+def supplied_texts(audit: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """The licence texts the package supplies itself (#547), from the audit."""
+    audit = audit if audit is not None else _load(LICENSE_AUDIT)
+    return list(audit.get("supplied_texts", []))
+
+
+def expected_files(
+    set_: dict[str, Any], audit: dict[str, Any] | None = None
+) -> set[str]:
     files = {LAUNCHER, ENTRYPOINT, AUDITOR, README}
+    files |= {t["file"] for t in supplied_texts(audit)}
     files |= {f"{g2.MODEL_ROOT}/{f}" for f in MODEL_ROOT_FILES}
     files |= {f"{VENDOR}/{e['soname']}" for e in set_["entries"]}
     files |= {
@@ -294,6 +304,10 @@ def cmd_static(args: argparse.Namespace) -> int:
             p = tree / "licenses" / e["wheel"] / lic["path"].rsplit("/", 1)[-1]
             if not p.is_file() or g2.sha256_file(p) != lic["sha256"]:
                 lic_bad.append(str(p.relative_to(tree)))
+    for t in supplied_texts():
+        p = tree / t["file"]
+        if not p.is_file() or g2.sha256_file(p) != t["sha256"]:
+            lic_bad.append(t["file"])
     notice = tree / "licenses/THIRD_PARTY.md"
     if not notice.is_file() or notice.read_bytes() != NOTICE_SOURCE.read_bytes():
         lic_bad.append("licenses/THIRD_PARTY.md")

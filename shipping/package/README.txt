@@ -123,6 +123,16 @@ Licenses
 --------
 
 Saccade is Apache-2.0 (licenses/saccade/). The libraries in lib/vendor/ are
-third-party components under their own terms, not Apache-2.0. See
-licenses/THIRD_PARTY.md for each object's license files, the terms read for
-it, and the distribution status.
+third-party components under their own terms, not Apache-2.0:
+
+  licenses/<wheel>/     the license files of the wheel each library came from
+  licenses/terms/       the version-matched official NVIDIA terms
+  licenses/libgomp/     GNU libgomp's license (GPL-3.0 with the GCC Runtime
+                        Library Exception) and where to get its source
+                        (SOURCE.txt)
+  licenses/THIRD_PARTY.md  each object's license files, the terms read for
+                        it, the open items and the distribution status
+
+These files are notices. They are not an agreement between you and the
+publisher of this package, and nothing in this package grants rights in the
+third-party components beyond their own terms.
