@@ -5,8 +5,10 @@
 docs/reference/native_runtime_resolved_config.md §20; owner decision C-D5
 (minisign). The signed file is ``<name>.sha256`` (the package digest, which
 names the tarball and the installer); the signature is
-``<name>.sha256.minisig`` next to it, a fourth release file. The trusted
-comment, which minisign signs too, is
+``<name>.sha256.minisig`` next to it, a fourth release file. Signing is
+optional for a local-only package (#546, §21): an unsigned package keeps every
+integrity check and is not authenticated. The trusted comment, which minisign
+signs too, is
 
     package=<name> commit=<source commit> manifest_sha256=<sha256 of MANIFEST.json>
 

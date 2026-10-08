@@ -14,7 +14,11 @@ in minisign's format with Ed25519 (no secret key of the release is involved):
   the digest, the trusted comment or the key is not the expected one;
 * with the ``minisign`` binary present, a key made by ``minisign -G`` and a
   signature made by ``sign_shipping_package.py sign`` verify with both
-  ``minisign -V`` and the reader, and both refuse the same tampered digest.
+  ``minisign -V`` and the reader, and both refuse the same tampered digest;
+* the signature is optional (#546, §21): an unsigned release keeps every
+  integrity check and reports ``authentication`` ``none``; a ``.minisig``
+  without ``--pubkey`` fails ``release_set``; a bad signature never reports
+  the publisher as authenticated.
 """
 
 # scope: system
@@ -245,6 +249,94 @@ def test_tarball_check_release_set_and_signature(
     missing = _tarball_report(dist, tmp_path, key)
     assert not missing["checks"]["release_set"]["pass"]
     assert not missing["checks"]["signature"]["pass"]
+
+
+# ---------------------------------------------------------------------------
+# optional signature (#546, §21)
+
+INTEGRITY_CHECKS = {
+    "release_set",
+    "package_digest",
+    "installer_exact",
+    "tar_members",
+    "manifest_exact",
+    "pinned_tree",
+    "metadata",
+}
+
+
+def test_unsigned_release_keeps_every_integrity_check(
+    tmp_path: Path, no_binary: None
+) -> None:
+    dist = _dist(tmp_path)
+    report = _tarball_report(dist, tmp_path, None)
+    assert set(report["checks"]) == INTEGRITY_CHECKS
+    assert report["checks"]["release_set"]["pass"]
+    assert report["checks"]["package_digest"]["pass"]
+    assert report["authentication"] == {
+        "method": "none",
+        "publisher_authenticated": False,
+        "reading": "integrity only; the publisher is not authenticated",
+    }
+
+
+def test_unsigned_release_still_refuses_a_changed_digest(
+    tmp_path: Path, no_binary: None
+) -> None:
+    dist = _dist(tmp_path)
+    digest = dist / f"{NAME}.sha256"
+    digest.write_text("0" * 64 + digest.read_text()[64:])
+    report = _tarball_report(dist, tmp_path, None)
+    assert not report["checks"]["package_digest"]["pass"]
+    assert not report["pass"]
+    assert report["authentication"]["publisher_authenticated"] is False
+
+
+def test_signature_without_pubkey_is_not_ignored(
+    tmp_path: Path, no_binary: None
+) -> None:
+    dist = _dist(tmp_path)
+    _sign_dist(dist)
+    report = _tarball_report(dist, tmp_path, None)
+    problems = report["checks"]["release_set"]["problems"]
+    assert any("present but no --pubkey" in p for p in problems)
+    assert "signature" not in report["checks"]
+    assert report["authentication"]["method"] == "none"
+    assert not report["pass"]
+
+
+def test_bad_signature_is_never_authenticated(tmp_path: Path, no_binary: None) -> None:
+    dist = _dist(tmp_path)
+    key = _sign_dist(dist)
+    good = _tarball_report(dist, tmp_path, key)
+    assert good["checks"]["signature"]["pass"]
+    assert good["authentication"]["method"] == "minisign"
+    assert good["authentication"]["publisher_authenticated"] is True
+
+    other = _sign_dist(_dist(tmp_path / "o"), seed=2)
+    wrong_key = _tarball_report(dist, tmp_path, other)
+    assert not wrong_key["checks"]["signature"]["pass"]
+    assert wrong_key["authentication"] == {
+        "method": "minisign",
+        "publisher_authenticated": False,
+        "reading": "a signature was requested and did not verify",
+    }
+
+    sig = dist / f"{NAME}.sha256.minisig"
+    lines = sig.read_text().splitlines()
+    lines[2] = lines[2][:-1] + ("0" if lines[2][-1] != "0" else "1")
+    sig.write_text("\n".join(lines) + "\n")
+    tampered = _tarball_report(dist, tmp_path, key)
+    assert not tampered["checks"]["signature"]["pass"]
+    assert tampered["authentication"]["publisher_authenticated"] is False
+
+
+def test_authentication_reading() -> None:
+    assert pkg.authentication(False, None)["publisher_authenticated"] is False
+    assert pkg.authentication(False, True)["method"] == "none"
+    assert pkg.authentication(True, None)["publisher_authenticated"] is False
+    assert pkg.authentication(True, False)["publisher_authenticated"] is False
+    assert pkg.authentication(True, True)["publisher_authenticated"] is True
 
 
 # ---------------------------------------------------------------------------

@@ -2184,3 +2184,72 @@ review 在 `59de3f28` 重現了三個稽核的假 PASS，以及一個舊 MANIFES
   - PR-C3 package 的 `tarball` 現在 `metadata` PASS。它的 `pinned_tree` 仍然 FAIL：目前 repository 的 layout 多了 `README.txt`，`THIRD_PARTY.md` 也不同了，這是預期的，`tarball` 一向以目前的 pin 檢查。
 
 測試：`tests/unit/test_license_audit.py` 加了 component 列（含 13.0.88 的借用）、terms 與 release 的綁定（同 archive／不同 archive／沒有版本），以及狀態與證據的一致性；`tests/unit/test_package_signature.py` 釘住 PR-C3 的 `reading`。原本一個合成測試改為較嚴的行為：沒有版本、也沒有記錄風險的 release，現在是失敗，不再只是 note。
+
+## 21. Release policy：local package 的簽章改為可選（#546，#465 closeout）
+
+#546 是 #465 的收尾：把 native runtime 的工程結果整理成可稽核的驗收紀錄（[closeout 文件](native_runtime_closeout.md)），並簡化 release policy。本節只處理 release policy：**SHA-256 digest 與 MANIFEST 的完整性檢查維持強制；minisign 的發行者認證對 local-only package 改為可選。** 本節不改任何 stage 的計算、entrypoint（pin `92f74ef4…`）、operator library（`aa84cccd…`）、27 個第三方物件、launcher、auditor、安裝器（`shipping/package/install.sh` 與 PR-C3 逐位元組相同）、SM 清單、glibc baseline、授權稽核與散佈狀態（`local-only`）。
+
+| 項目 | 位置 |
+|:--|:--|
+| package 檢查的 `authentication` 欄位、未驗證簽章的拒絕 | `scripts/native/check_shipping_package.py`（`tarball`） |
+| 使用者說明 | `shipping/package/README.txt`（「Verify, then install」） |
+| 測試 | `tests/unit/test_package_signature.py`、`tests/unit/test_shipping_package.py` |
+
+### 21.1 設計決定
+
+- **兩種檢查，兩種意義。**
+  - 完整性（強制）：`<name>.sha256` 的 sha256、MANIFEST 的檔案集合／sha256／大小／mode、staging 後一次 `RENAME_NOREPLACE` 的 atomic 安裝、任何失敗都不建立 TARGET、`tarball` 檢查的 pin 與 runtime identity（`metadata`）。它們證明檔案是 digest 指名的那一份、完整且沒有被改，**不證明是誰做的**：能換掉 tarball 的人也能換掉 digest（§19.6）。
+  - 發行者認證（可選）：`<name>.sha256.minisig`，以 `minisign -V` 對 repository 的公鑰驗證（§20.1）。
+- **安裝器不變。** 它本來就只做完整性檢查、不讀簽章、不需要 minisign（§20.1 的 owner 指示）；`install.sh` 是 runtime identity 的輸入，不改它也就不需要 republish。所以「簽章可選」在安裝路徑上不是新行為，而是把既有行為寫成 policy。
+- **release set**：三個檔案（tarball、安裝器、digest）；簽過的 release 多一個 `.minisig`。local-only package 不需要簽，engineering closeout 不需要 production release key。
+- **簽章的路徑仍是明確的 opt-in**，而且 fail-closed：
+  - `tarball --pubkey`：要求第四個檔案，`signature` 檢查（`minisign -V`＋reader＋trusted comment）任何一項不成立就 FAIL（§20.5 S1–S8 不變）。
+  - `tarball` 不帶 `--pubkey`、dist 裡卻有 `.minisig`：`release_set` FAIL，訊息說明要以 `--pubkey` 驗證。簽章要嘛被驗證、要嘛檢查失敗，**不會被略過**。
+  - 使用者端：README 的第 1 步（簽過的 release）失敗就停止，不安裝。
+- **報告不把未簽的 package 說成已認證。** `tarball` 報告多一個 `authentication`：
+  - 不帶 `--pubkey`：`method: none`、`publisher_authenticated: false`、`reading`＝「integrity only; the publisher is not authenticated」；
+  - 帶 `--pubkey`：`method: minisign`，`publisher_authenticated` 只在 `signature` PASS 時為 true；`reading` 說明 key 是否屬於發行者取決於公鑰的來源。
+  
+  `signed` 欄位保留（＝是否要求簽章），舊的評估器照常讀得到。
+- **README**：release 是三個檔案，簽過的多一個；列出 digest／MANIFEST 與簽章各自證明什麼；明寫「digest 不是簽章」「未簽的 package 不是 authenticated，不要說它是 signed／verified」；minisign 那一步標成「Signed release only」。
+- **MANIFEST 的 `reading` 不改。** PR-C4 的 `reading` 提到 `.minisig`；`manifest_head` 以 source commit 推出 `reading`，改它就要再一個依 commit 選擇的版本。它描述的是簽章檔「若存在」時涵蓋什麼，不是認證宣稱；未簽的 package 有沒有被認證，以 `tarball` 報告的 `authentication` 與 README 為準（§21.5 記為限制）。
+
+### 21.2 改了什麼
+
+- `check_shipping_package.py`：`release_set` 對「有 `.minisig` 但沒有 `--pubkey`」給出明確的問題；報告多 `authentication`（`authentication()`）；最後一行印出 `authentication: <method> (<reading>)`；docstring 與 `--pubkey` 的 help。
+- `sign_shipping_package.py`：只改 docstring。
+- `shipping/package/README.txt`：「Verify, then install」改寫（上述）。README 不是 runtime identity 的輸入（prose，`build_runtime_identity._is_prose`）；`check_runtime_identity_staleness.py --mode attested` 在本節的變更後仍 exit 0。
+- 測試：
+  - `test_package_signature.py`：未簽的 release 跑完全部七項完整性檢查並報告 `none`；未簽時 digest 被改仍然 FAIL；有 `.minisig` 但沒有 `--pubkey` ⇒ `release_set` FAIL、沒有 `signature` 項；錯的 key 與被改的 trusted comment ⇒ `signature` FAIL 且 `publisher_authenticated: false`；`authentication()` 的真值表。
+  - `test_shipping_package.py`：安裝器不提 `minisig`；未簽的 package 與旁邊放一個壞 `.minisig` 的 package 安裝輸出相同（除 staging 名稱），都不提 sign／authentic。
+- **沒有動的**：`install.sh`、launcher、auditor、shipping 與 tracking 的 C++ 原始碼、`third_party_set.json`、`entrypoint_pin.json`、`license_audit.json`、`THIRD_PARTY.md`、model root、operator library、runtime identity 出版。
+
+### 21.3 驗證契約（量測之前寫定）
+
+不跑 GPU：runtime 的位元組不變（下面 V3、E1 檢查），7-seq parity 沿用 PR-C4 r2（`results/465_prc4_release/full_bc75dcab/`，gate 7–8 `EXACT`）。結果目錄 `results/546_closeout/full_<commit>/`。
+
+**有效性**（任一不成立 ⇒ 受影響的項目 `UNRESOLVED`）：
+- V1：乾淨 commit；`check_runtime_identity_staleness.py --mode attested` exit 0。
+- V2：operator library 與 pin 的 entrypoint 的 sha256 等於 attestation 與 `entrypoint_pin.json`。
+- V3：`git diff 24dab817 HEAD -- shipping` 只改 `shipping/package/README.txt`；`git diff 9217ed92 HEAD -- shipping/package/install.sh` 為空。
+
+**PASS 規則**（全部成立 ⇒ `PASS`）：
+
+1. **E1 tree**：`cmake --install build-release --component shipping`（不 configure、不 build）到 `$R/tree`；`static` 12 項 PASS；每個檔案的 sha256 與 r2 的 `gate1_tree.sha256` 相同，唯一的差別是 `README.txt`。
+2. **E2 未簽的 package**：builder（不帶 `--trial`）exit 0；`tarball`（不帶 `--pubkey`）exit 0，七項 PASS，`signed: false`，`authentication.method`＝`none`、`publisher_authenticated`＝false；安裝器 sha256＝`afa5d06a…`（PR-C3）；MANIFEST 的 `files` 等於 `$R/tree`。
+3. **E3 未簽的 package 安裝到乾淨容器**：`run_package_container.sh install-strace` exit 0；`install-trace` 5 項 PASS；`static --manifest` 13 項 PASS；容器內 `--verify` exit 0；除 MANIFEST 外與 `$R/tree` 逐位元組相同。
+4. **E4 簽章 opt-in**：容器 minisign 產生一次性 test key（`-G -W`），`sign` exit 0；`tarball --pubkey` exit 0，八項 PASS，`authentication.method`＝`minisign`、`publisher_authenticated`＝true；`run_package_container.sh verify` exit 0。
+
+**負控制**（各自的 dist 副本，未改的檔案是 hard link）：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| U1 | 未簽的 dist：digest 的 tarball 那一行第一個 hex 字元改掉 | `tarball`（不帶 `--pubkey`）`package_digest` FAIL；容器安裝器 exit 1（`sha256 is not the one in`），TARGET 沒有建立、沒有 staging |
+| U2 | 簽過的 dist，`tarball` 不帶 `--pubkey` | `release_set` FAIL（`present but no --pubkey`）；沒有 `signature` 項；`authentication.method`＝`none` |
+| U3 | 簽過的 dist：digest 第一個 hex 字元改掉，簽章不變，帶 `--pubkey` | `signature` FAIL，`publisher_authenticated`＝false；容器 `verify` exit 非 0 |
+| U4 | 以第二把 test key 簽，以第一把驗 | `signature` FAIL（key id），`publisher_authenticated`＝false；容器 `verify` exit 非 0 |
+| U5 | 未簽的 package 安裝到已存在的 TARGET（空目錄） | 容器安裝器 exit 2（`exists; nothing was changed`），上層目錄不變 |
+
+**沿用、不重跑的證據**：安裝器的 P1–P15（PR-C3 §19.5）與簽章的 S1–S9（PR-C4 §20.5）：安裝器與簽章檢查的邏輯沒有變（安裝器逐位元組相同；`signature` 的檢查函式沒有改）。stale identity 的拒絕：builder 不帶 `--trial` 時拒絕、`tarball` 的 `metadata` 對 `identity_current: false` 失敗（§19.1，單元測試）。
+
+**不做的**：GPU、parity、FPS；release key；任何散佈。
