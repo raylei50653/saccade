@@ -1,4 +1,4 @@
-<!-- doc-status: proposed -->
+<!-- doc-status: active -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-10-09 -->
 <!-- doc-module: cross -->
@@ -7,7 +7,14 @@
 
 本稿是 [#536](https://github.com/raylei50653/saccade/issues/536) B0／B1 的第一批設計，只處理三列已批准的需求：[REQ-535-01-01](capability_requirements_535.md#req-535-01-01)、[REQ-535-01-02](capability_requirements_535.md#req-535-01-02)、[REQ-535-08-02](capability_requirements_535.md#req-535-08-02)。適用範圍是 ledger 的 [S-SHIP](capability_requirements_535.md#scope-535-shipping) 與 [S-EXPORT](capability_requirements_535.md#scope-535-export)，決策邊界依 [第一切片決策](capability_requirements_535.md#decision-535-first-slice)；本稿不重述也不擴大。
 
-**狀態用語**：`observed as-is` 是在 source baseline `c45a24da953ffd16d3b98478cae79954a45204f4` 讀原始碼得到的現況，沒有跑 runtime、GPU 或 package；`proposed target` 是本稿提出、**尚未批准**的設計。本稿沒有任何 `accepted target` 或 `implemented` 項目。需求批准不等於設計批准，設計批准也不等於實作已驗證。
+**狀態用語**：`observed as-is` 是在 source baseline `c45a24da953ffd16d3b98478cae79954a45204f4` 讀原始碼得到的現況，沒有跑 runtime、GPU 或 package；`accepted target` 是依[設計決策](#decision-536-first-slice)批准的目標設計。本稿沒有任何 `implemented` 或 `verified` 項目。需求批准不等於設計批准，設計批准也不等於實作已驗證。
+
+<a id="decision-536-first-slice"></a>**第一批設計決策（2026-10-09，Asia/Taipei）**：`owner=raylei50653; decision=accepted; scope=#536 B0/B1 S-SHIP × S-EXPORT 第一批`。Decision source：[#558 owner design decision](https://github.com/raylei50653/saccade/pull/558#issuecomment-6080588466)（權威來源；comment 可編輯，因此具體內容以本段的版本控制紀錄保存）。審查的 PR head 是 `9709c3e127ab57bc377d9daf3b815cd6b8d13ae9`。
+
+- **批准的內容**：第 1 節總圖的目標節點與邊、第 4 節三張契約卡，以及三項決策：CC-536-01-01 取得 `<out>` lock 並建立新 journal 後，只作廢本輪會覆寫的產物，並記錄失敗重跑的行為；CC-536-01-02 現階段允許 `checksum_matched`，不宣稱可信來源或 publisher authentication，可信來源與日後的 `expected_source_verified` 要求由 #549 S1 決定；CC-536-08-02 保護 frozen stem，只有 `--overwrite` 不能覆寫，預設改用新 stem。
+- **本決策的邊界（全文唯一陳述，其他段落引用此處）**：只批准架構與接口設計，不認證實作、runtime／GPU／package 證據、完整 #535 A3、發行權利或公開發行，也不是 merge 授權。#537 的狀態語義、#541 的檢查與 as-built 驗收不因此改變。
+- **授權的下一步**：第一個實作 PR 限於 Export safety；Completion、Preflight、Identity integration 依 §6 分開進行。
+- **實作層的後續事項**（不是設計阻擋項，由對應的實作 PR 處理）：`<out>` 原本不存在時，先建立目錄再取 lock；新 journal 以 rename 取代舊 journal，之後的作廢不得刪到新 journal（CC-536-01-01 第 4 步已依此釐清）；半發布的 export 配對要以 hash 驗證強制拒絕；`<out>` 以外的 `--report`／`--trace` 的並行問題。負控制與 runtime 證據仍未完成。
 
 **本稿不擁有的內容**（只引用）：CAP／REQ 與支持裁決歸 [#535 ledger](capability_requirements_535.md)；run 狀態的 transition 語義與 failure／degradation 狀態機歸 [#537](https://github.com/raylei50653/saccade/issues/537)；模型 bundle schema、trusted expected identity 的來源、ABI／SM／TRT pairing 歸 [#549](https://github.com/raylei50653/saccade/issues/549) S1；requirement↔check 對應與 as-built 驗收歸 [#541](https://github.com/raylei50653/saccade/issues/541)；發行權利歸 #547。既有 #465 契約（[shipping boundary](../reference/native_runtime_shipping_boundary.md)、[resolved config](../reference/native_runtime_resolved_config.md)、[closeout](../reference/native_runtime_closeout.md)）不重開。
 
@@ -18,7 +25,7 @@
 | 標記 | 意思 |
 |:--|:--|
 | 方框 `N-…`、實線 `L-01…L-16` | observed as-is（source-inspected） |
-| 六角框 `N-T…`、虛線 `L-T…`、標籤以「目標」開頭 | proposed target，未批准、未實作 |
+| 六角框 `N-T…`、虛線 `L-T…`、標籤以「目標」開頭 | accepted target（[設計決策](#decision-536-first-slice)），未實作、未驗證 |
 | 標籤中的 `⚠G1`／`⚠G2`／`⚠G3` | 第 3 節的現況差距落在這裡 |
 
 ```mermaid
@@ -132,9 +139,9 @@ flowchart TB
 | F4 | sha256 檢查與實際載入分開開檔（hash 之後才 `dlopen`／`jit::load`／讀 engine），兩次開檔之間檔案可能被換 | unverified（known limit） | #549 S1 trust boundary |
 | F5 | `run_sequences` 是 shipping 與 `saccade_track_measurement` 共用的程式碼；改 completion 行為也會改到 measurement build | contract-gap（實作範圍注意） | 實作 PR 須保留 [measurement surface](../../tests/unit/test_shipping_measurement_surface.py) 檢查 |
 
-## 4. 接口契約卡（proposed target）
+## 4. 接口契約卡（accepted target）
 
-以下三張卡都是**未批准**的設計。欄位依 #536 B1。實作 PR 的切法等本稿批准後再定。
+以下三張卡依[設計決策](#decision-536-first-slice)批准為目標設計，都還沒有實作。欄位依 #536 B1。
 
 ### <a id="cc-536-01-01"></a>CC-536-01-01：completion／diagnostic
 
@@ -145,7 +152,7 @@ flowchart TB
   1. **Run identity**：解析參數後立刻產生 `run_id`（每次 invocation 都不同的隨機值），stderr 第一行印出，journal 與 report 都帶它。MOT txt 的位元組不變，所以既有的 MOT parity 證據不受影響。
   2. **`<out>` 的獨占權**：建立或改寫任何東西之前，先對 `<out>` 內一個固定的 lock 檔取得非阻塞的獨占 `flock`。已經被另一個 process 持有時，立刻 exit 2，不建 journal，也不作廢或改寫任何檔案。lock 由 process 一直持有到結束（被 kill 時由 kernel 釋放），lock 檔本身不刪除，避免刪檔與重建之間的 race。這是同一 `--out` 並行執行時的明確拒絕機制，不是通用的交易框架。
   3. **Run journal（N-T1）**：`<out>` 內一個小 JSON 檔（名稱在實作 PR 定，有自己的 format 字串），每次都用 temp 檔加 rename 改寫。內容：`run_id`、`state`（`running`／`failed`／`complete`）、依 argv 順序列出每個 sequence 的 `pending`／`written`（`written` 帶 txt 路徑與 sha256）、`identity`（見 CC-536-01-02），失敗時另記失敗的 sequence（可為 null）與 stderr 的同一則訊息。這只是逐 run 的完成紀錄，不是統一的 failure-report schema。各 state 之間怎麼轉換、失敗怎麼分類，由 #537 擁有，本卡只要求這些值可以被觀察到。
-  4. **順序**：解析參數 → 取得 `<out>` 的 lock → 建立 journal（`state=running`、所有 sequence `pending`、`identity.level=null`）→ 作廢本輪會覆寫的路徑，**只限**舊 journal、`--report` 路徑、本輪各 sequence 的 `<seq>.txt` 與 trace 檔，`<out>` 內其他檔案不動 → CUDA-free preflight（N-T2）→ GPU 初始化與載入 → 每個 sequence 寫 temp 檔、rename 成 `<seq>.txt`，再把 journal 的該 sequence 改成 `written` → 全部完成後，report 一樣用 temp 加 rename 寫出（沿用「全部完成後才寫」）→ journal 改成 `complete`，**這是唯一的 commit point**。被捕捉的錯誤會盡力寫成 `failed` 後 exit 2；被 kill 或 abort 時 journal 會停在 `running`，caller 應視為未完成。
+  4. **順序**：解析參數 → 建立 `<out>`（原本不存在時）→ 取得 `<out>` 的 lock → 以 temp 加 rename 安裝新 journal（`state=running`、所有 sequence `pending`、`identity.level=null`），這一步本身就取代了舊 journal → 作廢本輪會覆寫的其他路徑，**只限** `--report` 路徑、本輪各 sequence 的 `<seq>.txt` 與 trace 檔，不包括剛安裝的新 journal，`<out>` 內其他檔案也不動 → CUDA-free preflight（N-T2）→ GPU 初始化與載入 → 每個 sequence 寫 temp 檔、rename 成 `<seq>.txt`，再把 journal 的該 sequence 改成 `written` → 全部完成後，report 一樣用 temp 加 rename 寫出（沿用「全部完成後才寫」）→ journal 改成 `complete`，**這是唯一的 commit point**。被捕捉的錯誤會盡力寫成 `failed` 後 exit 2；被 kill 或 abort 時 journal 會停在 `running`，caller 應視為未完成。
   5. **Exit code**：沿用 0／2／127／128+N，不新增。exit 0 必須同時有 `state=complete` 的 journal；非零代表本輪未完成，哪些 sequence 已確認提交以 journal 為準。
   6. **Report schema**：report 加上 `run_id` 與 `identity` 後，format 改成新版本（例如 `saccade.native_track_report/v3`），不在 v2 名下改語義。[native_track_parity](../../scripts/eval/diagnostics/native_track_parity.py) 把 format 釘死在 v2，所以要在同一個實作 PR 更新；已歸檔的 v2 report 維持原本的意思。
 - **Caller 判讀規則**：只有 journal 的 `run_id` 等於這次 invocation、而且 `state=complete`，才算本輪完整成功。只有 `written`、且檔案 sha256 等於 journal 所記值的 txt，才算本輪已提交的輸出。`pending` 的意思是**尚未確認提交**，不是「沒有本輪檔案」：rename 成功、journal 還沒改成 `written` 時被中斷，`<seq>.txt` 可能已經是本輪的完整檔案，但它不能當作本輪完成的證據。
@@ -237,11 +244,8 @@ Owner 欄寫的是 ledger 的 CAP accountable owner，以及語義的去向。ev
 
 ## 6. 本稿之後
 
-- **批准時要確認的三項決策**（PR #558 review 建議的方向已寫進上面三張卡；本稿批准前仍是 proposed）：
-  1. CC-536-01-01：作廢舊產物，只限本輪會覆寫的路徑，而且要先取得 `<out>` 的獨占權並建立 journal；
-  2. CC-536-01-02：分階段強制，現階段允許 `checksum_matched` 但不宣稱可信來源，#549 S1 批准後才要求 `expected_source_verified`；
-  3. CC-536-08-02：保護 frozen stem，`--overwrite` 不能單獨覆寫，預設改用新 stem。
-- **候選的實作切法**（批准後再定案，一次一個 PR）：
+- 三項決策與邊界見[設計決策](#decision-536-first-slice)，這裡不重述。
+- **實作切法**（一次一個 PR；第 1 項已獲授權，其餘仍是候選）：
   1. Export safety：F1、frozen stem 保護、staging 與 publication commit、失敗注入測試；
   2. Completion：`run_id`、lock、journal、逐檔 temp→rename 的 txt、report 新 format，MOT 位元組不變，並檢查 `saccade_track_measurement`；狀態轉換的細節由 #537 擁有；
   3. Preflight：sha256 與輸入檢查移到 GPU 初始化之前，並用負控制證明不碰 CUDA；
