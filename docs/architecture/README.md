@@ -7,6 +7,7 @@
 - 開發入口（需求層級 → 文檔組合）與 source-of-truth：看 [DEVELOPMENT.md](../../DEVELOPMENT.md)
 - 事件 / API / storage schema：看 [api_spec.md](../modules/storage/api_spec.md)
 - 能力／REQ／Profile、具名 owner、inherited scope／proposed delta 與代表鏈狀態：看 [capability_requirements_535.md](capability_requirements_535.md)（#535；批准與待決狀態只在該檔維護）
+- S-SHIP／S-EXPORT 的總圖（現況與目標）、completion／identity／export 接口契約卡與 ID 索引：看 [ship_export_contracts_536.md](ship_export_contracts_536.md)（#536；設計狀態只在該檔維護）
 
 ---
 
