@@ -7,7 +7,7 @@
 
 本文件記錄 [#509](https://github.com/raylei50653/saccade/issues/509) 前段的工程耗時基線，source 為 `83c9bef0029ab4b969a39f52ab592c47f74d34f6`。跨 Issue 排序、checkpoint 與下一主線只在 [#550](https://github.com/raylei50653/saccade/issues/550)；本文不承載第二張 roadmap。這次交付是 measurement snapshot，尚未變更任何 workflow、required check、pytest 選取、cache、runtime 或 evidence gate，也不提出加速百分比。
 
-可重新計算的 job/step 資料、checkout 身分、cache 證據及本機 phase 結果在 [evidence JSON](ci_timing_baseline_509.json)。原始 API、logs、JUnit XML 與 harness 保留於 `results/509_ci_baseline/20261009/`，不納入版本控制；JSON 保留它們的 SHA-256 與重取方法。這是工程過程資料，`doc-promotion: none`；任何後續優化決策需引用這份 baseline 並另附可比較的前後證據。
+可重新計算的 job/step 資料、checkout 身分、cache 證據及本機 phase 結果在 [evidence JSON](ci_timing_baseline_509.json)。原始 API、logs、JUnit XML 與 harness 保留於 `results/509_ci_baseline/20261009/`，不納入版本控制；逐檔 SHA-256 在該目錄的 `raw_sha256.json`（878 檔），JSON 記錄這份 manifest 的 SHA-256 與重取方法。量測時寫在 `/tmp` staging，之後原樣複製到上述目錄；JSON 內路徑已改寫成 repo-relative 的保留位置（對照表在 `path_normalization`），並省略 hostname／uname。這是工程過程資料，`doc-promotion: none`；任何後續優化決策需引用這份 baseline 並另附可比較的前後證據。
 
 ## Sampling and definitions
 
@@ -72,7 +72,7 @@
 
 ## Local pytest baseline
 
-WSL2、32 logical CPUs、RTX 5070 Ti Laptop，既有 `.venv` 與 native extension；精確 versions / source hashes 見 JSON。使用原 `pre_push` selection（`tests/ -q --ignore=tests/benchmarks`，configured `not research`），加上 durations/JUnit instrumentation，沒有 coverage。每次 fresh Python process，在 `machine-bench` lease 下序列量測，source/head/worktree 保持乾淨。
+WSL2、32 logical CPUs、RTX 5070 Ti Laptop，既有 `.venv` 與 native extension；精確 versions / source hashes 見 JSON。使用 `pre_push` 的 pytest 參數（`tests/ -q --ignore=tests/benchmarks`，configured `not research`），加上 durations/JUnit instrumentation，沒有 coverage；但以 `.venv/bin/python -m pytest` 執行，不是 `pre_push.sh` 的 `uv run pytest`：沒有 uv 的環境同步檢查，且 `-m` 會把 repo root 放進 `sys.path`。每次 fresh Python process；6 次 run 序列執行，每次各自取得並在結束時釋放 `machine-bench` lease（lease 之間未排除其他 holder），source/head/worktree 保持乾淨。
 
 | 秒 | rep 1 | rep 2 | rep 3 | median [min, max] |
 |:--|--:|--:|--:|--:|
@@ -80,7 +80,7 @@ WSL2、32 logical CPUs、RTX 5070 Ti Laptop，既有 `.venv` 與 native extensio
 | full pytest external wall | 300.201 | 299.640 | 298.988 | 299.640 [298.988, 300.201] |
 | pytest reported elapsed | 295.46 | 294.86 | 294.00 | 294.86 [294.00, 295.46] |
 
-三次 full 均 exit 0：**5362 passed、52 skipped、105 deselected、5 xfailed**；collection 均 5419/5524 selected，105 deselected。JUnit 的 57 skipped 包含 5 xfailed；不把它誤當 57 個一般 skip。
+三次 full 均 exit 0：**5362 passed、52 skipped、105 deselected、5 xfailed**；collection 均 5419/5524 selected，105 deselected。JUnit 的 57 skipped 包含 5 xfailed；不把它誤當 57 個一般 skip。同一 source 的 CI pytest（[37878975871](https://github.com/raylei50653/saccade/actions/runs/37878975871)）collect 5451 items／105 deselected／12 collection-time skipped／5346 selected，結果 5158 passed、196 skipped、4 xfailed；本機 collect 5524、selected 5419，沒有 collection-time skip。差異發生在 collection 階段（本機多 73 items、CI 多 12 個 collection-time skip），本文未逐項歸因；本機計數不能當成 CI selection 的計數。
 
 collection-only 是另一次 process，不能把兩欄 median 的差當成精確 execution phase。全套 external wall 含 Python 啟動／退出、collection、fixture/setup、call、teardown、report；pytest reported elapsed 的邊界較窄。前面的未取得 lease 首輪保留為 exploratory，排除於上述 median。重複出現在三輪 slowest-30 的 setup/call：resolved-config export setup 27.90 秒、preseal independent expansion call 21.82 秒、real-package licence comparison call 21.32 秒（各取 median；不是跨 run 可重用的 PASS）。既有 pyc/filesystem/GPU caches 已暖，Windows host 與 ambient services 未隔離。這些數字與 GitHub coverage/fallback runner 不同，不是它們的加速結果。
 
@@ -95,7 +95,7 @@ collection-only 是另一次 process，不能把兩欄 median 的差當成精確
 | CTest | 3.353 | 3.418 | 3.357 | 3.357 [3.353, 3.418] |
 | incremental no-op build | 0.090 | 0.093 | 0.091 | 0.091 [0.090, 0.093] |
 
-每個 phase exit 0；三次 CTest 都 6/6 PASS。no-op 沒有 compile/link，products hashes 全部保持相同。此結果只覆蓋 CUDA-free standalone loader/config/MOT targets，未建置現有 native runtime、修改 attestation 或安裝 package；完整 CUDA C++ cost 使用上面的 remote baseline。fresh build directory 不代表 filesystem/compiler cache 已清空。首個 attempt 的三個 phase 均 exit 0、CTest 6/6，但 harness 未識別本機 `100% tests passed out of 6` 摘要而停止；原始 attempt 與原 harness 保留為 `build-incomplete/`，排除於以上 n=3。修正僅在量測 harness，之後用全新目錄重跑。
+每個 phase exit 0；三次 CTest 都 6/6 PASS。no-op 沒有 compile/link，products hashes 全部保持相同。此結果只覆蓋 CUDA-free standalone `shipping/` targets 與其 6 個 CTests（resolved config、native config、detection filters、MOT output、ingest plan、detector plan），未建置現有 native runtime、修改 attestation 或安裝 package；完整 CUDA C++ cost 使用上面的 remote baseline。fresh build directory 不代表 filesystem/compiler cache 已清空。首個 attempt 的三個 phase 均 exit 0、CTest 6/6，但 harness 未識別本機 `100% tests passed out of 6` 摘要而停止；原始 attempt 與原 harness 保留為 `build-incomplete/`，排除於以上 n=3。修正僅在量測 harness，之後用全新目錄重跑。
 
 ## What this evidence supports
 
@@ -111,19 +111,28 @@ collection-only 是另一次 process，不能把兩欄 median 的差當成精確
 gh api repos/raylei50653/saccade/actions/runs/<run-id>
 gh api 'repos/raylei50653/saccade/actions/runs/<run-id>/attempts/<attempt>/jobs?per_page=100'
 gh run view <run-id> --attempt <attempt> --log
+# main checkouts（本機有 git object）
 git rev-parse '<checkout-sha>:<path>'
 git show '<checkout-sha>:<path>'
+# PR checkouts 是 GitHub 的 synthetic merge commit（0c808139、e3dd69a9、4c23dbd0），本機 clone 沒有；改用 API
+gh api repos/raylei50653/saccade/commits/<logged-archive-prefix>
+gh api 'repos/raylei50653/saccade/contents/<path>?ref=<checkout-sha>'   # content 先 base64 decode 再算 SHA-256；API sha 是 git blob ID
 ```
 
-本機量測的精確 argv 與已記錄的環境／工具清單在 JSON／原始 harness。每個測試或 build 使用 fresh process，正式 timing 經 [resctl machine-bench](../WORKTREE_RESOURCES.md) 序列執行；使用已有環境，沒有清除全機 filesystem／compiler／Python caches。重新執行須在該 source checkout；它不是任意未來 head 的 baseline。
+本機量測的精確 argv 與已記錄的環境／工具清單在 JSON／原始 harness。每個測試或 build 使用 fresh process，正式 timing 經 [resctl machine-bench](../WORKTREE_RESOURCES.md) 序列執行；使用已有環境，沒有清除全機 filesystem／compiler／Python caches。重新執行須在 `83c9bef0` 的乾淨 checkout（例如 detached worktree）；它不是任意未來 head 的 baseline。
+
+重放用 `results/509_ci_baseline/replay/` 的 harness：它們是原 harness 的副本，只把 checkout root（取自 git）、interpreter（取自呼叫者）與輸出目錄參數化，輸出直接寫到新的或空的保留目錄，不經 `/tmp`；量測 phase、argv 與檢查不變，SHA-256 在 JSON `replay_harnesses`。在 `83c9bef0` checkout 內執行：
 
 ```sh
-.venv/bin/python tools/resctl.py run machine-bench -- \
-  .venv/bin/python -m pytest tests/ --collect-only -q --ignore=tests/benchmarks
-.venv/bin/python tools/resctl.py run machine-bench -- \
-  .venv/bin/python -m pytest tests/ -q --ignore=tests/benchmarks --durations=30 --junitxml=/tmp/509-pytest.xml
-.venv/bin/python tools/resctl.py run machine-bench -- \
-  .venv/bin/python results/509_ci_baseline/20261009/build/measure.py --output-dir /tmp/509-replay-fresh
+R=<main checkout>/results/509_ci_baseline   # gitignored，不弄髒被量測的 checkout
+PY=<main checkout>/.venv/bin/python
+D=$(date -u +%Y%m%d)
+# pytest：metadata，接著 3 次 collection-only、3 次 full，每次各取一個 machine-bench lease
+$PY $R/replay/pytest_series.py $R/$D/pytest
+# build：整批一個 lease；3 個 fresh build dirs 的 configure、build、6 個 CTests、incremental no-op
+$PY tools/resctl.py run machine-bench -- $PY $R/replay/build_measure.py --output-dir $R/$D/build
+# 遠端報表：從保留的 raw API/log 重算，不覆寫原 evidence
+$PY $R/replay/remote_report.py --raw-dir $R/20261009/remote --output-dir $R/$D/remote-report
 ```
 
-build harness 會序列量測三個 fresh build directories 的 configure、build、6 個 CTests 與 incremental no-op build；輸出位置必須是尚未量過的新目錄。pytest 兩個 argv 各重跑三次，分別記錄 wall、summary 與 JUnit，不能只執行一次當成完整 protocol。本機 standalone loader 不代表完整 CUDA C++ build 的數字；後者以遠端兩組 build 的 source/coverage 為準。
+重放 harness 已在 `83c9bef0` detached worktree 檢查（輸出在 `replay/check-20261009/`）：remote 報表與保留版本只差路徑字串；build 完整跑完 3 reps、CTest 6/6；pytest 只做了一次 collection-only smoke（5419/5524 selected、105 deselected，與正式 run 相同），full series 沒有重跑。輸出目錄必須是尚未量過的新目錄。本機 standalone loader 不代表完整 CUDA C++ build 的數字；後者以遠端兩組 build 的 source/coverage 為準。
