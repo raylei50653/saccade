@@ -1,5 +1,5 @@
 {
-  "schema": "saccade.ci_timing_baseline/v2",
+  "schema": "saccade.ci_timing_baseline/v3",
   "generated_at_utc": "2026-10-09T04:19:35.934095+00:00",
   "source_sha": "83c9bef0029ab4b969a39f52ab592c47f74d34f6",
   "scope": "#509 Stage 0B measurement baseline; progress authority #550",
@@ -31,45 +31,165 @@
     "checkout_source_verification": [
       {
         "checkout_sha": "83c9bef0029ab4b969a39f52ab592c47f74d34f6",
-        "verification": [
-          "local git object"
-        ],
-        "matches_canonical_source_hashes": true
+        "files": {
+          ".github/workflows/ci.yml": {
+            "git_blob": "d7399ff091a524034bdaf79059a8536d00c573ce",
+            "sha256": "c7fdf4d77e02a335c74b32b9e849a301ae0dc0c7f2c10c50cc91793bd657179e",
+            "verification": "local git object"
+          },
+          ".github/workflows/cpp_build.yml": {
+            "git_blob": "d926cbc15797e55df93d77b3e9805756abd46da1",
+            "sha256": "51df3173a436207eef1b17b42631a2437198a03354c29ebd9ac79bce49650b76",
+            "verification": "local git object"
+          },
+          "pyproject.toml": {
+            "git_blob": "94081f964ebba44ee5e1203f1c215512a7999a83",
+            "sha256": "192d9a2fdd8dcda72733acbae865224050ca60d8648e54505b57f0f2e3876a8e",
+            "verification": "local git object"
+          },
+          "uv.lock": {
+            "git_blob": "c389fd976674aa1173e64143bd27dcd3f1977c9f",
+            "sha256": "d06c1db0da58091d4cd2a5a08b0145dc66af9b70ba40b0ca87aeac7242621d3c",
+            "verification": "local git object"
+          }
+        }
       },
       {
         "checkout_sha": "54be85ade88ebc3271a8cae378330c38c63180ea",
-        "verification": [
-          "local git object"
-        ],
-        "matches_canonical_source_hashes": true
+        "files": {
+          ".github/workflows/ci.yml": {
+            "git_blob": "d7399ff091a524034bdaf79059a8536d00c573ce",
+            "sha256": "c7fdf4d77e02a335c74b32b9e849a301ae0dc0c7f2c10c50cc91793bd657179e",
+            "verification": "local git object"
+          },
+          ".github/workflows/cpp_build.yml": {
+            "git_blob": "d926cbc15797e55df93d77b3e9805756abd46da1",
+            "sha256": "51df3173a436207eef1b17b42631a2437198a03354c29ebd9ac79bce49650b76",
+            "verification": "local git object"
+          },
+          "pyproject.toml": {
+            "git_blob": "94081f964ebba44ee5e1203f1c215512a7999a83",
+            "sha256": "192d9a2fdd8dcda72733acbae865224050ca60d8648e54505b57f0f2e3876a8e",
+            "verification": "local git object"
+          },
+          "uv.lock": {
+            "git_blob": "c389fd976674aa1173e64143bd27dcd3f1977c9f",
+            "sha256": "d06c1db0da58091d4cd2a5a08b0145dc66af9b70ba40b0ca87aeac7242621d3c",
+            "verification": "local git object"
+          }
+        }
       },
       {
         "checkout_sha": "24dab817f2dfb3941daf634f4ce98bb7d4599364",
-        "verification": [
-          "local git object"
-        ],
-        "matches_canonical_source_hashes": true
+        "files": {
+          ".github/workflows/ci.yml": {
+            "git_blob": "d7399ff091a524034bdaf79059a8536d00c573ce",
+            "sha256": "c7fdf4d77e02a335c74b32b9e849a301ae0dc0c7f2c10c50cc91793bd657179e",
+            "verification": "local git object"
+          },
+          ".github/workflows/cpp_build.yml": {
+            "git_blob": "d926cbc15797e55df93d77b3e9805756abd46da1",
+            "sha256": "51df3173a436207eef1b17b42631a2437198a03354c29ebd9ac79bce49650b76",
+            "verification": "local git object"
+          },
+          "pyproject.toml": {
+            "git_blob": "94081f964ebba44ee5e1203f1c215512a7999a83",
+            "sha256": "192d9a2fdd8dcda72733acbae865224050ca60d8648e54505b57f0f2e3876a8e",
+            "verification": "local git object"
+          },
+          "uv.lock": {
+            "git_blob": "c389fd976674aa1173e64143bd27dcd3f1977c9f",
+            "sha256": "d06c1db0da58091d4cd2a5a08b0145dc66af9b70ba40b0ca87aeac7242621d3c",
+            "verification": "local git object"
+          }
+        }
       },
       {
         "checkout_sha": "0c8081396a315b20faa5bf3539fe0187f78d3287",
-        "verification": [
-          "GitHub contents API"
-        ],
-        "matches_canonical_source_hashes": true
+        "files": {
+          ".github/workflows/ci.yml": {
+            "git_blob": "d7399ff091a524034bdaf79059a8536d00c573ce",
+            "sha256": "c7fdf4d77e02a335c74b32b9e849a301ae0dc0c7f2c10c50cc91793bd657179e",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/0c8081396a315b20faa5bf3539fe0187f78d3287..github__workflows__ci.yml.contents.json"
+          },
+          ".github/workflows/cpp_build.yml": {
+            "git_blob": "d926cbc15797e55df93d77b3e9805756abd46da1",
+            "sha256": "51df3173a436207eef1b17b42631a2437198a03354c29ebd9ac79bce49650b76",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/0c8081396a315b20faa5bf3539fe0187f78d3287..github__workflows__cpp_build.yml.contents.json"
+          },
+          "pyproject.toml": {
+            "git_blob": "94081f964ebba44ee5e1203f1c215512a7999a83",
+            "sha256": "192d9a2fdd8dcda72733acbae865224050ca60d8648e54505b57f0f2e3876a8e",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/0c8081396a315b20faa5bf3539fe0187f78d3287.pyproject.toml.contents.json"
+          },
+          "uv.lock": {
+            "git_blob": "c389fd976674aa1173e64143bd27dcd3f1977c9f",
+            "sha256": "d06c1db0da58091d4cd2a5a08b0145dc66af9b70ba40b0ca87aeac7242621d3c",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/0c8081396a315b20faa5bf3539fe0187f78d3287.uv.lock.contents.json"
+          }
+        }
       },
       {
         "checkout_sha": "e3dd69a94c118ed3ed89371a82b2583f236ed8f8",
-        "verification": [
-          "GitHub contents API"
-        ],
-        "matches_canonical_source_hashes": true
+        "files": {
+          ".github/workflows/ci.yml": {
+            "git_blob": "d7399ff091a524034bdaf79059a8536d00c573ce",
+            "sha256": "c7fdf4d77e02a335c74b32b9e849a301ae0dc0c7f2c10c50cc91793bd657179e",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/e3dd69a94c118ed3ed89371a82b2583f236ed8f8..github__workflows__ci.yml.contents.json"
+          },
+          ".github/workflows/cpp_build.yml": {
+            "git_blob": "d926cbc15797e55df93d77b3e9805756abd46da1",
+            "sha256": "51df3173a436207eef1b17b42631a2437198a03354c29ebd9ac79bce49650b76",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/e3dd69a94c118ed3ed89371a82b2583f236ed8f8..github__workflows__cpp_build.yml.contents.json"
+          },
+          "pyproject.toml": {
+            "git_blob": "94081f964ebba44ee5e1203f1c215512a7999a83",
+            "sha256": "192d9a2fdd8dcda72733acbae865224050ca60d8648e54505b57f0f2e3876a8e",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/e3dd69a94c118ed3ed89371a82b2583f236ed8f8.pyproject.toml.contents.json"
+          },
+          "uv.lock": {
+            "git_blob": "c389fd976674aa1173e64143bd27dcd3f1977c9f",
+            "sha256": "d06c1db0da58091d4cd2a5a08b0145dc66af9b70ba40b0ca87aeac7242621d3c",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/e3dd69a94c118ed3ed89371a82b2583f236ed8f8.uv.lock.contents.json"
+          }
+        }
       },
       {
         "checkout_sha": "4c23dbd096a13bfdb6e76cb5040edd76cb428f2f",
-        "verification": [
-          "GitHub contents API"
-        ],
-        "matches_canonical_source_hashes": true
+        "files": {
+          ".github/workflows/ci.yml": {
+            "git_blob": "d7399ff091a524034bdaf79059a8536d00c573ce",
+            "sha256": "c7fdf4d77e02a335c74b32b9e849a301ae0dc0c7f2c10c50cc91793bd657179e",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/4c23dbd096a13bfdb6e76cb5040edd76cb428f2f..github__workflows__ci.yml.contents.json"
+          },
+          ".github/workflows/cpp_build.yml": {
+            "git_blob": "d926cbc15797e55df93d77b3e9805756abd46da1",
+            "sha256": "51df3173a436207eef1b17b42631a2437198a03354c29ebd9ac79bce49650b76",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/4c23dbd096a13bfdb6e76cb5040edd76cb428f2f..github__workflows__cpp_build.yml.contents.json"
+          },
+          "pyproject.toml": {
+            "git_blob": "94081f964ebba44ee5e1203f1c215512a7999a83",
+            "sha256": "192d9a2fdd8dcda72733acbae865224050ca60d8648e54505b57f0f2e3876a8e",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/4c23dbd096a13bfdb6e76cb5040edd76cb428f2f.pyproject.toml.contents.json"
+          },
+          "uv.lock": {
+            "git_blob": "c389fd976674aa1173e64143bd27dcd3f1977c9f",
+            "sha256": "d06c1db0da58091d4cd2a5a08b0145dc66af9b70ba40b0ca87aeac7242621d3c",
+            "verification": "GitHub contents API",
+            "raw_file": "checkout_sources/4c23dbd096a13bfdb6e76cb5040edd76cb428f2f.uv.lock.contents.json"
+          }
+        }
       }
     ],
     "definitions": {
@@ -101,7 +221,7 @@
         "git show <checkout_sha>:<path>",
         "gh api repos/raylei50653/saccade/commits/<logged_archive_prefix>",
         "gh api \"repos/raylei50653/saccade/contents/<path>?ref=<checkout_sha>\"",
-        "python results/509_ci_baseline/replay/remote_report.py --raw-dir results/509_ci_baseline/20261009/remote --output-dir <fresh-dir>"
+        "<main checkout>/.venv/bin/python results/509_ci_baseline/replay/remote_report.py --raw-dir results/509_ci_baseline/20261009/remote --output-dir <fresh-dir>"
       ],
       "source_paths": [
         ".github/workflows/ci.yml",
@@ -6224,9 +6344,60 @@
       }
     ],
     "raw_sha256": {
-      "see": "raw_artifacts.manifest",
-      "file_count": 54,
-      "prefix": "remote/"
+      "37763391614/jobs.json": "7e69725a1fe3990f78897549adcd0bde5e6ceec2a26f81863fc3d3efbf365da9",
+      "37763391614/logs.txt": "0c32cb1d3044eaa33b38c04f900c692e77ed5228be7f1a11b8c2f7088484f92c",
+      "37763391614/run.json": "f0c98e15ee112e2e1cc5377a0e993ceec4a2f1fc4f2054be096bf2e7a90494a0",
+      "37763391668/jobs.json": "9705358ba7487d64486fe25e6ac1556618ced19b8ede158e1d3ee35ec8c58dea",
+      "37763391668/logs.txt": "898f76691f19d0702472cad4462f5ac1c71fd10e2f68d132591f88e94c9a3b40",
+      "37763391668/run.json": "093721700dbf4c6d53f726baa840cd89ebe2292b97784a10f77f2b7a6777fabb",
+      "37764791730/jobs.json": "d38f3a36c2f24a635b443cb936149b5b941a4d2dbc5631b8d14d45fd397ca2aa",
+      "37764791730/logs.txt": "29df441c89e26ab2a3a09dbf21c8acee6a9fa5cb8e23a60f2399633f03011711",
+      "37764791730/run.json": "8a1b6e66458b322ba7c1e618323c802596d7ecca72e059b4753126a979614da4",
+      "37764791793/jobs.json": "1f9497afb3658e482ab8e83d9d341e8be8755e149067d2e7a624dee21f0e4829",
+      "37764791793/logs.txt": "47d10582caf37a271d55db24b407f2a10d2edebde4e11176eb0759190f652806",
+      "37764791793/run.json": "3ddc512c9337c72eedfe7df5b1a5bb0cc93245a785f5fc65d8bfd17b04265674",
+      "37769937398/jobs.json": "dd8977a66dbaab2b932392de5615bdaa3c0e7ae61978452f9560e389f4ddc359",
+      "37769937398/logs.txt": "ec242a11d16466c86f3c5c6910e0bb73d5275290b099b6596a5a4d70516443b8",
+      "37769937398/run.json": "1fd5351aa0a0732ea3be7fc9ed36aa06040e6fcfe87eaa2cb6e7fd8982b25713",
+      "37769937438/jobs.json": "c34bd796e13c53ebdf58f230a651e136a515aa494ec317c47f5765dbeffac69d",
+      "37769937438/logs.txt": "986706c0eb27f97616ff667b0e1ac632c9de8a6c0aff681a112f21c26817578d",
+      "37769937438/run.json": "02b6de8c2ccf31bc73ee2e2d9639852a9b15fb819238c1398bb776cb1bf3a102",
+      "37773867908/jobs.json": "e1b5bb8ad4afb3e4b8ad48c0a52b399176f7e429c1f086257a81143d35c2d6a3",
+      "37773867908/logs.txt": "6eed8a06e80d008422207965b3a6ed065b8202b32133f0dac3aa114af5dd81f3",
+      "37773867908/run.json": "3904b00091bfc5f3ad972c9dce4273c9f8cae0023380b43e086f81ed7e72780c",
+      "37773867912/jobs.json": "21d4ab8cd2de1c909c3a678a97da5a7a2f6bbb8a0564b59455d85f28bc7eb802",
+      "37773867912/logs.txt": "7147876f667c06a688bfd6a2bcc7de1c12dbda9d9cb514295f9fa743f5e94867",
+      "37773867912/run.json": "f97e5f8366235cf7e7a8893961ac3ae2d9d9b37e022d8270529f23d1e153c19f",
+      "37877523166/jobs.json": "5b37f39767f2806326e0aa89ac19a5387b60894d211c4caafa3b95254fbff2ee",
+      "37877523166/logs.txt": "5b2a67b7c4ee4beb97923c6f96d7159c39f3c7cdd47ea2ed160a1f5a245e5c99",
+      "37877523166/run.json": "65e6fd504875ad822cbe5c839638f8246b014ca8417aeefa16951c33f6011ecd",
+      "37877523223/jobs.json": "c9d712811f1c1b7d205a0d3a0a1a4c9c18e17668f3055ff7105ef230deef6ce4",
+      "37877523223/logs.txt": "8d988eb479c4550b8675707a85035238bedcc028bb0707f42f6514bf0301921c",
+      "37877523223/run.json": "92e475d944c64df43c2f52d9f7c701be1ce29d298d2aa97e7b8e44f97db8b7ca",
+      "37878975871/jobs.json": "fdcc181a36bb1c8cbe8af32ec8b9c7df8963361f80156bd8e294f2bf157e0e28",
+      "37878975871/logs.txt": "959d6a04c2f4be635dacd897df0684348fd7de22109b872c05965547a32b4dc6",
+      "37878975871/run.json": "6e2cc26cefa6fa3cd4a8e5b2afa6daff03c55196c166482d55c5a5e6781baf50",
+      "37878975874/jobs.json": "d33075ab8fe7eeeb73a1db782fa8ea46245e222c5f76dff63fb02054e58c8364",
+      "37878975874/logs.txt": "d219bdb668c5e1fe557ae9b28da78e8d3bab38f8ce6862534655609c986f60d1",
+      "37878975874/run.json": "45c35b8de79d59a02a8a016acb36280824cc449d491c6703a0015aced158113f",
+      "checkout_sources/0c80813.commit.json": "264e283bfde95495483cc8dadc95705b43e9a6ca11c45c45d60c648807368965",
+      "checkout_sources/0c8081396a315b20faa5bf3539fe0187f78d3287..github__workflows__ci.yml.contents.json": "967cc02e9789a32f9eec073fc3d64fcb1001f76d9a15215c13255103f4b8080f",
+      "checkout_sources/0c8081396a315b20faa5bf3539fe0187f78d3287..github__workflows__cpp_build.yml.contents.json": "637ea9a880f9b0b256e699b61dda61de1210e9524bf9f3b2a1a9c442e45fbd4d",
+      "checkout_sources/0c8081396a315b20faa5bf3539fe0187f78d3287.commit.json": "264e283bfde95495483cc8dadc95705b43e9a6ca11c45c45d60c648807368965",
+      "checkout_sources/0c8081396a315b20faa5bf3539fe0187f78d3287.pyproject.toml.contents.json": "fa3fe9e3ee447d266ed77fed18f67c8d1a27a63cfa0c32d2bfe09e812b6c845b",
+      "checkout_sources/0c8081396a315b20faa5bf3539fe0187f78d3287.uv.lock.contents.json": "21609548c551db58bdda2f94cde6fafdcb2c2c17b029e2a5e6831df3bd100e14",
+      "checkout_sources/4c23dbd.commit.json": "3c1e7eacb9f31c63cfac64cdf3d9e5f6eea8ccba5e679601c6148e322e9db385",
+      "checkout_sources/4c23dbd096a13bfdb6e76cb5040edd76cb428f2f..github__workflows__ci.yml.contents.json": "6f0a4a509bcdfeb868acd1f43db8c94f3a8f919f03eeb14821af69e7a39f8619",
+      "checkout_sources/4c23dbd096a13bfdb6e76cb5040edd76cb428f2f..github__workflows__cpp_build.yml.contents.json": "9c1d5d625e28fc78df10da2c978e1e8b6f28f3534eb75f7ac528f17639284c97",
+      "checkout_sources/4c23dbd096a13bfdb6e76cb5040edd76cb428f2f.commit.json": "3c1e7eacb9f31c63cfac64cdf3d9e5f6eea8ccba5e679601c6148e322e9db385",
+      "checkout_sources/4c23dbd096a13bfdb6e76cb5040edd76cb428f2f.pyproject.toml.contents.json": "791a0bd5530f29f9801f6f0ca3444a554c456662324d8c90c46a05069f38986e",
+      "checkout_sources/4c23dbd096a13bfdb6e76cb5040edd76cb428f2f.uv.lock.contents.json": "4d17aad2373094a281ca6a07130b2d08968cfbc852bddf51df5b506d3387e1a6",
+      "checkout_sources/e3dd69a.commit.json": "597d57d3c6539e7419a2059a4ac248f6bd01cd4699215e01a7919c2277cc8fb0",
+      "checkout_sources/e3dd69a94c118ed3ed89371a82b2583f236ed8f8..github__workflows__ci.yml.contents.json": "ba12138c4a1bc063cb11222dfe56496092579c3de5be1244ef2c234346fef178",
+      "checkout_sources/e3dd69a94c118ed3ed89371a82b2583f236ed8f8..github__workflows__cpp_build.yml.contents.json": "a5cc33545c7ab34930d34f10bc33cec1ec2628652c8eddefe1ced9d1710f1bdf",
+      "checkout_sources/e3dd69a94c118ed3ed89371a82b2583f236ed8f8.commit.json": "597d57d3c6539e7419a2059a4ac248f6bd01cd4699215e01a7919c2277cc8fb0",
+      "checkout_sources/e3dd69a94c118ed3ed89371a82b2583f236ed8f8.pyproject.toml.contents.json": "0b828639faf4d0b6cc2e27e11d64a77a0ed5d8b38c63b08ef79c799c84bc5f2c",
+      "checkout_sources/e3dd69a94c118ed3ed89371a82b2583f236ed8f8.uv.lock.contents.json": "249267e31257b4928f0895fc928c884549750962d04195cdee12bfab9ed8bff0"
     }
   },
   "local_pytest": {
@@ -8102,8 +8273,8 @@
       }
     }
   },
-  "revised_at_utc": "2026-10-09T04:43:44.691915+00:00",
-  "revision_note": "v2 changes representation only: paths now name the kept copies; host identity removed; per-file hashes moved to raw_artifacts.manifest. Numeric values are unchanged from v1.",
+  "revised_at_utc": "2026-10-09T09:15:39.114917+00:00",
+  "revision_note": "v2 changed representation only: paths name the kept copies; host identity removed; per-file hashes moved to raw_artifacts.manifest. v3 (#555 review): remote.checkout_source_verification and remote.raw_sha256 are again the remote_report.py output (per-file checkout identities; 54-file subset), remote.regeneration names the venv interpreter, raw_artifacts.scope is corrected, and the replay harnesses gained lease, native-extension, exit-code and count checks. Numeric measured values are unchanged from v1. v3.1 (#557 review): replay_prerequisites records the untracked replay inputs, the limit of the native-extension SHA-256, the CI-unverified harness, and the out-of-repo copy.",
   "path_normalization": {
     "mapping": {
       "/tmp/saccade-509-build-baseline-r2": "results/509_ci_baseline/20261009/build",
@@ -8126,20 +8297,204 @@
       "pytest": 60,
       "remote": 78
     },
-    "scope": "Every file copied by assemble.py. assemble.py, finalize.py and the manifest itself are not listed in it.",
+    "scope": "Every file copied by assemble.py, plus assemble.py itself (878 = 877 copied files + assemble.py; its hash also appears in support_files_sha256). finalize.py and the manifest itself are not listed. The 78 remote/ entries include the 54 files in remote.raw_sha256 (remote_report.py hashes only run.json, jobs.json and logs.txt per run plus checkout_sources/*.json).",
     "verify": "sha256sum results/509_ci_baseline/20261009/raw_sha256.json, then check each listed path relative to results/509_ci_baseline/20261009",
     "support_files_sha256": {
       "results/509_ci_baseline/20261009/assemble.py": "9b703362d2b39dd3f39a2eb235b24033209f29c115babc1eaee1180f8925e6b0",
-      "results/509_ci_baseline/20261009/finalize.py": "487af5fff5d42174f188547ae5da8450780360027b707190060b072b4ff0895d"
+      "results/509_ci_baseline/20261009/finalize.py": "487af5fff5d42174f188547ae5da8450780360027b707190060b072b4ff0895d",
+      "results/509_ci_baseline/revise_v3.py": "5199192d8961b5d7ee219c3e9246fe7c4baf09f77baf1d446058dc5b9892c06b",
+      "results/509_ci_baseline/revise_v3_prereq.py": "6c0deb13f973d97d11b753f2911d7f0b0fa8af6d5e7e20074c927c26c72d0539"
     }
   },
   "replay_harnesses": {
-    "note": "Parameterized copies of the original harnesses: checkout root from git, interpreter from the caller, and a required new/empty --output-dir instead of a fixed /tmp path. Measured phases, argv and checks are unchanged.",
+    "note": "Parameterized copies of the original harnesses: checkout root from git, interpreter from the caller, and a required new/empty output directory outside the kept 20261009/ root instead of a fixed /tmp path. Measured phases and argv are unchanged. Checks added after the #555 review: formal pytest runs require a held machine-bench lease owned by their direct parent for this worktree/head/harness (as build_measure.py); the saccade_tracking_ext a plain import resolves must match the baseline SHA-256 before and after each formal run; formal runs must reproduce the baseline counts; pytest_measure.py exits with pytest's code (3 on a failed check) and pytest_series.py stops unless each record has exit 0 and no failed check.",
+    "native_extension_sha256": "97a2f10b9e297df20b2b32177b362e5b0358610ab434ca975985cb87a59c70c5",
     "sha256": {
-      "results/509_ci_baseline/replay/build_measure.py": "de35d4180ee38c1ae650ee611871ed002fe58856851614e25f97f4f2d68f01b6",
-      "results/509_ci_baseline/replay/pytest_measure.py": "95205026dd0fa81d3e5559cf63a2c8c7e7bd0ca9e91e66b54ed447df2edb32e2",
-      "results/509_ci_baseline/replay/pytest_series.py": "cb778d048b178c9ca122a7cd4203e9871472fcf80f71e956627127cabde72eda",
-      "results/509_ci_baseline/replay/remote_report.py": "31b94d81479b165a3e676e3522797d01d203823a7e00c96912b5c25b6b6e182d"
+      "results/509_ci_baseline/replay/build_measure.py": "9eb859ceb5fb57358f79cd2e3c6963dfa79edd8236211d85a5b9ad2456c352fd",
+      "results/509_ci_baseline/replay/pytest_measure.py": "5e1356185498ec970fdc1f4d316b0e27730ac4d8311a539af501fdb96026d60e",
+      "results/509_ci_baseline/replay/pytest_series.py": "ff672c1fc621c90b4dba5916aa7cb7e08100a8cbcc3475437b0810cc43c6f29b",
+      "results/509_ci_baseline/replay/remote_report.py": "dec00b843c4f0b973931f02321c7baef99fa67a3b5b53004025d73e103f9d706"
+    }
+  },
+  "replay_verification": {
+    "directory": "results/509_ci_baseline/replays/20261009T075753Z",
+    "note": "Check of the revised harnesses on 2026-10-09, not a second baseline; formal medians above are unchanged. The pytest series in a detached 83c9bef0 worktree stopped after full run 1 (the checks failed): the worktree lacks the main checkout's gitignored build/, datasets/ and models/. The pytest series reproduces the baseline only in the measuring (main) checkout at 83c9bef0.",
+    "remote_report_equals_committed_remote_section": true,
+    "build_detached_worktree": {
+      "complete": true,
+      "phase_summary_seconds": {
+        "build": {
+          "max": 3.483780057,
+          "median": 3.442978166,
+          "min": 3.323332835,
+          "values": [
+            3.442978166,
+            3.483780057,
+            3.323332835
+          ]
+        },
+        "configure": {
+          "max": 1.648368551,
+          "median": 1.611195518,
+          "min": 1.551186116,
+          "values": [
+            1.648368551,
+            1.611195518,
+            1.551186116
+          ]
+        },
+        "ctest": {
+          "max": 3.380628491,
+          "median": 3.342728683,
+          "min": 3.323189336,
+          "values": [
+            3.342728683,
+            3.323189336,
+            3.380628491
+          ]
+        },
+        "incremental-noop": {
+          "max": 0.098231729,
+          "median": 0.090018228,
+          "min": 0.087923311,
+          "values": [
+            0.098231729,
+            0.090018228,
+            0.087923311
+          ]
+        }
+      }
+    },
+    "pytest_detached_worktree_stopped": {
+      "formal-collection-1": {
+        "exit_code": 0,
+        "check_failures": [],
+        "parsed_counts": null,
+        "wall_seconds": 7.41682706,
+        "native_extension_matches_baseline": true
+      },
+      "formal-collection-2": {
+        "exit_code": 0,
+        "check_failures": [],
+        "parsed_counts": null,
+        "wall_seconds": 7.510146537,
+        "native_extension_matches_baseline": true
+      },
+      "formal-collection-3": {
+        "exit_code": 0,
+        "check_failures": [],
+        "parsed_counts": null,
+        "wall_seconds": 7.526684097,
+        "native_extension_matches_baseline": true
+      },
+      "formal-full-1": {
+        "exit_code": 1,
+        "check_failures": [
+          "pytest exit code 1",
+          "counts differ from the formal baseline"
+        ],
+        "parsed_counts": {
+          "failed": 4,
+          "passed": 5278,
+          "skipped": 132,
+          "deselected": 105,
+          "xfailed": 5,
+          "warnings": 814
+        },
+        "wall_seconds": 236.060700914,
+        "native_extension_matches_baseline": true
+      }
+    },
+    "pytest_main_checkout_complete": {
+      "formal-collection-1": {
+        "exit_code": 0,
+        "check_failures": [],
+        "parsed_counts": null,
+        "wall_seconds": 8.276798168,
+        "native_extension_matches_baseline": true
+      },
+      "formal-collection-2": {
+        "exit_code": 0,
+        "check_failures": [],
+        "parsed_counts": null,
+        "wall_seconds": 7.999321625,
+        "native_extension_matches_baseline": true
+      },
+      "formal-collection-3": {
+        "exit_code": 0,
+        "check_failures": [],
+        "parsed_counts": null,
+        "wall_seconds": 8.079151063,
+        "native_extension_matches_baseline": true
+      },
+      "formal-full-1": {
+        "exit_code": 0,
+        "check_failures": [],
+        "parsed_counts": {
+          "passed": 5362,
+          "skipped": 52,
+          "deselected": 105,
+          "xfailed": 5,
+          "warnings": 895
+        },
+        "wall_seconds": 322.196351716,
+        "native_extension_matches_baseline": true
+      },
+      "formal-full-2": {
+        "exit_code": 0,
+        "check_failures": [],
+        "parsed_counts": {
+          "passed": 5362,
+          "skipped": 52,
+          "deselected": 105,
+          "xfailed": 5,
+          "warnings": 895
+        },
+        "wall_seconds": 303.83020642,
+        "native_extension_matches_baseline": true
+      },
+      "formal-full-3": {
+        "exit_code": 0,
+        "check_failures": [],
+        "parsed_counts": {
+          "passed": 5362,
+          "skipped": 52,
+          "deselected": 105,
+          "xfailed": 5,
+          "warnings": 895
+        },
+        "wall_seconds": 301.372574815,
+        "native_extension_matches_baseline": true
+      }
+    },
+    "pytest_main_checkout_full_wall_median_seconds": 303.83020642,
+    "negative_controls_refused": [
+      "remote_report.py and pytest_series.py with an output directory inside 20261009/",
+      "formal pytest_measure.py without a held machine-bench lease (lock not held)",
+      "formal collection under a lease with PYTEST_ADDOPTS=-k ... (counts differ; exit 3)",
+      "formal collection with a different saccade_tracking_ext first on PYTHONPATH (SHA-256 mismatch)"
+    ]
+  },
+  "replay_prerequisites": {
+    "scope": "Original-environment replay, not clean-environment reproduction. The pytest series reproduces the formal counts only with the measuring (main) checkout's untracked inputs below; a fresh clone at 83c9bef0 lacks them (a detached worktree gave 4 failed, 132 skipped).",
+    "untracked_inputs": {
+      ".venv": "Existing environment; saccade_build.pth adds the main checkout build/ to sys.path. Recorded: Python version and the native-extension identity, not a full package hash.",
+      "build/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": {
+        "sha256": "97a2f10b9e297df20b2b32177b362e5b0358610ab434ca975985cb87a59c70c5",
+        "kept_copy": "results/509_ci_baseline/native_ext/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so",
+        "restore": "Copy kept_copy over build/ (and restore the newer build afterwards) when main has rebuilt the extension; the harness refuses any other SHA-256.",
+        "provenance": "The SHA-256 proves the loaded bytes equal the measured ones; it does not prove which source revision built them. The file was not rebuilt for 83c9bef0 (its mtime predates that commit) and no source-to-binary attestation was made."
+      },
+      "datasets/, models/": "Not hashed. Checked only indirectly through the fixed outcome counts (missing inputs show up as extra skips or failures); changed content that keeps the same counts would not be detected."
+    },
+    "harness": "results/509_ci_baseline/replay/ is gitignored: GitHub CI and the PR diff see only this JSON and the report, so the harness implementation is identified by replay_harnesses.sha256, not reviewed or executed by CI.",
+    "out_of_repo_copy": {
+      "path": "../saccade_evidence_mirror/509_ci_baseline/2026-10-09 (relative to the repository root)",
+      "contents": "Byte-identical copy of results/509_ci_baseline/ (raw evidence, replay harnesses, replays, revision scripts, native_ext/).",
+      "manifest": "SHA256SUMS",
+      "manifest_sha256": "60b096b8de8969414cb0f08d610ba6bc2760b7c23733eb33f34f3740a5bd735e",
+      "file_count": 2096,
+      "limit": "Same disk and machine: protects against a results/ cleanup, not against disk or host loss."
     }
   }
 }
