@@ -246,10 +246,31 @@
       "evidence": "results/547_l3_gomp/20261008/ (downloads, repo_metadata, gpg output in the #547 run)"
     }
   },
-  "recheck": [
-    "git checkout <commit>; cmake --install build-release --component shipping --prefix T",
-    "compare T against e1_tree.sha256 (its sha256 is in artifacts_sha256)",
-    "fetch the two packages (urls above), check their sha256",
-    "license_audit.py check --licenses T/licenses --sources <snapshots> --gomp-rpm <rpm> --srpm <srpm>"
-  ]
+  "recheck": {
+    "anchors": {
+      "historical": "run.commit 664208d1 (tree 540c6a14): the commit the formal run executed at. Kept as record only; it is not on any pushed branch and cannot be fetched.",
+      "fetchable_equivalent": "run.rebased_equivalent.commit 91a7e61d (tree 109dc801): differs from 664208d1 only in docs/reference/native_runtime_resolved_config.md (+51 lines, §22.4-§22.6), which is not installed.",
+      "replay": "review_replay.commit cec6af39: the review-fixed source; its installed tree matched e1_tree.sha256. Use this to re-check the current shipping code."
+    },
+    "steps": [
+      "git checkout <anchor> (91a7e61d for the formal run's source, cec6af39 for the review-fixed source); cmake --install build-release --component shipping --prefix T",
+      "compare T against e1_tree.sha256 (its sha256 is in artifacts_sha256; review_replay.artifacts_sha256 r1_tree.sha256 has the same value)",
+      "fetch the two packages (urls above), check their sha256",
+      "license_audit.py check --licenses T/licenses --sources <snapshots> --gomp-rpm <rpm> --srpm <srpm>"
+    ]
+  },
+  "review_replay": {
+    "reading": "The #552 review-fix replay (docs/reference/native_runtime_resolved_config.md §22.8-§22.9), same machine, no GPU step. Its head is on a pushed branch (merged into feat/547-licence-evidence by 1a7f2dba), so it is the fetchable anchor for re-checking the installed tree. Same-host replay, not an independent one.",
+    "results_dir": "results/547_licence/review_cec6af39",
+    "commit": "cec6af39dd2e4be1b619f82556c1af7c9655477f",
+    "tree": "949e245dbfc39769dd36dc84f1eb32cddbb23ff4",
+    "verdict": "PASS",
+    "artifacts_sha256": {
+      "r1_tree.sha256": "7b1b90383dfc49374fb214cd14b300930d9cc2eb7492ef0370413563d5893542",
+      "r2_audit.json": "6b77d965e478f8cb364d4dbc632ec3108b8578485566e111843b3299d4444327",
+      "static.json": "fc8b29db03c205817c7260b5d7585bc6bf534a8cfa66e5c65139adc817803aae",
+      "run.sh": "84d8475ad7d1dc85e6eaf6548591c4173af3d3705961314ee1776315ff32dec4"
+    },
+    "same_tree_as_run": "r1_tree.sha256 is byte-identical to the formal run's e1_tree.sha256 (same sha256), so the installed shipping tree from this commit equals the one the formal run accepted."
+  }
 }

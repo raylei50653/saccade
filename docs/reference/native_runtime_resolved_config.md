@@ -2496,3 +2496,5 @@ head `cec6af39`＝review 修正 `16104f4e` 加上 republish（implementation `8e
 | **verdict** | **`PASS`** |
 
 所有 open item 仍是 OPEN，`distribution.status` 仍是 `local-only`。
+
+`r1_tree.sha256` 與 `e1_tree.sha256` 相同，所以 `cec6af39` 是可由 GitHub 取得的重新檢查 anchor。`native_runtime_licence_evidence_547.json` 的 `recheck.anchors` 分三層：`664208d1` 只作紀錄（不在任何推上去的 branch）；`91a7e61d` 是可取得的對應版本（只差本文件 §22.4–§22.6，不安裝）；`cec6af39` 是修正後的重播 anchor（`review_replay` 記錄其 commit、tree 與產物 sha256）。仍是同一台機器的重播，不是獨立重播。
