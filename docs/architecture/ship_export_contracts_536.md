@@ -100,6 +100,8 @@ flowchart TB
 
 ### 2.1 S-EXPORT
 
+本節是 baseline `c45a24da` 的現況，保留不改。第 1–3 點的寫檔與 `--check` 行為已由 #559 改變，現行行為見 [CC-536-08-02 實作狀態](#cc-536-08-02-status)。
+
 1. [`run_export`](../../scripts/model/export_headline_mamba_head_torchscript.py)：`.pt` 或 `.lineage.json` 已存在且未給 `--overwrite` 就拒絕。之後依序載入 `build/libsaccade_scan_torchop.so`（DT_NEEDED 有 libpython／libtorch_python 即拒絕），經 [`resolve_inputs`](../../scripts/model/export_headline_mamba_head.py) 把 preset 與 inventory 綁定（ckpt sha256 不符就拒絕；backbone 不符只記成 `backbone_engine_sha256_match=false`），trace（遇到 Python op 或不在 allowlist 的 tracer warning 就拒絕）。
 2. `save` 以 `torch.jit.save` 直接寫到正式路徑，然後跑 structural check（合成輸入，與 eager head 逐位元比對；不是 parity）。**不論 check 結果都寫 lineage**，check 失敗時 exit 1。
 3. `--check` 重新 trace，比對 `content_sha256`、檔案 sha256、op library sha256、ckpt sha256，再跑一次 structural check，不寫任何檔案。
@@ -214,14 +216,15 @@ flowchart TB
 
 - **取捨**：沒有選擇在 lineage 內加 `accepted` 欄位，理由見上面的 `shipping_accepted`。每次重新 export，`.pt` 的檔案位元組都會不同（serialization id），所以新的 export 一定需要新的接受紀錄，並依 op library 重新 attest 的規則送 owner review；可攜的 identity 是 `content_sha256`。
 - **State writer**：`exported`／`check_passed` 由 exporter 寫；`shipping_accepted` 只由 committed 接受紀錄的 PR 寫。
-- **Evidence**：[TorchScript export](../../tests/unit/test_headline_head_torchscript_export.py)、[export binding](../../tests/unit/test_headline_head_export_binding.py)、[detector plan](../../tests/native/test_shipping_detector_plan.cpp)；「check 失敗時不碰正式路徑」、半發布被拒絕、frozen stem 保護由 [publication tests](../../tests/unit/test_headline_head_export_publication.py) 涵蓋（見下方實作狀態），requirement↔check 對應交 #541。
+- **Evidence**：[TorchScript export](../../tests/unit/test_headline_head_torchscript_export.py)、[export binding](../../tests/unit/test_headline_head_export_binding.py)、[detector plan](../../tests/native/test_shipping_detector_plan.cpp)；「check 失敗時不碰正式路徑」、半發布被拒絕、frozen stem 保護由 [publication tests](../../tests/unit/test_headline_head_export_publication.py) 涵蓋（見下方實作狀態），requirement↔check 對應已[交 #541](https://github.com/raylei50653/saccade/issues/541#issuecomment-6082489675)。
 - **Known limits**：structural check 只用合成輸入，不是 MOT parity；本卡不涵蓋 ONNX、TRT、ReID 或其他 export；SM、TRT、ABI 的相容性由 #549 定。
 - <a id="cc-536-08-02-status"></a>**實作狀態（2026-10-09）**：`implemented`，[#559](https://github.com/raylei50653/saccade/pull/559) merge `8b8e3dc6918e1f284651e65096ea7572a1c97d1a`（head `e2c35e46`）。實作在 [exporter](../../scripts/model/export_headline_mamba_head_torchscript.py)，負控制在 [publication tests](../../tests/unit/test_headline_head_export_publication.py)。
   - **實作內容**：目標接口 1–4 全部。staging 位置是 `<stem>.staging-<utc>-<rand>/`；`check_passed` 的條件在 staging 內判定，另外比對 staged `.pt` 的 sha256 與 lineage 所記值、lineage 的 `torchscript.path` 指向正式 `.pt`。失敗時把 staging 改名為 `<stem>.rejected-*/`，保留 lineage 與原因，刪掉未驗證的 `.pt`。預設 export stem 改為 `…_torchscript_candidate`；`--check` 的預設仍是 frozen stem（PR-2L parity runner 不帶參數呼叫）。維護旗標是 `--replace-frozen-stem <stem>`。`--check` 另外檢查 lineage 指向本 stem 的 `.pt`（#559 審查 P2）。
-  - **驗證（CPU，CI）**：publication tests 32 項，在 head `e2c35e46` 的 [PR CI](https://github.com/raylei50653/saccade/actions/runs/37935505477) 全數 PASSED、沒有 skip；GPU 步驟以假物件替代，中斷以 fault seam 與 fork 後 `os._exit` 注入（不是 SIGKILL）。七個 mutant（rename 順序、跳過 gate、關掉 frozen 保護、保留未驗證 `.pt`、pair 規則恆真、不解析路徑、直接寫正式路徑）都至少讓一項測試失敗。merge 後 `8b8e3dc6` 的 [main CI](https://github.com/raylei50653/saccade/actions/runs/37939343584) 7/7 SUCCESS。
-  - **驗證（consumer）**：半發布配對被 exporter 的 pair 規則、`--check` 與 [install_model_root.cmake](../../shipping/cmake/install_model_root.cmake) 拒絕；完整的 frozen stem 維護發布仍被 install 拒絕（attestation 綁定失效，exporter 無法自己接受）。
-  - **驗證（GPU，本機，非 CI）**：在 `10530b0a` 以乾淨工作樹做一次預設 export：`.pt` 的 sha256 等於 lineage 所記值，`content_sha256` 等於 attestation 記的 frozen 值 `f6a540ed…`（計算圖與權重沒變）；`--check --stem <candidate>` 回 OK；對 frozen stem 用 `--overwrite` 在載入任何東西前被拒；兩次 `--check` 前後 `models/yolo/` 不變。raw 輸出保存在 repo 外的 gitignored `results/536_export_safety/`。
-  - **未驗證**：`DetectorHost`（N-R6）拒絕半發布配對沒有 GPU 負控制；`plan_detector_files` 抓不到這種配對（舊 lineage 與 attestation 仍互相一致），所以執行期的拒絕在 GPU 初始化之後（G2，屬 Preflight）。真正的 SIGKILL、斷電與 fsync durability，以及網路或 WSL 掛載磁碟上的 rename，都沒有驗證。完整 #535 A3 與 as-built 驗收屬 #541。
+  - **驗證（CPU，CI）**：publication tests 32 項，在 head `e2c35e46` 的 [PR CI](https://github.com/raylei50653/saccade/actions/runs/37935505477) 全數 PASSED、沒有 skip；GPU 步驟以假物件替代，中斷以 fault seam 與 fork 後 `os._exit` 注入（不是 SIGKILL）。merge 後 `8b8e3dc6` 的 [main CI](https://github.com/raylei50653/saccade/actions/runs/37939343584) 7/7 SUCCESS。
+  - **負控制的 mutation 檢查（本機，非 CI）**：在 `10530b0a` 對當時的 31 項測試做七個 mutant（rename 順序、跳過 gate、關掉 frozen 保護、保留未驗證 `.pt`、pair 規則恆真、不解析路徑、直接寫正式路徑），每個都至少讓一項測試失敗；exporter 事後以 sha256 確認還原。P2 的負控制另外在修正前的 `10530b0a` 確認會失敗（`--check` 回 0）。
+  - **驗證（consumer，同一批 CPU 測試）**：半發布配對被 exporter 的 pair 規則、`--check`（GPU 步驟為假物件）與 [install_model_root.cmake](../../shipping/cmake/install_model_root.cmake)（真的 `cmake -P`）拒絕；完整的 frozen stem 維護發布仍被 install 拒絕（attestation 綁定失效，exporter 無法自己接受）。
+  - **驗證（GPU，本機，非 CI）**：在 `10530b0a` 以乾淨工作樹做一次預設 export：`.pt` 的 sha256 等於 lineage 所記值；`content_sha256` 等於 attestation 記的 frozen 值 `f6a540ed…`，也就是 TorchScript 封存內容（不含 `serialization_id` 與 `*.debug_pkl`）與 frozen artifact 相同。這不是 MOT parity。`--check --stem <candidate>` 回 OK；對 frozen stem 用 `--overwrite` 在載入任何東西前被拒。P2 修正後，以內容等於 `e2c35e46` 的工作樹重跑兩個 `--check`：candidate 仍回 OK，frozen 仍只有 op library 那一項失敗。每次 `--check` 前後 `models/yolo/` 的清單、大小、mtime 與 frozen hash 都不變。raw 輸出保存在 repo 外的 gitignored `results/536_export_safety/`。
+  - **未驗證**：`DetectorHost`（N-R6）拒絕半發布配對沒有 GPU 負控制。依 source 判讀（未以測試確認），`plan_detector_files` 抓不到這種配對，因為舊 lineage 與 attestation 仍互相一致；所以執行期的拒絕在 GPU 初始化之後（G2，屬 Preflight）。真正的 SIGKILL、斷電與 fsync durability，以及網路或 WSL 掛載磁碟上的 rename，都沒有驗證。完整 #535 A3 與 as-built 驗收屬 #541。
   - **Known limits（實作層）**：同一 stem 的兩個 exporter 之間沒有 lock，後 rename 者勝出，發布後的 pair 檢查只能報告；硬中斷可能留下 `.staging-*`，`.staging-*`／`.rejected-*` 不會自動清理；跨檔案系統時 rename 會失敗（EXDEV）；frozen stem 只從 `configs/shipping/*.attestation.json` 的 `frozen_lineage.path` 判定，未來 #549 bundle manifest 不在內；frozen stem 的 `--check` 目前因 op library sha256 與 frozen lineage 所記不同而失敗，這是 #559 之前就存在的狀態（attestation 已記錄原 build 不存在）。
 
 ## 5. ID 索引
@@ -247,7 +250,7 @@ Owner 欄寫的是 ledger 的 CAP accountable owner，以及語義的去向。ev
 | N-T1、L-T0、L-T4…L-T6 | 目標：lock＋journal | 01-01 | CC-536-01-01 | 未實作 | 未驗證 | CAP-01；狀態語義 #537；check #541 |
 | N-T2、L-T1、L-T2 | 目標：preflight | 01-02、01-01 | CC-536-01-02 Gate A | 未實作 | 未驗證 | CAP-01；check #541 |
 | N-T3、L-T3 | 目標：identity level | 01-02 | CC-536-01-02 | 未實作 | expected source 待 #549 S1 | CAP-01；#549 S1 |
-| N-T4、L-T7、L-T8 | export publication gate | 08-02 | CC-536-08-02 | `run_export`／`publish`（#559） | [實作狀態](#cc-536-08-02-status) | CAP-08；check #541 |
+| N-T4、L-T7、L-T8 | 目標：export publication gate（已實作） | 08-02 | CC-536-08-02 | `run_export`／`publish`（#559） | [實作狀態](#cc-536-08-02-status) | CAP-08；check #541 |
 
 ## 6. 本稿之後
 
