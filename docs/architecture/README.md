@@ -6,7 +6,7 @@
 - 近期工作方向與 ablation backlog：看 [TODO.md](../TODO.md)
 - 開發入口（需求層級 → 文檔組合）與 source-of-truth：看 [DEVELOPMENT.md](../../DEVELOPMENT.md)
 - 事件 / API / storage schema：看 [api_spec.md](../modules/storage/api_spec.md)
-- 能力／REQ／Profile、具名 owner、inherited scope／proposed delta 與代表鏈狀態：看 [capability_requirements_535.md](capability_requirements_535.md)（#535 A1/A2 candidate；三項限定 delta 已批准，A3待驗收）
+- 能力／REQ／Profile、具名 owner、inherited scope／proposed delta 與代表鏈狀態：看 [capability_requirements_535.md](capability_requirements_535.md)（#535；批准與待決狀態只在該檔維護）
 
 ---
 
@@ -38,9 +38,8 @@ Saccade 目前以 **GPU-first 的 MOT / tracking / relink pipeline** 為核心�
 L1～L6 是責任分層；它們在不同 entrypoints 中組成不同路徑。支持範圍須同時讀
 capability 與 profile，不能用一條 eval 或 shipping 路徑的證據概括全部模組。
 [CAP/REQ 盤點與支持矩陣](capability_requirements_535.md) 保留既有支持義務、
-source-inspected 現況與新候選需求。九個 CAP owner 與第一切片三項 REQ
-decision owner 已指派為 `raylei50653`；[三項限定 delta](capability_requirements_535.md#decision-535-first-slice)
-已批准為相關 #536 設計輸入，其餘 19 項仍 pending，完整 A3 尚未通過。
+source-inspected 現況與新候選需求；owner、批准與待決狀態只在該檔的
+[decision 紀錄](capability_requirements_535.md#decision-535-first-slice)維護，本節不重述。
 
 | 使用者／profile | 能力與邊界；細節及限制由 linked owner 擁有 |
 |:--|:--|
@@ -48,7 +47,7 @@ decision owner 已指派為 `raylei50653`；[三項限定 delta](capability_requ
 | 外部 Python caller／public-library | CAP-535-02：五個現有 lazy exports；[ADR 025](../decisions/025-native-extension-delivery.md) 已決定 native delivery，#441 擁有 tracker/reorder public surface／compatibility／core channel；eval/config/detector API 支持由 #535/#536 與原 owner 裁決 |
 | 評測維護者／eval | CAP-535-03：MOT17/headline、dataset adapters、detector/metric/comparison 入口；既有 headline config 不為所有組合承諾品質 |
 | 研究與量測維護者／research | CAP-535-04、08-T：measurement/controls/custody、training recipes；原 research contracts/evidence owners 保有驗收與 promotion，`saccade_track_measurement` 與 native probes 不 install 到 shipping |
-| 串流／記憶服務使用者及維運者／online-service | CAP-535-05～07：ingest/dispatch、event memory/RAG/retrieval、resource/health；source producer/callback/deployment 缺口與未知 consumers 明列，完整支持範圍待裁決 |
+| 串流／記憶服務使用者及維運者／online-service | CAP-535-05～07：ingest/dispatch、event memory/RAG/retrieval、resource/health；source producer/callback/deployment 缺口與未知 consumers 見 ledger E05～E07 |
 | 開發者／build-debug | CAP-535-04、08-E/B、09：observer/native measurement、artifact export、native build/install/check、perception demo；demo 未接 tracker，工具支持不從 shipping parity 推出 |
 
 能力生命週期由 #539 裁決；未批准、default-off、未找到 consumer 均不等於可退役。
