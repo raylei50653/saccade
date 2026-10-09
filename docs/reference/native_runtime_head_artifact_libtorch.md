@@ -80,7 +80,7 @@ manifest 由 clean tree 產生（tool commit `37d4d21d`，`git_dirty=false`；op
 ```bash
 cmake --build build --target saccade_scan_torchop
 .venv/bin/python tools/resctl.py run gpu0 -- \
-    .venv/bin/python scripts/model/export_headline_mamba_head_torchscript.py            # 產生（已存在時需 --overwrite）
+    .venv/bin/python scripts/model/export_headline_mamba_head_torchscript.py            # 產生到 *_candidate stem（#536：staging 檢查後才發布；frozen stem 另需 --replace-frozen-stem）
 .venv/bin/python tools/resctl.py run gpu0 -- \
     .venv/bin/python scripts/model/export_headline_mamba_head_torchscript.py --check    # 重新 trace 並比對紀錄
 ```
