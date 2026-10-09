@@ -5,7 +5,7 @@
 
 # Capability / support requirements (#535)
 
-本稿是 [#535](https://github.com/raylei50653/saccade/issues/535) 的 A1/A2 修訂候選，source baseline 為 `60880ce69a4d411c12398760eb694881fa93e605`。保留九個既有 CAP ID，分開能力盤點、需求／支持裁決、證據／缺口；**三項限定 delta 已獲 owner 批准為相關 #536 設計輸入，其餘 19 項仍為 candidate，A3 尚未通過**。本次能力證據來自文件與原始碼抽查；repository/document checks 只驗證本輪交付，沒有新 runtime workload、parity 或效能量測。
+本稿是 [#535](https://github.com/raylei50653/saccade/issues/535) 的 A1/A2 修訂候選，source baseline 為 `60880ce69a4d411c12398760eb694881fa93e605`。保留九個既有 CAP ID，分開能力盤點、需求／支持裁決、證據／缺口；**三項限定 delta 已獲 owner 批准為相關 #536 設計輸入，其餘 19 項仍為 candidate，A3 尚未通過**。本次能力證據來自文件與原始碼抽查；repository/document/pytest checks 只驗證本輪交付，未新增能力驗收、shipping/GPU parity 或效能量測。
 
 架構閱讀入口仍是 [architecture](README.md)；既有 [module interactions](module_interactions.md)、[src map](../../src/README.md) 與各契約擁有自己的技術內容。本檔不複製模型 registry、async state machine、研究 verdict 或 benchmark。跨 Issue 排序與 checkpoint 唯一入口是 [#550](https://github.com/raylei50653/saccade/issues/550)。
 
@@ -94,7 +94,7 @@ C3、C5 的具名家族如下。同一家族的工具依 I/O 與 use case 歸入
 
 每列的 `inherited scope` 只繼承原契約明列的承諾；`source-only` 是現況，沒有 inherited-approved support。Owner 只裁決 `proposed delta`。新需求的使用者/consumer/非目標沿 CAP 引用，必要覆寫寫在該列。提案支持義務和 effective obligation/approval 分開。
 
-<a id="decision-535-first-slice"></a>**第一切片支持決策（2026-10-09，Asia/Taipei）**：`owner=raylei50653; decision=approved; effective obligation=required`。Owner 對已呈示的三項限定 delta 回覆「批准三項限定 delta，作為相關 #536 設計輸入」。適用 [REQ-535-01-01 × shipping](#req-535-01-01)、[REQ-535-01-02 × shipping](#req-535-01-02) 的 S-SHIP，以及 [REQ-535-08-02 × build-debug](#req-535-08-02) 的 S-EXPORT；delta 以各 canonical 行為準，環境／資料／限制依上述兩個 scope。Decision URL：待發布本段的 immutable commit capture；原始來源為本對話，沒有公開訊息 permalink，capture 不是 GitHub owner comment/review。本決策批准需求義務，不認證 delta 已實作或驗證，也不批准完整 A3、model-free packaging、跨 Profile 支持或公開發行；E01/E08 的 identity/ABI、completion interface 與 check blockers 留給 #536/#549/#541。其餘 19 列保留 `decision owner=pending（由 CAP owner 指派）; decision URL/date/scope=pending`；E/issue 是 blocker 路由，不是批准。
+<a id="decision-535-first-slice"></a>**第一切片支持決策（2026-10-09，Asia/Taipei）**：`owner=raylei50653; decision=approved; effective obligation=required`。Owner 對已呈示的三項限定 delta 回覆「批准三項限定 delta，作為相關 #536 設計輸入」。適用 [REQ-535-01-01 × shipping](#req-535-01-01)、[REQ-535-01-02 × shipping](#req-535-01-02) 的 S-SHIP，以及 [REQ-535-08-02 × build-debug](#req-535-08-02) 的 S-EXPORT；delta 以各 canonical 行為準，環境／資料／限制依上述兩個 scope。Decision URL：[immutable decision capture](https://github.com/raylei50653/saccade/blob/47176dfff2714a5a7171a603a3b3723ccf1a8544/docs/architecture/capability_requirements_535.md#decision-535-first-slice)；原始來源為本對話，沒有公開訊息 permalink，capture 不是 GitHub owner comment/review。本決策批准需求義務，不認證 delta 已實作或驗證，也不批准完整 A3、model-free packaging、跨 Profile 支持或公開發行；E01/E08 的 identity/ABI、completion interface 與 check blockers 留給 #536/#549/#541。其餘 19 列保留 `decision owner=pending（由 CAP owner 指派）; decision URL/date/scope=pending`；E/issue 是 blocker 路由，不是批准。
 
 | REQ ID / CAP（user/consumer/non-goal 引用） | Profile / scope | inherited scope | proposed delta：條件 → 可觀察結果／禁止行為 | 候選義務；effective / approval | Decision owner | E / blocker route |
 |:--|:--|:--|:--|:--|:--|:--|
@@ -152,7 +152,7 @@ C4 的六個家族各保留以下代表鏈：
 - **retrieval API → CAP-06/E06**：FastAPI lifespan＋四 routes → Redis objects/Chroma search → HTTP caller；external clients unknown，`update_object_track` 非測試 producer 未找到，active-object/history 支持未閉合。
 - **resource/health/telemetry → CAP-07/E07**：AsyncDispatcher NVML→SHM→orchestrator，另有 health CLI 與 `OnlineTelemetry`→維運報告；WorkbenchPool 沒有相同 writer，missing/unknown 不冒充已知 healthy。threshold 不是 SLO。
 
-本輪**只定位、未執行**的代表檢查（其 mock／CPU／GPU 適用範圍以測試與原契約為準）：
+下表是能力盤點的 **check pointers**（mock／CPU／GPU 適用範圍以測試與原契約為準）；本輪交付的實際 pytest PASS/FAIL 記於文件 PR，不能用 passing tests 填補未閉合的能力鏈或批准支持範圍：
 
 | CAP / evidence | 既有 check pointers；本輪可支持的說法 |
 |:--|:--|
