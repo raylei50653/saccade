@@ -556,3 +556,21 @@ def test_check_writes_nothing(repo: Path, pipe: Pipeline) -> None:
     before = _tree(repo)
     assert T.run_check(_args("models/yolo/fresh")) == 1
     assert _tree(repo) == before
+
+
+def test_check_refuses_a_lineage_that_names_another_artifact(
+    repo: Path, pipe: Pipeline
+) -> None:
+    """Review of #559 (P2): stem A's lineage replaced by B's self-consistent
+    lineage. The named file hashes correctly, so only the path binding to
+    ``--stem`` can refuse it."""
+    for stem, payload in (("models/yolo/a", b"head a"), ("models/yolo/b", b"head b")):
+        pipe.payload = payload
+        assert T.run_export(_args(stem)) == 0
+    assert T.run_check(_args("models/yolo/b")) == 0  # positive control
+    shutil.copyfile(
+        repo / "models/yolo/b.lineage.json", repo / "models/yolo/a.lineage.json"
+    )
+    before = _tree(repo)
+    assert T.run_check(_args("models/yolo/a")) == 1
+    assert _tree(repo) == before

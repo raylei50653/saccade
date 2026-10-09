@@ -82,5 +82,8 @@ cmake --build build --target saccade_scan_torchop
 .venv/bin/python tools/resctl.py run gpu0 -- \
     .venv/bin/python scripts/model/export_headline_mamba_head_torchscript.py            # 產生到 *_candidate stem（#536：staging 檢查後才發布；frozen stem 另需 --replace-frozen-stem）
 .venv/bin/python tools/resctl.py run gpu0 -- \
-    .venv/bin/python scripts/model/export_headline_mamba_head_torchscript.py --check    # 重新 trace 並比對紀錄
+    .venv/bin/python scripts/model/export_headline_mamba_head_torchscript.py --check \
+        --stem models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript_candidate     # 重新 trace 並比對上面產生的 candidate
 ```
+
+不帶 `--stem` 的 `--check` 驗證的是 frozen stem（attestation 綁定的那一份）；這個預設保留給 PR-2L parity runner 使用。

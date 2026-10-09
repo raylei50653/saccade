@@ -673,6 +673,14 @@ def run_check(args: argparse.Namespace) -> int:
     if record.get("schema") != SCHEMA:
         raise SystemExit(f"{lineage_path}: unknown schema {record.get('schema')!r}")
     failures = []
+    # The lineage must name this stem's .pt, or another self-consistent pair
+    # would pass for it (#536 CC-536-08-02 consumer rule).
+    stem_pt = trt_export._rel(_targets(stem)[0])
+    if record["torchscript"]["path"] != stem_pt:
+        failures.append(
+            f"lineage torchscript.path {record['torchscript']['path']!r} is not "
+            f"{stem_pt!r}"
+        )
     op_rec = load_op_library()
     if op_rec["sha256"] != record["op_library"]["sha256"]:
         failures.append("op library sha256 differs from manifest")
