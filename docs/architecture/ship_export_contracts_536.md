@@ -7,7 +7,7 @@
 
 本稿是 [#536](https://github.com/raylei50653/saccade/issues/536) B0／B1 的第一批設計，只處理三列已批准的需求：[REQ-535-01-01](capability_requirements_535.md#req-535-01-01)、[REQ-535-01-02](capability_requirements_535.md#req-535-01-02)、[REQ-535-08-02](capability_requirements_535.md#req-535-08-02)。適用範圍是 ledger 的 [S-SHIP](capability_requirements_535.md#scope-535-shipping) 與 [S-EXPORT](capability_requirements_535.md#scope-535-export)，決策邊界依 [第一切片決策](capability_requirements_535.md#decision-535-first-slice)；本稿不重述也不擴大。
 
-**狀態用語**：`observed as-is` 是在 source baseline `c45a24da953ffd16d3b98478cae79954a45204f4` 讀原始碼得到的現況，沒有跑 runtime、GPU 或 package；`accepted target` 是依[設計決策](#decision-536-first-slice)批准的目標設計。本稿沒有任何 `implemented` 或 `verified` 項目。需求批准不等於設計批准，設計批准也不等於實作已驗證。
+**狀態用語**：`observed as-is` 是在 source baseline `c45a24da953ffd16d3b98478cae79954a45204f4` 讀原始碼得到的現況，沒有跑 runtime、GPU 或 package；`accepted target` 是依[設計決策](#decision-536-first-slice)批准的目標設計。`implemented` 只有 [CC-536-08-02](#cc-536-08-02)（見該卡的實作狀態），其驗證範圍逐項列在該處；其餘兩張卡仍只是 `accepted target`。需求批准不等於設計批准，設計批准也不等於實作已驗證。
 
 <a id="decision-536-first-slice"></a>**第一批設計決策（2026-10-09，Asia/Taipei）**：`owner=raylei50653; decision=accepted; scope=#536 B0/B1 S-SHIP × S-EXPORT 第一批`。Decision source：[#558 owner design decision](https://github.com/raylei50653/saccade/pull/558#issuecomment-6080588466)（權威來源；comment 可編輯，因此具體內容以本段的版本控制紀錄保存）。審查的 PR head 是 `9709c3e127ab57bc377d9daf3b815cd6b8d13ae9`。
 
@@ -25,7 +25,7 @@
 | 標記 | 意思 |
 |:--|:--|
 | 方框 `N-…`、實線 `L-01…L-16` | observed as-is（source-inspected） |
-| 六角框 `N-T…`、虛線 `L-T…`、標籤以「目標」開頭 | accepted target（[設計決策](#decision-536-first-slice)），未實作、未驗證 |
+| 六角框 `N-T…`、虛線 `L-T…`、標籤以「目標」開頭 | accepted target（[設計決策](#decision-536-first-slice)）；N-T4 已實作（[CC-536-08-02 實作狀態](#cc-536-08-02-status)），其餘未實作、未驗證 |
 | 標籤中的 `⚠G1`／`⚠G2`／`⚠G3` | 第 3 節的現況差距落在這裡 |
 
 ```mermaid
@@ -133,7 +133,7 @@ flowchart TB
 
 | ID | 發現 | 分類 | 去向 |
 |:--|:--|:--|:--|
-| F1 | exporter 在 structural check 失敗時仍把 lineage 寫到正式路徑；對預設 stem 使用 `--overwrite`，會覆蓋 attestation 綁定的那份 frozen lineage。`models/yolo/` 是 gitignored，被覆蓋後無法從 git 取回 | contract-gap | CC-536-08-02；實作 PR 待定 |
+| F1 | exporter 在 structural check 失敗時仍把 lineage 寫到正式路徑；對預設 stem 使用 `--overwrite`，會覆蓋 attestation 綁定的那份 frozen lineage。`models/yolo/` 是 gitignored，被覆蓋後無法從 git 取回 | contract-gap | CC-536-08-02；[#559](https://github.com/raylei50653/saccade/pull/559) 已實作 |
 | F2 | 不給 `--attestation` 時，installed tree 的 op library（attested build）與 lineage 記的 sha256 不同，會在 N-R6 失敗。結果是 fail-closed，但失敗點在 GPU 初始化之後 | already-covered（fail-closed）＋G2 | CC-536-01-02 |
 | F3 | auditor 的 exit 127 可能在任何後續的 object load 發生；有沒有任何 load 發生在第一個 txt 寫出之後，沒有追查（[resolved config](../reference/native_runtime_resolved_config.md) §17 的 N3 曾觀察到執行中 lazy `dlopen` `libnvrtc`） | unverified | CC-536-01-01 limit；#541 |
 | F4 | sha256 檢查與實際載入分開開檔（hash 之後才 `dlopen`／`jit::load`／讀 engine），兩次開檔之間檔案可能被換 | unverified（known limit） | #549 S1 trust boundary |
@@ -141,7 +141,7 @@ flowchart TB
 
 ## 4. 接口契約卡（accepted target）
 
-以下三張卡依[設計決策](#decision-536-first-slice)批准為目標設計，都還沒有實作。欄位依 #536 B1。
+以下三張卡依[設計決策](#decision-536-first-slice)批准為目標設計。CC-536-08-02 已實作（狀態見卡內），CC-536-01-01 與 CC-536-01-02 還沒有實作。欄位依 #536 B1。
 
 ### <a id="cc-536-01-01"></a>CC-536-01-01：completion／diagnostic
 
@@ -214,8 +214,15 @@ flowchart TB
 
 - **取捨**：沒有選擇在 lineage 內加 `accepted` 欄位，理由見上面的 `shipping_accepted`。每次重新 export，`.pt` 的檔案位元組都會不同（serialization id），所以新的 export 一定需要新的接受紀錄，並依 op library 重新 attest 的規則送 owner review；可攜的 identity 是 `content_sha256`。
 - **State writer**：`exported`／`check_passed` 由 exporter 寫；`shipping_accepted` 只由 committed 接受紀錄的 PR 寫。
-- **Evidence**：[TorchScript export](../../tests/unit/test_headline_head_torchscript_export.py)、[export binding](../../tests/unit/test_headline_head_export_binding.py)、[detector plan](../../tests/native/test_shipping_detector_plan.cpp)。目前沒有任何檢查涵蓋「check 失敗時不碰正式路徑」、半發布被拒絕、frozen stem 保護；這些交給 #541。
+- **Evidence**：[TorchScript export](../../tests/unit/test_headline_head_torchscript_export.py)、[export binding](../../tests/unit/test_headline_head_export_binding.py)、[detector plan](../../tests/native/test_shipping_detector_plan.cpp)；「check 失敗時不碰正式路徑」、半發布被拒絕、frozen stem 保護由 [publication tests](../../tests/unit/test_headline_head_export_publication.py) 涵蓋（見下方實作狀態），requirement↔check 對應交 #541。
 - **Known limits**：structural check 只用合成輸入，不是 MOT parity；本卡不涵蓋 ONNX、TRT、ReID 或其他 export；SM、TRT、ABI 的相容性由 #549 定。
+- <a id="cc-536-08-02-status"></a>**實作狀態（2026-10-09）**：`implemented`，[#559](https://github.com/raylei50653/saccade/pull/559) merge `8b8e3dc6918e1f284651e65096ea7572a1c97d1a`（head `e2c35e46`）。實作在 [exporter](../../scripts/model/export_headline_mamba_head_torchscript.py)，負控制在 [publication tests](../../tests/unit/test_headline_head_export_publication.py)。
+  - **實作內容**：目標接口 1–4 全部。staging 位置是 `<stem>.staging-<utc>-<rand>/`；`check_passed` 的條件在 staging 內判定，另外比對 staged `.pt` 的 sha256 與 lineage 所記值、lineage 的 `torchscript.path` 指向正式 `.pt`。失敗時把 staging 改名為 `<stem>.rejected-*/`，保留 lineage 與原因，刪掉未驗證的 `.pt`。預設 export stem 改為 `…_torchscript_candidate`；`--check` 的預設仍是 frozen stem（PR-2L parity runner 不帶參數呼叫）。維護旗標是 `--replace-frozen-stem <stem>`。`--check` 另外檢查 lineage 指向本 stem 的 `.pt`（#559 審查 P2）。
+  - **驗證（CPU，CI）**：publication tests 32 項，在 head `e2c35e46` 的 [PR CI](https://github.com/raylei50653/saccade/actions/runs/37935505477) 全數 PASSED、沒有 skip；GPU 步驟以假物件替代，中斷以 fault seam 與 fork 後 `os._exit` 注入（不是 SIGKILL）。七個 mutant（rename 順序、跳過 gate、關掉 frozen 保護、保留未驗證 `.pt`、pair 規則恆真、不解析路徑、直接寫正式路徑）都至少讓一項測試失敗。merge 後 `8b8e3dc6` 的 [main CI](https://github.com/raylei50653/saccade/actions/runs/37939343584) 7/7 SUCCESS。
+  - **驗證（consumer）**：半發布配對被 exporter 的 pair 規則、`--check` 與 [install_model_root.cmake](../../shipping/cmake/install_model_root.cmake) 拒絕；完整的 frozen stem 維護發布仍被 install 拒絕（attestation 綁定失效，exporter 無法自己接受）。
+  - **驗證（GPU，本機，非 CI）**：在 `10530b0a` 以乾淨工作樹做一次預設 export：`.pt` 的 sha256 等於 lineage 所記值，`content_sha256` 等於 attestation 記的 frozen 值 `f6a540ed…`（計算圖與權重沒變）；`--check --stem <candidate>` 回 OK；對 frozen stem 用 `--overwrite` 在載入任何東西前被拒；兩次 `--check` 前後 `models/yolo/` 不變。raw 輸出保存在 repo 外的 gitignored `results/536_export_safety/`。
+  - **未驗證**：`DetectorHost`（N-R6）拒絕半發布配對沒有 GPU 負控制；`plan_detector_files` 抓不到這種配對（舊 lineage 與 attestation 仍互相一致），所以執行期的拒絕在 GPU 初始化之後（G2，屬 Preflight）。真正的 SIGKILL、斷電與 fsync durability，以及網路或 WSL 掛載磁碟上的 rename，都沒有驗證。完整 #535 A3 與 as-built 驗收屬 #541。
+  - **Known limits（實作層）**：同一 stem 的兩個 exporter 之間沒有 lock，後 rename 者勝出，發布後的 pair 檢查只能報告；硬中斷可能留下 `.staging-*`，`.staging-*`／`.rejected-*` 不會自動清理；跨檔案系統時 rename 會失敗（EXDEV）；frozen stem 只從 `configs/shipping/*.attestation.json` 的 `frozen_lineage.path` 判定，未來 #549 bundle manifest 不在內；frozen stem 的 `--check` 目前因 op library sha256 與 frozen lineage 所記不同而失敗，這是 #559 之前就存在的狀態（attestation 已記錄原 build 不存在）。
 
 ## 5. ID 索引
 
@@ -240,13 +247,13 @@ Owner 欄寫的是 ledger 的 CAP accountable owner，以及語義的去向。ev
 | N-T1、L-T0、L-T4…L-T6 | 目標：lock＋journal | 01-01 | CC-536-01-01 | 未實作 | 未驗證 | CAP-01；狀態語義 #537；check #541 |
 | N-T2、L-T1、L-T2 | 目標：preflight | 01-02、01-01 | CC-536-01-02 Gate A | 未實作 | 未驗證 | CAP-01；check #541 |
 | N-T3、L-T3 | 目標：identity level | 01-02 | CC-536-01-02 | 未實作 | expected source 待 #549 S1 | CAP-01；#549 S1 |
-| N-T4、L-T7、L-T8 | 目標：export publication gate | 08-02 | CC-536-08-02 | 未實作 | 未驗證 | CAP-08；check #541 |
+| N-T4、L-T7、L-T8 | export publication gate | 08-02 | CC-536-08-02 | `run_export`／`publish`（#559） | [實作狀態](#cc-536-08-02-status) | CAP-08；check #541 |
 
 ## 6. 本稿之後
 
 - 三項決策與邊界見[設計決策](#decision-536-first-slice)，這裡不重述。
-- **實作切法**（一次一個 PR；第 1 項已獲授權，其餘仍是候選）：
-  1. Export safety：F1、frozen stem 保護、staging 與 publication commit、失敗注入測試；
+- **實作切法**（一次一個 PR；第 1 項已完成，其餘仍是候選，各需自己的授權）：
+  1. Export safety：F1、frozen stem 保護、staging 與 publication commit、失敗注入測試（[#559](https://github.com/raylei50653/saccade/pull/559) merged，見 [CC-536-08-02 實作狀態](#cc-536-08-02-status)）；
   2. Completion：`run_id`、lock、journal、逐檔 temp→rename 的 txt、report 新 format，MOT 位元組不變，並檢查 `saccade_track_measurement`；狀態轉換的細節由 #537 擁有；
   3. Preflight：sha256 與輸入檢查移到 GPU 初始化之前，並用負控制證明不碰 CUDA；
   4. Identity integration：等 #549 S1 決定可信來源後，才加上 `expected_source_verified` 與強制 policy。
