@@ -7,13 +7,13 @@
 
 本文件記錄 [#509](https://github.com/raylei50653/saccade/issues/509) 前段的工程耗時基線，source 為 `83c9bef0029ab4b969a39f52ab592c47f74d34f6`。跨 Issue 排序、checkpoint 與下一主線只在 [#550](https://github.com/raylei50653/saccade/issues/550)；本文不承載第二張 roadmap。這次交付是 measurement snapshot，尚未變更任何 workflow、required check、pytest 選取、cache、runtime 或 evidence gate，也不提出加速百分比。
 
-可重新計算的 job/step 資料、checkout 身分、cache 證據及本機 phase 結果在 [evidence JSON](ci_timing_baseline_509.json)。原始 API、logs、JUnit XML 與 harness 保留於 `results/509_ci_baseline/20261009/`，不納入版本控制；逐檔 SHA-256 在該目錄的 `raw_sha256.json`（878 檔），JSON 記錄這份 manifest 的 SHA-256 與重取方法。量測時寫在 `/tmp` staging，之後原樣複製到上述目錄；JSON 內路徑已改寫成 repo-relative 的保留位置（對照表在 `path_normalization`），並省略 hostname／uname。這是工程過程資料，`doc-promotion: none`；任何後續優化決策需引用這份 baseline 並另附可比較的前後證據。
+可重新計算的 job/step 資料、checkout 身分、cache 證據及本機 phase 結果在 [evidence JSON](ci_timing_baseline_509.json)。原始 API、logs、JUnit XML 與 harness 保留於 `results/509_ci_baseline/20261009/`，不納入版本控制；逐檔 SHA-256 在該目錄的 `raw_sha256.json`（878 檔：assemble.py 複製的 877 檔加上 assemble.py 本身），JSON 記錄這份 manifest 的 SHA-256 與重取方法。量測時寫在 `/tmp` staging，之後原樣複製到上述目錄；JSON 內路徑已改寫成 repo-relative 的保留位置（對照表在 `path_normalization`），並省略 hostname／uname。這是工程過程資料，`doc-promotion: none`；任何後續優化決策需引用這份 baseline 並另附可比較的前後證據。
 
 ## Sampling and definitions
 
 - 遠端：2026-10-08–09 的 3 組成功 main runs 與 3 組不同的代表性 PR runs，每組各含 CI 與 C++（共 12 runs）；分開報告 main / PR cohort。
 - 這是兩個 routine CI workflows 的成功 cohort；不涵蓋 Docker Build、手動 H0／runtime-identity GPU qualification，也不估計失敗、取消或重試成本。未觸發的工作沒有 PASS 宣稱。
-- 四份 workflow/config/lock files 在實際 checkouts 相同：各 checkout 的 `ci.yml`、`cpp_build.yml`、`pyproject.toml`、`uv.lock` 身分見 JSON。PR 的 `run.head_sha` 與 checkout 的 synthetic merge SHA 分開記錄。
+- 四份 workflow/config/lock files 在實際 checkouts 相同：各 checkout 的 `ci.yml`、`cpp_build.yml`、`pyproject.toml`、`uv.lock` 逐檔 git blob 與 SHA-256 在 JSON `remote.checkout_source_verification`（PR synthetic merge 另記 contents API raw 檔）。PR 的 `run.head_sha` 與 checkout 的 synthetic merge SHA 分開記錄。
 - 程式／測試仍有變化，遠端 passing tests 為 5120–5158；這是相同四份 workflow/config/lock files 下的 baseline，並非同一 head 的重跑，更不是受控優化前後實驗。runner image、網路與 cache 壓力未固定。
 - Workflow wall = `max(job.completed_at) - run.created_at`，含排隊與編排；job = `completed_at - started_at`；step 同理。API 時間精度是秒，0 秒不表示沒有工作；workflow completion housekeeping 不包含在此定義。
 - 各欄各自取中位數；**不能相加各 step/job 中位數來當 total 中位數**。critical branch 依最後完成的 job 與現行 `needs` 確定，queue/orchestration gap 不當成 test execution。
@@ -119,20 +119,35 @@ gh api repos/raylei50653/saccade/commits/<logged-archive-prefix>
 gh api 'repos/raylei50653/saccade/contents/<path>?ref=<checkout-sha>'   # content 先 base64 decode 再算 SHA-256；API sha 是 git blob ID
 ```
 
-本機量測的精確 argv 與已記錄的環境／工具清單在 JSON／原始 harness。每個測試或 build 使用 fresh process，正式 timing 經 [resctl machine-bench](../WORKTREE_RESOURCES.md) 序列執行；使用已有環境，沒有清除全機 filesystem／compiler／Python caches。重新執行須在 `83c9bef0` 的乾淨 checkout（例如 detached worktree）；它不是任意未來 head 的 baseline。
+本機量測的精確 argv 與已記錄的環境／工具清單在 JSON／原始 harness。每個測試或 build 使用 fresh process，正式 timing 經 [resctl machine-bench](../WORKTREE_RESOURCES.md) 序列執行；使用已有環境，沒有清除全機 filesystem／compiler／Python caches。重新執行須把 checkout 切到乾淨的 `83c9bef0`；它不是任意未來 head 的 baseline。pytest 必須在原量測用的 main checkout 執行：detached worktree 沒有 main checkout 的 gitignored `build/`、`datasets/`、`models/`，實測第一次 full run 為 4 failed、132 skipped。build 與遠端報表可在 detached worktree 執行。
 
-重放用 `results/509_ci_baseline/replay/` 的 harness：它們是原 harness 的副本，只把 checkout root（取自 git）、interpreter（取自呼叫者）與輸出目錄參數化，輸出直接寫到新的或空的保留目錄，不經 `/tmp`；量測 phase、argv 與檢查不變，SHA-256 在 JSON `replay_harnesses`。在 `83c9bef0` checkout 內執行：
+重放用 `results/509_ci_baseline/replay/` 的 harness：它們是原 harness 的副本，把 checkout root（取自 git）、interpreter（取自呼叫者）與輸出目錄參數化，輸出直接寫到新的或空的目錄，不經 `/tmp`，並拒絕寫進保留的 `20261009/`；量測 phase 與 argv 不變，SHA-256 在 JSON `replay_harnesses`。#555 review 後 pytest harness 另加四項檢查，任一失敗即停止 series：
+
+- formal run 必須是持有中 `machine-bench` lease 的直接 child，lease 的 pid／worktree／head／command 屬於這次 run（同 `build_measure.py`）；只有殘留的 lease JSON 不算。
+- `.venv` 的 `saccade_build.pth` 讓 plain import 從 main checkout 的 `build/` 載入 `saccade_tracking_ext`，不是從被量測的 worktree。harness 在每次 formal run 前後記錄實際載入的檔案，SHA-256 必須等於正式 baseline 觀察到的 `97a2f10b…`；main 重建 native extension 後即拒絕重放，要先換回該 artifact，不能拿另一個 revision 的 extension 比較。
+- formal collection 須為 5419/5524 selected、105 deselected；full 須為 5362 passed、52 skipped、105 deselected、5 xfailed（缺 gitignored data/weights 會改變 skip 數）。
+- `pytest_measure.py` 以 pytest 的 exit code 結束（檢查失敗為 3），`pytest_series.py` 只在 wrapper 與 record 都是 exit 0 且無失敗檢查時繼續。
+
+在切到 `83c9bef0` 的 checkout 內執行（pytest 限 main checkout）；每次重放用一個新的 UTC 時間戳目錄：
 
 ```sh
 R=<main checkout>/results/509_ci_baseline   # gitignored，不弄髒被量測的 checkout
 PY=<main checkout>/.venv/bin/python
-D=$(date -u +%Y%m%d)
+D=$R/replays/$(date -u +%Y%m%dT%H%M%SZ)
 # pytest：metadata，接著 3 次 collection-only、3 次 full，每次各取一個 machine-bench lease
-$PY $R/replay/pytest_series.py $R/$D/pytest
+$PY $R/replay/pytest_series.py $D/pytest
 # build：整批一個 lease；3 個 fresh build dirs 的 configure、build、6 個 CTests、incremental no-op
-$PY tools/resctl.py run machine-bench -- $PY $R/replay/build_measure.py --output-dir $R/$D/build
+$PY tools/resctl.py run machine-bench -- $PY $R/replay/build_measure.py --output-dir $D/build
 # 遠端報表：從保留的 raw API/log 重算，不覆寫原 evidence
-$PY $R/replay/remote_report.py --raw-dir $R/20261009/remote --output-dir $R/$D/remote-report
+$PY $R/replay/remote_report.py --raw-dir $R/20261009/remote --output-dir $D/remote-report
 ```
 
-重放 harness 已在 `83c9bef0` detached worktree 檢查（輸出在 `replay/check-20261009/`）：remote 報表與保留版本只差路徑字串；build 完整跑完 3 reps、CTest 6/6；pytest 只做了一次 collection-only smoke（5419/5524 selected、105 deselected，與正式 run 相同），full series 沒有重跑。輸出目錄必須是尚未量過的新目錄。本機 standalone loader 不代表完整 CUDA C++ build 的數字；後者以遠端兩組 build 的 source/coverage 為準。
+修正後的重放 harness 已檢查，輸出在 `results/509_ci_baseline/replays/20261009T075753Z/`，摘要在 JSON `replay_verification`。這是 harness 檢查，不是第二份 baseline，上面的正式 median 不變：
+
+- remote 報表與 JSON 的 `remote` 區段完全相同。
+- build 在 detached worktree 完整跑完 3 reps，CTest 6/6。
+- pytest 在 detached worktree：3 次 collection 通過，第一次 full run 為 4 failed、5278 passed、132 skipped，series 依檢查停止。
+- pytest 在切到 `83c9bef0` 的 main checkout：完整 series 6/6 通過所有檢查，三次 full 均 5362 passed、52 skipped、105 deselected、5 xfailed；full external wall 322.196／303.830／301.373 秒（median 303.830）。
+- 負控制皆被拒絕：輸出到 `20261009/`、未持 lease 的 formal run、`PYTEST_ADDOPTS=-k …` 改變 selection（exit 3）、`PYTHONPATH` 上換掉 native extension。
+
+本機 standalone loader 不代表完整 CUDA C++ build 的數字；後者以遠端兩組 build 的 source/coverage 為準。
