@@ -41,6 +41,27 @@ Outputs (under gitignored ``models/yolo/`` by default):
 * ``<stem>.pt`` -- the TorchScript artifact
 * ``<stem>.lineage.json`` -- ``saccade.head_artifact_lineage_torchscript/v1``
 
+Publication (#536 CC-536-08-02): both files are written to a versioned
+staging directory next to the stem (``<stem>.staging-<utc>-<rand>/``, same
+filesystem) and checked there -- structural check bit-exact, inventory
+bindings true, ``git_dirty`` false, the staged bytes hash to what the lineage
+records. Only then is ``.pt`` renamed into place and, **last**, the lineage:
+the lineage is the single publication marker, and a pair counts as published
+only when its ``torchscript.sha256`` equals the on-disk ``.pt``. A check that
+fails leaves the formal paths untouched and keeps the lineage plus the reasons
+under ``<stem>.rejected-<utc>-<rand>/`` (the unverified ``.pt`` is deleted).
+An interruption between the two renames leaves a new ``.pt`` beside the old
+lineage (or none); consumers refuse that pair, and nothing is rolled back.
+The exporter never writes ``shipping_accepted``: that is the committed
+attestation's job.
+
+Stems: the default export stem is a candidate stem, never the frozen one. A
+stem whose lineage a committed ``configs/shipping/*.attestation.json`` binds
+is refused even with ``--overwrite``; replacing it needs
+``--replace-frozen-stem <that stem>`` as well, and breaks the attestation
+binding until a new attestation is reviewed. ``--check`` defaults to the
+frozen stem and writes nothing.
+
 Usage:
     .venv/bin/python tools/resctl.py run gpu0 -- \\
         .venv/bin/python scripts/model/export_headline_mamba_head_torchscript.py
@@ -55,6 +76,7 @@ import argparse
 import contextlib
 import datetime as dt
 import json
+import os
 import sys
 import tempfile
 import warnings
@@ -69,7 +91,12 @@ import export_headline_mamba_head as trt_export  # noqa: E402  (sets sys.path, R
 project_root = trt_export.project_root
 
 SCHEMA = "saccade.head_artifact_lineage_torchscript/v1"
-DEFAULT_STEM = "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript"
+# The stem the committed realization attestation binds (``--check`` default).
+FROZEN_STEM = "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript"
+# Export default: a new stem, so a plain export never touches the frozen one.
+DEFAULT_EXPORT_STEM = FROZEN_STEM + "_candidate"
+ATTESTATION_GLOB = "configs/shipping/*.attestation.json"
+LINEAGE_SUFFIX = ".lineage.json"
 OP_LIBRARY = "build/libsaccade_scan_torchop.so"
 NATIVE_OP = "saccade_native::selective_scan_fwd"
 PYTHON_OP = "saccade::selective_scan_fwd"
@@ -355,78 +382,286 @@ def environment() -> dict[str, Any]:
     }
 
 
+def _fault(point: str) -> None:
+    """Fault-injection seam for the publication tests: they replace it to fail
+    or exit at ``point`` (``staged``: both files in staging, gate not yet run;
+    ``pt_published``: ``.pt`` renamed into place, lineage not). A no-op here."""
+
+
+def _targets(stem: Path) -> tuple[Path, Path]:
+    return stem.with_suffix(".pt"), stem.with_suffix(LINEAGE_SUFFIX)
+
+
+def _fsync(path: Path) -> None:
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def frozen_targets() -> dict[Path, str]:
+    """Resolved ``.pt`` and lineage paths of every stem whose lineage a
+    committed attestation binds -> that attestation. An attestation that does
+    not say what it binds fails closed."""
+    out: dict[Path, str] = {}
+    for att in sorted(project_root.glob(ATTESTATION_GLOB)):
+        rel = trt_export._rel(att)
+        try:
+            bound = json.loads(att.read_text())["frozen_lineage"]["path"]
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise SystemExit(f"{rel}: cannot read frozen_lineage.path ({e!r})")
+        if not isinstance(bound, str) or not bound.endswith(LINEAGE_SUFFIX):
+            raise SystemExit(f"{rel}: frozen_lineage.path {bound!r} is not a lineage")
+        for p in _targets(project_root / bound[: -len(LINEAGE_SUFFIX)]):
+            out[p.resolve()] = rel
+    return out
+
+
+def target_problems(
+    stem: Path, overwrite: bool, replace_frozen: str | None
+) -> list[str]:
+    """Where an export may write. An existing stem needs ``--overwrite``; a
+    frozen stem also needs ``--replace-frozen-stem`` naming that same stem."""
+    frozen = frozen_targets()
+    targets = [p.resolve() for p in _targets(stem)]
+    bound = sorted({frozen[p] for p in targets if p in frozen})
+    named = (
+        None
+        if replace_frozen is None
+        else [p.resolve() for p in _targets(project_root / replace_frozen)]
+    )
+    problems = []
+    if bound and named != targets:
+        problems.append(
+            f"{trt_export._rel(stem)} is the frozen stem bound by {', '.join(bound)}; "
+            "--overwrite alone cannot replace it (maintenance only: add "
+            f"--replace-frozen-stem {trt_export._rel(stem)}; the binding then "
+            "breaks until a new attestation is reviewed)"
+        )
+    if named is not None and not bound:
+        problems.append(
+            f"--replace-frozen-stem {replace_frozen}: the export stem "
+            f"{trt_export._rel(stem)} is not bound by any committed attestation"
+        )
+    for p in _targets(stem):
+        if (p.exists() or p.is_symlink()) and not overwrite:
+            problems.append(f"{trt_export._rel(p)} exists; pass --overwrite to replace")
+    return problems
+
+
+def publication_problems(
+    record: dict[str, Any], staging: Path, pt_path: Path, lineage_path: Path
+) -> list[str]:
+    """``check_passed`` (CC-536-08-02), judged on the staged files: the
+    conditions consumers refuse, and the staged bytes being the ones the
+    lineage records. Empty means the pair may be published."""
+    problems = []
+    if record["structural_check"]["bitwise_equal_all"] is not True:
+        problems.append("structural check: artifact != eager head on synthetic input")
+    for key in ("ckpt_sha256_match", "backbone_engine_sha256_match"):
+        if record["inventory"].get(key) is not True:
+            problems.append(f"inventory.{key} is not true")
+    if record["tool"]["git_dirty"] is not False:
+        problems.append("tool.git_dirty is true (consumers refuse this lineage)")
+    if record["torchscript"]["path"] != trt_export._rel(pt_path):
+        problems.append(
+            f"lineage torchscript.path {record['torchscript']['path']!r} is not "
+            f"{trt_export._rel(pt_path)!r}"
+        )
+    staged = sorted(p.name for p in staging.iterdir())
+    if staged != sorted([pt_path.name, lineage_path.name]):
+        problems.append(f"staging holds {staged}, not the .pt and lineage only")
+        return problems
+    if trt_export._sha256(staging / pt_path.name) != record["torchscript"]["sha256"]:
+        problems.append("staged .pt sha256 != lineage torchscript.sha256")
+    try:
+        written = json.loads((staging / lineage_path.name).read_text())
+    except ValueError as e:
+        problems.append(f"staged lineage is not JSON ({e})")
+    else:
+        if written != record:
+            problems.append("staged lineage differs from the record")
+    return problems
+
+
+def published_pair_problems(stem: Path) -> list[str]:
+    """Consumer rule: the pair is published only when the lineage exists, names
+    this ``.pt`` and its ``torchscript.sha256`` equals the ``.pt`` on disk."""
+    pt_path, lineage_path = _targets(stem)
+    pt_rel, lineage_rel = trt_export._rel(pt_path), trt_export._rel(lineage_path)
+    if not lineage_path.exists():
+        return [f"{lineage_rel} missing: no published pair"]
+    try:
+        ts = json.loads(lineage_path.read_text())["torchscript"]
+        path, sha = ts["path"], ts["sha256"]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        return [f"{lineage_rel} unreadable ({e!r})"]
+    if path != pt_rel:
+        return [f"{lineage_rel} names {path!r}, not {pt_rel!r}"]
+    if not pt_path.exists():
+        return [f"{pt_rel} missing"]
+    if trt_export._sha256(pt_path) != sha:
+        return [
+            f"{pt_rel} sha256 != {lineage_rel} torchscript.sha256 "
+            "(half-published or altered pair)"
+        ]
+    return []
+
+
+def reject(staging: Path, problems: list[str]) -> Path:
+    """Keep the lineage and the reasons under ``<stem>.rejected-<id>/``; delete
+    the unverified ``.pt`` so nothing can load it (it is regenerable)."""
+    for p in staging.glob("*.pt"):
+        p.unlink()
+    (staging / "rejected.json").write_text(
+        json.dumps({"problems": problems}, indent=2) + "\n"
+    )
+    rejected = staging.with_name(staging.name.replace(".staging-", ".rejected-", 1))
+    os.replace(staging, rejected)
+    return rejected
+
+
+def _reject_after_interrupt(staging: Path, reason: str) -> None:
+    try:
+        rejected = trt_export._rel(reject(staging, [reason]))
+    except OSError as e:
+        rejected = f"{trt_export._rel(staging)} (could not mark rejected: {e!r})"
+    print(f"rejected    : {rejected}; {reason}", file=sys.stderr)
+
+
+def publish(staging: Path, pt_path: Path, lineage_path: Path) -> None:
+    """Rename ``.pt`` into place, then the lineage: the lineage is the single
+    publication marker. Not atomic as a pair; an interruption between the two
+    renames leaves a half-published pair that consumers refuse. No rollback."""
+    staged_pt, staged_lineage = staging / pt_path.name, staging / lineage_path.name
+    _fsync(staged_pt)
+    _fsync(staged_lineage)
+    try:
+        os.replace(staged_pt, pt_path)
+        _fault("pt_published")
+        os.replace(staged_lineage, lineage_path)
+    except BaseException as e:
+        state = (
+            "nothing published"
+            if staged_pt.exists()
+            else f"HALF-PUBLISHED: new {trt_export._rel(pt_path)} beside the "
+            "previous lineage (or none); consumers refuse it, re-run the export"
+        )
+        _reject_after_interrupt(
+            staging, f"interrupted during publication, {state}: {e!r}"
+        )
+        raise
+    _fsync(pt_path.parent)
+    staging.rmdir()
+
+
 def run_export(args: argparse.Namespace) -> int:
     stem = project_root / args.stem
-    pt_path = stem.with_suffix(".pt")
-    lineage_path = stem.with_suffix(".lineage.json")
-    for p in (pt_path, lineage_path):
-        if p.exists() and not args.overwrite:
-            raise SystemExit(
-                f"{trt_export._rel(p)} exists; pass --overwrite to replace"
-            )
+    pt_path, lineage_path = _targets(stem)
+    problems = target_problems(stem, args.overwrite, args.replace_frozen_stem)
+    if problems:
+        raise SystemExit("refusing to export: " + "; ".join(problems))
 
     op_rec = load_op_library()
     inputs = trt_export.resolve_inputs(args.yolo_weights, args.teacher_ckpt)
     head, described = trt_export.build_head(inputs)
     in_channels = described["head_load"]["in_channels"]
     traced, trace_rec = trace_head(head, in_channels)
-    pt_rec = save(traced, pt_path)
-    check = structural_check(pt_path, head, in_channels)
-    record = {
-        "schema": SCHEMA,
-        "issue": "#465 Phase B PR-1L (U1 redesign: LibTorch TorchScript)",
-        "generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "tool": {
-            "path": trt_export._rel(Path(__file__)),
-            "git_commit": trt_export._git("rev-parse", "HEAD"),
-            "git_dirty": bool(trt_export._git("status", "--porcelain")),
-        },
-        "preset": inputs["preset"],
-        "inventory": inputs["inventory"],
-        **described,
-        "artifact_scope": {
-            "included": (
-                "MambaDetectionHead._forward_eager, single frame (T=1), "
-                "return_embeddings=False: p3/p4/p5 -> cls_p3..p5, reg_p3..p5"
+    pt_path.parent.mkdir(parents=True, exist_ok=True)
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    staging = Path(
+        tempfile.mkdtemp(prefix=f"{stem.name}.staging-{stamp}-", dir=pt_path.parent)
+    )
+    try:
+        staged_pt = staging / pt_path.name
+        # Recorded at the path it is published to, not the staging path.
+        pt_rec = {**save(traced, staged_pt), "path": trt_export._rel(pt_path)}
+        check = structural_check(staged_pt, head, in_channels)
+        record = {
+            "schema": SCHEMA,
+            "issue": "#465 Phase B PR-1L (U1 redesign: LibTorch TorchScript)",
+            "generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(
+                timespec="seconds"
             ),
-            "excluded": (
-                "S2 whole-detect tail (640 stretch resize, anchor decode, "
-                "sigmoid/class max, top-k, coordinate scaling) -> U3b; "
-                "conf_thr/max_det stay in the B2 resolved config"
-            ),
-        },
-        "torchscript": {
-            **pt_rec,
-            "method": "torch.jit.trace (check_trace=False), no freeze, no optimize",
-            "inputs": {
-                n: list(s)
-                for n, s in zip(["p3", "p4", "p5"], input_shapes(in_channels))
+            "tool": {
+                "path": trt_export._rel(Path(__file__)),
+                "git_commit": trt_export._git("rev-parse", "HEAD"),
+                "git_dirty": bool(trt_export._git("status", "--porcelain")),
             },
-            "outputs": OUTPUT_NAMES,
-            "dtype": "float32",
-            "batch": "static 1",
-            **trace_rec,
-        },
-        "op_library": {**op_rec, "op": NATIVE_OP},
-        "runtime_requirements": RUNTIME_REQUIREMENTS,
-        "structural_check": check,
-        "companions": {
-            "backbone_engine": {
-                "path": trt_export._rel(inputs["backbone"]),
-                "sha256": inputs["backbone_sha256"],
-                "reading": (
-                    "recorded for B5 hash verification only; its provenance is the "
-                    "inventory's unresolved engine link, not attested here"
+            "preset": inputs["preset"],
+            "inventory": inputs["inventory"],
+            **described,
+            "artifact_scope": {
+                "included": (
+                    "MambaDetectionHead._forward_eager, single frame (T=1), "
+                    "return_embeddings=False: p3/p4/p5 -> cls_p3..p5, reg_p3..p5"
                 ),
-            }
-        },
-        "environment": environment(),
-    }
-    lineage_path.write_text(json.dumps(record, indent=2) + "\n")
-    print(f"lineage     : {trt_export._rel(lineage_path)}")
+                "excluded": (
+                    "S2 whole-detect tail (640 stretch resize, anchor decode, "
+                    "sigmoid/class max, top-k, coordinate scaling) -> U3b; "
+                    "conf_thr/max_det stay in the B2 resolved config"
+                ),
+            },
+            "torchscript": {
+                **pt_rec,
+                "method": "torch.jit.trace (check_trace=False), no freeze, no optimize",
+                "inputs": {
+                    n: list(s)
+                    for n, s in zip(["p3", "p4", "p5"], input_shapes(in_channels))
+                },
+                "outputs": OUTPUT_NAMES,
+                "dtype": "float32",
+                "batch": "static 1",
+                **trace_rec,
+            },
+            "op_library": {**op_rec, "op": NATIVE_OP},
+            "runtime_requirements": RUNTIME_REQUIREMENTS,
+            "structural_check": check,
+            "companions": {
+                "backbone_engine": {
+                    "path": trt_export._rel(inputs["backbone"]),
+                    "sha256": inputs["backbone_sha256"],
+                    "reading": (
+                        "recorded for B5 hash verification only; its provenance is "
+                        "the inventory's unresolved engine link, not attested here"
+                    ),
+                }
+            },
+            "environment": environment(),
+        }
+        (staging / lineage_path.name).write_text(json.dumps(record, indent=2) + "\n")
+        _fault("staged")
+        problems = publication_problems(record, staging, pt_path, lineage_path)
+        problems += target_problems(stem, args.overwrite, args.replace_frozen_stem)
+    except BaseException as e:
+        _reject_after_interrupt(
+            staging, f"interrupted before publication, formal paths untouched: {e!r}"
+        )
+        raise
     print(f"torchscript : {pt_rec['sha256']} (content {pt_rec['content_sha256']})")
     print(f"structural  : bitwise_equal_all={check['bitwise_equal_all']}")
-    return 0 if check["bitwise_equal_all"] else 1
+    if problems:
+        rejected = reject(staging, problems)
+        for p in problems:
+            print(f"FAIL: {p}")
+        print(
+            f"rejected    : {trt_export._rel(rejected)}; "
+            f"{trt_export._rel(pt_path)} and {trt_export._rel(lineage_path)} untouched"
+        )
+        return 1
+    publish(staging, pt_path, lineage_path)
+    problems = published_pair_problems(stem)
+    for p in problems:
+        print(f"FAIL: {p}")
+    print(f"lineage     : {trt_export._rel(lineage_path)} (published last)")
+    bound_by = frozen_targets().get(lineage_path.resolve())
+    if bound_by is not None:
+        print(
+            f"NOTE        : {bound_by} no longer binds this lineage; shipping "
+            "refuses it until a new attestation is reviewed"
+        )
+    return 1 if problems else 0
 
 
 def run_check(args: argparse.Namespace) -> int:
@@ -438,6 +673,14 @@ def run_check(args: argparse.Namespace) -> int:
     if record.get("schema") != SCHEMA:
         raise SystemExit(f"{lineage_path}: unknown schema {record.get('schema')!r}")
     failures = []
+    # The lineage must name this stem's .pt, or another self-consistent pair
+    # would pass for it (#536 CC-536-08-02 consumer rule).
+    stem_pt = trt_export._rel(_targets(stem)[0])
+    if record["torchscript"]["path"] != stem_pt:
+        failures.append(
+            f"lineage torchscript.path {record['torchscript']['path']!r} is not "
+            f"{stem_pt!r}"
+        )
     op_rec = load_op_library()
     if op_rec["sha256"] != record["op_library"]["sha256"]:
         failures.append("op library sha256 differs from manifest")
@@ -482,17 +725,33 @@ def run_check(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--stem", default=DEFAULT_STEM)
+    parser.add_argument(
+        "--stem",
+        help=f"export default {DEFAULT_EXPORT_STEM}; --check default {FROZEN_STEM}",
+    )
     parser.add_argument("--yolo-weights", default=trt_export.DEFAULT_YOLO_WEIGHTS)
     parser.add_argument("--teacher-ckpt", default=trt_export.DEFAULT_TEACHER_CKPT)
-    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--overwrite", action="store_true", help="replace an existing stem"
+    )
+    parser.add_argument(
+        "--replace-frozen-stem",
+        metavar="STEM",
+        help="maintenance: also allow replacing STEM, which must be the export "
+        "stem and bound by a committed attestation (breaks that binding until a "
+        "new attestation is reviewed)",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
         help="re-trace and verify the manifest and the structural check",
     )
     args = parser.parse_args()
-    return run_check(args) if args.check else run_export(args)
+    if args.check:
+        args.stem = args.stem or FROZEN_STEM
+        return run_check(args)
+    args.stem = args.stem or DEFAULT_EXPORT_STEM
+    return run_export(args)
 
 
 if __name__ == "__main__":
