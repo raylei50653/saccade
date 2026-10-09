@@ -128,6 +128,16 @@ gh api 'repos/raylei50653/saccade/contents/<path>?ref=<checkout-sha>'   # conten
 - formal collection 須為 5419/5524 selected、105 deselected；full 須為 5362 passed、52 skipped、105 deselected、5 xfailed（缺 gitignored data/weights 會改變 skip 數）。
 - `pytest_measure.py` 以 pytest 的 exit code 結束（檢查失敗為 3），`pytest_series.py` 只在 wrapper 與 record 都是 exit 0 且無失敗檢查時繼續。
 
+### Replay prerequisites and evidence boundary
+
+pytest 重放是「原量測環境可重播」，不是「任意乾淨環境可重現」。它依賴 main checkout 的未追蹤輸入，逐項在 JSON `replay_prerequisites`：
+
+- `.venv`：既有環境，只記錄 Python 版本與 native extension 身分，未對整個 package 集合做 hash。
+- `build/saccade_tracking_ext…so`（`97a2f10b…`）：副本保留在 `results/509_ci_baseline/native_ext/`；main 重建後，先用它覆蓋 `build/` 再重放，結束後換回。SHA-256 只證明載入的 bytes 與量測時相同，不證明由哪個 source revision 建置：該檔未為 `83c9bef0` 重建（mtime 早於該 commit），也沒有 source→binary attestation。
+- `datasets/`、`models/`：未做 hash，只透過固定的 outcome counts 間接檢查；缺檔會變成多出的 skip／failure，但內容改變而 counts 不變則偵測不到。
+
+`results/509_ci_baseline/replay/` 的 harness 不在版本控制內：GitHub CI 與 PR diff 只看得到本文與 JSON，harness 實作只以 JSON `replay_harnesses.sha256` 識別，沒有經過 CI 執行或 diff review。整個 `results/509_ci_baseline/`（含 harness、raw evidence、replays、revision scripts、native extension 副本）另有 byte-identical 的 repo 外副本，位置、manifest 與 SHA-256 記錄在 `replay_prerequisites.out_of_repo_copy`；它在同一顆磁碟上，只防 `results/` 清理，不防磁碟或主機遺失。
+
 在切到 `83c9bef0` 的 checkout 內執行（pytest 限 main checkout）；每次重放用一個新的 UTC 時間戳目錄：
 
 ```sh

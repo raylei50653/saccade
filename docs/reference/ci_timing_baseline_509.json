@@ -8273,8 +8273,8 @@
       }
     }
   },
-  "revised_at_utc": "2026-10-09T08:20:10.910477+00:00",
-  "revision_note": "v2 changed representation only: paths name the kept copies; host identity removed; per-file hashes moved to raw_artifacts.manifest. v3 (#555 review): remote.checkout_source_verification and remote.raw_sha256 are again the remote_report.py output (per-file checkout identities; 54-file subset), remote.regeneration names the venv interpreter, raw_artifacts.scope is corrected, and the replay harnesses gained lease, native-extension, exit-code and count checks. Numeric measured values are unchanged from v1.",
+  "revised_at_utc": "2026-10-09T09:15:39.114917+00:00",
+  "revision_note": "v2 changed representation only: paths name the kept copies; host identity removed; per-file hashes moved to raw_artifacts.manifest. v3 (#555 review): remote.checkout_source_verification and remote.raw_sha256 are again the remote_report.py output (per-file checkout identities; 54-file subset), remote.regeneration names the venv interpreter, raw_artifacts.scope is corrected, and the replay harnesses gained lease, native-extension, exit-code and count checks. Numeric measured values are unchanged from v1. v3.1 (#557 review): replay_prerequisites records the untracked replay inputs, the limit of the native-extension SHA-256, the CI-unverified harness, and the out-of-repo copy.",
   "path_normalization": {
     "mapping": {
       "/tmp/saccade-509-build-baseline-r2": "results/509_ci_baseline/20261009/build",
@@ -8302,7 +8302,8 @@
     "support_files_sha256": {
       "results/509_ci_baseline/20261009/assemble.py": "9b703362d2b39dd3f39a2eb235b24033209f29c115babc1eaee1180f8925e6b0",
       "results/509_ci_baseline/20261009/finalize.py": "487af5fff5d42174f188547ae5da8450780360027b707190060b072b4ff0895d",
-      "results/509_ci_baseline/revise_v3.py": "5199192d8961b5d7ee219c3e9246fe7c4baf09f77baf1d446058dc5b9892c06b"
+      "results/509_ci_baseline/revise_v3.py": "5199192d8961b5d7ee219c3e9246fe7c4baf09f77baf1d446058dc5b9892c06b",
+      "results/509_ci_baseline/revise_v3_prereq.py": "6c0deb13f973d97d11b753f2911d7f0b0fa8af6d5e7e20074c927c26c72d0539"
     }
   },
   "replay_harnesses": {
@@ -8473,5 +8474,27 @@
       "formal collection under a lease with PYTEST_ADDOPTS=-k ... (counts differ; exit 3)",
       "formal collection with a different saccade_tracking_ext first on PYTHONPATH (SHA-256 mismatch)"
     ]
+  },
+  "replay_prerequisites": {
+    "scope": "Original-environment replay, not clean-environment reproduction. The pytest series reproduces the formal counts only with the measuring (main) checkout's untracked inputs below; a fresh clone at 83c9bef0 lacks them (a detached worktree gave 4 failed, 132 skipped).",
+    "untracked_inputs": {
+      ".venv": "Existing environment; saccade_build.pth adds the main checkout build/ to sys.path. Recorded: Python version and the native-extension identity, not a full package hash.",
+      "build/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": {
+        "sha256": "97a2f10b9e297df20b2b32177b362e5b0358610ab434ca975985cb87a59c70c5",
+        "kept_copy": "results/509_ci_baseline/native_ext/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so",
+        "restore": "Copy kept_copy over build/ (and restore the newer build afterwards) when main has rebuilt the extension; the harness refuses any other SHA-256.",
+        "provenance": "The SHA-256 proves the loaded bytes equal the measured ones; it does not prove which source revision built them. The file was not rebuilt for 83c9bef0 (its mtime predates that commit) and no source-to-binary attestation was made."
+      },
+      "datasets/, models/": "Not hashed. Checked only indirectly through the fixed outcome counts (missing inputs show up as extra skips or failures); changed content that keeps the same counts would not be detected."
+    },
+    "harness": "results/509_ci_baseline/replay/ is gitignored: GitHub CI and the PR diff see only this JSON and the report, so the harness implementation is identified by replay_harnesses.sha256, not reviewed or executed by CI.",
+    "out_of_repo_copy": {
+      "path": "../saccade_evidence_mirror/509_ci_baseline/2026-10-09 (relative to the repository root)",
+      "contents": "Byte-identical copy of results/509_ci_baseline/ (raw evidence, replay harnesses, replays, revision scripts, native_ext/).",
+      "manifest": "SHA256SUMS",
+      "manifest_sha256": "60b096b8de8969414cb0f08d610ba6bc2760b7c23733eb33f34f3740a5bd735e",
+      "file_count": 2096,
+      "limit": "Same disk and machine: protects against a results/ cleanup, not against disk or host loss."
+    }
   }
 }
