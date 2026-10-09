@@ -21,6 +21,10 @@
 //                     message, the first sequence written with the rerun's
 //                     bytes, the earlier txt / trace / report of the rerun's
 //                     sequences gone, other files in <out> untouched;
+//   * killed_in_first_sequence: SIGKILL in the first sequence, after the
+//                     earlier outputs were removed: the new journal is there
+//                     (running, this run's id, every sequence pending) and
+//                     none of the earlier run's outputs is;
 //   * killed_in_sequence: SIGKILL inside a sequence: journal running, that
 //                     sequence pending and its txt absent; the lock is free
 //                     again for the next run;
@@ -373,6 +377,27 @@ void case_failed_rerun(const fs::path& base) {
     CHECK(temp_files(c.dir).empty());
 }
 
+void case_killed_in_first_sequence(const fs::path& base) {
+    Case c = make_case(base, "killed_in_first_sequence");
+    CHECK(run_child(child_of(c, 1)).code == 0);
+    Child ch = child_of(c, 2);
+    ch.kill_in = 0;
+    const Status s = run_child(ch);
+    CHECK(!s.exited && s.signal == SIGKILL);
+    const std::string id = last_run_id(c);
+    CHECK(fs::exists(c.p.out / sh::kRunJournalName));  // the cleanup did not take it
+    const JsonValue j = journal(c.p);
+    CHECK(str(j, "run_id") == id);
+    CHECK(str(j, "state") == "running");
+    for (std::size_t i = 0; i < kSeqs.size(); ++i) {
+        CHECK(str(seq_entry(j, i), "state") == "pending");
+        CHECK(!fs::exists(c.p.out / (kSeqs[i] + ".txt")));
+        CHECK(!fs::exists(c.p.trace / kSeqs[i] / "detector.bin"));
+    }
+    CHECK(!fs::exists(c.p.report));
+    CHECK(committed(c.p, id).empty());
+}
+
 void case_killed_in_sequence(const fs::path& base) {
     Case c = make_case(base, "killed_in_sequence");
     CHECK(run_child(child_of(c, 1)).code == 0);
@@ -526,6 +551,7 @@ int main(int argc, char** argv) {
         CHECK(sh::new_run_id() != sh::new_run_id());
         case_fresh(base);
         case_failed_rerun(base);
+        case_killed_in_first_sequence(base);
         case_killed_in_sequence(base);
         case_killed_before_rename(base);
         case_killed_after_rename(base);
