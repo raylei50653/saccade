@@ -13,9 +13,18 @@
 // realization attestation and the files they bind; no environment variable is
 // read.
 //
-// Exit 0: every sequence written; 2: any error (message on stderr; a refused
-// argument, config or input stops before or at that sequence; an argument
-// that is not listed below is refused before any file is read).
+// Exit 0: every sequence written and the journal's state=complete written;
+// 2: any error (message on stderr; a refused argument, config or input stops
+// before or at that sequence; an argument that is not listed below is refused
+// before any file is read). Once the arguments parse, stderr's first line is
+// "saccade_track: run_id <id>"; the run id names this run in
+// <out>/saccade_track.journal.json and the report. --out is exclusive: a
+// second run on the same <out> exits 2 and changes nothing. A run removes its
+// own sequences' earlier <out>/<sequence>.txt, trace files and the --report
+// file before it starts, so a failed rerun leaves none of them; keep earlier
+// outputs with another --out. Only a journal with this run_id and
+// state=complete marks a complete run; a txt counts only when the journal has
+// it `written` with its sha256 (track_driver.hpp, run_completion.hpp).
 //
 // Usage:
 //   saccade_track --config configs/shipping/mamba_whole_graph.resolved.json
@@ -28,6 +37,7 @@
 // saccade_track_measurement, a developer build that is not installed.
 #include <cstdio>
 #include <exception>
+#include <optional>
 #include <string>
 
 #include "saccade_shipping/double_buffer_runtime.hpp"
@@ -61,25 +71,28 @@ track::Options parse_args(int argc, char** argv) {
     return o;
 }
 
-int run(const track::Options& opt) {
-    track::require_distinct_sequences(opt);
+int run(const track::Options& opt, sh::RunCompletion& completion) {
     const sh::ResolvedShippingConfig cfg = sh::load_resolved_shipping_config_file(opt.config);
     const sh::DetectorInputs inputs{opt.lineage, opt.attestation};
     if (sh::select_schedule(cfg, /*serial_requested=*/false) == sh::Schedule::Serial) {
         sh::SerialRuntime rt(cfg, inputs, opt.model_root);
-        return track::run_sequences(rt, opt, "saccade_track", "serial", 0, nullptr);
+        return track::run_sequences(rt, opt, completion, "saccade_track", "serial", 0, nullptr);
     }
     sh::DoubleBufferRuntime rt(cfg, inputs, opt.model_root);
-    return track::run_sequences(rt, opt, "saccade_track", "double_buffer", 0, nullptr);
+    return track::run_sequences(rt, opt, completion, "saccade_track", "double_buffer", 0, nullptr);
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
+    std::optional<sh::RunCompletion> completion;  // holds <out>'s lock until exit
     try {
-        return run(parse_args(argc, argv));
+        const track::Options opt = parse_args(argc, argv);
+        track::begin_run(opt, "saccade_track", completion);
+        return run(opt, *completion);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "saccade_track: %s\n", e.what());
+        if (completion) completion->fail(e.what());
         return 2;
     }
 }

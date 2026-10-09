@@ -20,6 +20,14 @@ negative controls, the serial override and ``--max-frames`` run the developer
 build ``saccade_track_measurement``, whose report must echo exactly what was
 asked. The command line the harness builds for the shipping binary holds no
 developer option, and ``--against`` also compares the native graph counts.
+
+#536 CC-536-01-01 (run completion): the report is v3 and must carry a run id
+and an identity that claims no level; the journal reader fails closed on a
+run id that is not the invocation's, a state other than ``complete``, a
+``pending`` sequence whose txt is present, and a txt / trace / report whose
+bytes are not the ones recorded. The same reader is run over the files the
+real writer leaves in each case of ``tests/native/test_shipping_run_completion.cpp``
+(``--keep``; skipped when that test is not built).
 """
 
 # scope: system
@@ -29,8 +37,11 @@ developer option, and ``--against`` also compares the native graph counts.
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
+import json
 import struct
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -39,6 +50,8 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 TOOL = REPO / "scripts" / "eval" / "diagnostics" / "native_track_parity.py"
+COMPLETION_TEST = REPO / "build" / "shipping" / "saccade_shipping_run_completion_test"
+RUN_ID = "0123456789abcdef0123456789abcdef"
 
 
 def _tool() -> Any:
@@ -123,6 +136,8 @@ def _good_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     }
     rep = {
         "format": T.TRACK_REPORT_FORMAT,
+        "run_id": RUN_ID,
+        "identity": {"level": None},
         "entrypoint": "saccade_track",
         "schedule": "serial",
         "python_libraries_mapped": [],
@@ -148,6 +163,12 @@ def _good_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     [
         (("format",), "x"),
         (("format",), "saccade.native_track_report/v1"),
+        (("format",), "saccade.native_track_report/v2"),
+        (("run_id",), None),
+        (("run_id",), "run-1"),
+        (("identity",), None),
+        (("identity",), {"level": "checksum_matched"}),
+        (("identity",), {"level": "expected_source_verified"}),
         (("entrypoint",), "saccade_track_measurement"),
         (("schedule",), "double_buffer"),
         (
@@ -463,3 +484,166 @@ def test_oracle_txt_problems_fail_closed(tmp_path: Path, key: str, value: Any) -
     bad = copy.deepcopy(good)
     bad[key] = value
     assert T.oracle_txt_problems(tmp_path, bad, ["S1", "S2"], "abc") != []
+
+
+# ── completion (#536 CC-536-01-01) ─────────────────────────────────────────────
+
+SEQS = ["S1", "S2"]
+
+
+def _sha(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+
+def _completed_run(tmp_path: Path) -> tuple[Path, Path, Path, dict[str, Any]]:
+    """A complete run's files: out/, trace/, the report, and its journal."""
+    out, trace, report = tmp_path / "out", tmp_path / "trace", tmp_path / "r.json"
+    out.mkdir()
+    entries = []
+    for s in SEQS:
+        txt, tb = f"1,1,{s}".encode(), f"trace {s}".encode()
+        (out / f"{s}.txt").write_bytes(txt)
+        (trace / s).mkdir(parents=True)
+        (trace / s / "detector.bin").write_bytes(tb)
+        entries.append(
+            {
+                "name": s,
+                "state": "written",
+                "txt": str(out / f"{s}.txt"),
+                "txt_sha256": _sha(txt),
+                "trace": str(trace / s / "detector.bin"),
+                "trace_sha256": _sha(tb),
+            }
+        )
+    report.write_bytes(b'{"run_id": "x"}\n')
+    journal = {
+        "format": T.JOURNAL_FORMAT,
+        "run_id": RUN_ID,
+        "entrypoint": "saccade_track",
+        "state": "complete",
+        "identity": {"level": None},
+        "sequences": entries,
+        "report": {"path": str(report), "sha256": _sha(report.read_bytes())},
+        "failure": None,
+    }
+    return out, trace, report, journal
+
+
+def _problems(
+    out: Path, trace: Path, report: Path, journal: dict[str, Any]
+) -> list[str]:
+    (out / T.JOURNAL_NAME).write_text(json.dumps(journal))
+    return T.journal_problems(out, RUN_ID, SEQS, report, trace)
+
+
+def test_journal_complete_run(tmp_path: Path) -> None:
+    out, trace, report, j = _completed_run(tmp_path)
+    assert _problems(out, trace, report, j) == []
+    assert T.committed_sequences(j, out, RUN_ID) == SEQS
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        lambda j: j.update(run_id="f" * 32),  # an earlier run's journal
+        lambda j: j.update(state="running"),
+        lambda j: j.update(state="failed"),
+        lambda j: j.update(format="saccade.native_track_journal/v0"),
+        lambda j: j.update(identity={"level": "checksum_matched"}),
+        lambda j: j["sequences"].reverse(),
+        lambda j: j["sequences"].pop(),
+        lambda j: j["sequences"][1].update(state="pending", txt_sha256=None),
+        lambda j: j["sequences"][1].update(txt_sha256="0" * 64),
+        lambda j: j["sequences"][0].update(trace_sha256="0" * 64),
+        lambda j: j["report"].update(sha256=None),
+        lambda j: j.update(report=None),
+    ],
+)
+def test_journal_problems_fail_closed(tmp_path: Path, edit: Any) -> None:
+    out, trace, report, j = _completed_run(tmp_path)
+    edit(j)
+    assert _problems(out, trace, report, j) != []
+
+
+def test_pending_with_its_file_present_is_not_committed(tmp_path: Path) -> None:
+    # A kill between the rename and the journal update: the txt is there and
+    # may be this run's whole output; the journal never confirmed it.
+    out, trace, report, j = _completed_run(tmp_path)
+    j["state"] = "running"
+    j["sequences"][1].update(state="pending", txt_sha256=None, trace_sha256=None)
+    assert (out / "S2.txt").is_file()
+    assert T.committed_sequences(j, out, RUN_ID) == ["S1"]
+    assert _problems(out, trace, report, j) != []
+
+
+def test_stale_or_replaced_files_are_not_committed(tmp_path: Path) -> None:
+    out, trace, report, j = _completed_run(tmp_path)
+    (out / "S1.txt").write_bytes(b"an older run's txt")
+    assert T.committed_sequences(j, out, RUN_ID) == ["S2"]
+    assert T.committed_sequences(j, out, "f" * 32) == []
+    (out / "S1.txt").unlink()
+    assert T.committed_sequences(j, out, RUN_ID) == ["S2"]
+    # A report outside <out> replaced by another run: detected by its hash.
+    (tmp_path / "b").mkdir()
+    out2, trace2, report2, j2 = _completed_run(tmp_path / "b")
+    report2.write_bytes(b'{"run_id": "another run"}\n')
+    assert any("report" in p for p in _problems(out2, trace2, report2, j2))
+    (out2 / T.JOURNAL_NAME).unlink()
+    assert T.journal_problems(out2, RUN_ID, SEQS, report2, trace2) != []
+    assert T.journal_problems(out, None, SEQS, report, trace) != []
+
+
+def test_invocation_run_id() -> None:
+    a, b = "a" * 32, "b" * 32
+    log = f"saccade_track: run_id {a}\n[saccade_track] S1: 5 frames\n"
+    assert T.invocation_run_id(log, "saccade_track") == a
+    assert T.invocation_run_id(log, "saccade_track_measurement") is None
+    assert (
+        T.invocation_run_id(log + f"saccade_track: run_id {b}\n", "saccade_track")
+        is None
+    )
+    assert T.invocation_run_id("saccade_track: run_id xyz\n", "saccade_track") is None
+    assert T.invocation_run_id("", "saccade_track") is None
+
+
+@pytest.mark.skipif(not COMPLETION_TEST.exists(), reason="completion test not built")
+def test_reader_on_the_writer_s_files(tmp_path: Path) -> None:
+    """The real writer's files in each completion case, judged by this reader."""
+    keep = tmp_path / "keep"
+    r = subprocess.run(
+        [str(COMPLETION_TEST), "--keep", str(keep)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    seqs = ["SEQ-A", "SEQ-B", "SEQ-C"]
+
+    def judge(
+        case: str, out: str = "out", run_id_file: str = "invocation.run_id"
+    ) -> tuple[list[str], list[str]]:
+        d = keep / case
+        run_id = (d / run_id_file).read_text()
+        j = json.loads((d / out / T.JOURNAL_NAME).read_text())
+        committed = T.committed_sequences(j, d / out, run_id)
+        problems = T.journal_problems(
+            d / out, run_id, seqs, d / "track_report.json", d / "trace"
+        )
+        return committed, problems
+
+    assert judge("fresh", "missing/parent/out") == (seqs, [])
+    assert judge("killed_in_sequence") == (seqs, [])  # the run after the kill
+    committed, problems = judge("failed_rerun")
+    assert committed == ["SEQ-A"] and problems
+    committed, problems = judge("killed_after_rename")
+    assert committed == ["SEQ-A"] and problems
+    assert (keep / "killed_after_rename" / "out" / "SEQ-B.txt").is_file()
+    committed, problems = judge("killed_after_report")
+    assert committed == seqs and any("state 'running'" in p for p in problems)
+    assert (keep / "killed_after_report" / "track_report.json").is_file()
+    committed, problems = judge("lock_busy")  # the refused run names nothing
+    assert committed == [] and problems
+    committed, problems = judge("lock_busy", run_id_file="holder.run_id")
+    assert committed == ["SEQ-A"] and problems
+    assert judge("collisions")[1]

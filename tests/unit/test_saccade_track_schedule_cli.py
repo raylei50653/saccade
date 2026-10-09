@@ -15,6 +15,12 @@ Skips when ``build/shipping/saccade_track`` has not been built.
 ``saccade_track_measurement`` only; the shipping ``saccade_track`` refuses it
 as an unknown argument before it reads the config. The override cases run the
 developer build (skipped when it is not built).
+
+#536 CC-536-01-01: once the arguments parse, the run takes ``--out`` and
+writes its journal before it reads the config, so a torn config now leaves
+``out/`` with the lock and a ``failed`` journal (this run's id, no sequence,
+the schedule error) and nothing else. A refused argument still creates
+nothing.
 """
 
 # scope: system
@@ -84,7 +90,18 @@ def test_torn_schedule_config_fails_closed(
     r = _run(tmp_path, torn, *override)
     assert r.returncode == 2, r.stderr
     assert "shipping schedule:" in r.stderr, r.stderr
-    assert not (tmp_path / "out").exists()
+    first = r.stderr.splitlines()[0]
+    name = "saccade_track_measurement" if override else "saccade_track"
+    assert first.startswith(f"{name}: run_id "), r.stderr
+    out = tmp_path / "out"
+    assert sorted(p.name for p in out.iterdir()) == [
+        "saccade_track.journal.json",
+        "saccade_track.lock",
+    ]
+    j = json.loads((out / "saccade_track.journal.json").read_text())
+    assert j["run_id"] == first.split()[-1]
+    assert j["state"] == "failed" and j["failure"]["sequence"] is None
+    assert "shipping schedule:" in j["failure"]["message"]
 
 
 def test_committed_config_passes_the_schedule_check(tmp_path: Path) -> None:
