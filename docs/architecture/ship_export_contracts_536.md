@@ -69,11 +69,11 @@ flowchart TB
   R7 -->|"L-16 MOT txt 原地覆寫"| O
   R8 --> O
 
-  T1{{"N-T1 目標：run journal<br/>run_id＋每個 sequence 的狀態"}}
+  T1{{"N-T1 目標：獨占鎖＋run journal<br/>run_id＋每個 sequence 的狀態"}}
   T2{{"N-T2 目標：CUDA-free preflight<br/>hash＋輸入＋輸出位置"}}
   T3{{"N-T3 目標：identity level<br/>checksum_matched／expected_source_verified"}}
-  T4{{"N-T4 目標：export commit gate<br/>check 通過才 rename"}}
-  R3 -.->|"L-T0 目標：先建 journal、作廢舊產物"| T1
+  T4{{"N-T4 目標：export publication gate<br/>staging 內 check；lineage 最後發布"}}
+  R3 -.->|"L-T0 目標：鎖 out、建 journal、作廢本輪路徑"| T1
   R4 -.->|"L-T1 目標"| T2
   T2 -.->|"L-T2 目標：全部通過才進 GPU"| R5
   T2 -.->|"L-T3 目標"| T3
@@ -81,13 +81,13 @@ flowchart TB
   R7 -.->|"L-T5 目標：temp→rename 後登記"| T1
   T1 -.->|"L-T6 目標：complete 是唯一 commit point"| O
   X1 -.->|"L-T7 目標"| T4
-  T4 -.->|"L-T8 目標：失敗不留在正式路徑"| X3
+  T4 -.->|"L-T8 目標：check 失敗不碰正式路徑"| X3
 
   classDef target stroke-dasharray: 5 5
   class T1,T2,T3,T4 target
 ```
 
-**為什麼這樣分**：執行期的判斷全部在一個 process 裡，所以總圖按「安裝期／執行期／export 期」三個信任與時間邊界切，不按目錄切。三個目標節點都是在現有路徑上加檢查點，不新增層或框架：N-T2 把已存在的 CUDA-free plan 階段（N-R4）擴成完整 preflight；N-T1 只是 N-R7／N-R8 已在產生的資料加上 run identity 與原子提交；N-T4 把 exporter 已有的 check 改成提交條件。Python library、eval、online-service 的路徑不在本圖，也不從本圖繼承任何保證。
+**為什麼這樣分**：執行期的判斷全部在一個 process 裡，所以總圖按「安裝期／執行期／export 期」三個信任與時間邊界切，不按目錄切。三個目標節點都是在現有路徑上加檢查點，不新增層或框架：N-T2 把已存在的 CUDA-free plan 階段（N-R4）擴成完整 preflight；N-T1 只是替 N-R7／N-R8 已在產生的資料加上 run identity、逐檔 temp→rename 與單一 commit point（整個 run 仍不是原子交易）；N-T4 把 exporter 已有的 check 改成發布條件。Python library、eval、online-service 的路徑不在本圖，也不從本圖繼承任何保證。
 
 ## 2. 現況追查（observed as-is）
 
@@ -143,19 +143,22 @@ flowchart TB
 - **現況**：exit 0 代表所有 sequence 已寫出、report（若有要求）已寫出；exit 2 代表 launcher prefix 不合法、參數被拒，或任何被捕捉的錯誤；exit 127 代表 auditor 沒有初始化或拒絕載入；signal 結束是 128+N；未捕捉的 abort 沒有定義。沒有 run identity，沒有逐 sequence 的狀態紀錄，txt 不是原子寫入。
 - **目標接口**：
   1. **Run identity**：解析參數後立刻產生 `run_id`（每次 invocation 都不同的隨機值），stderr 第一行印出，journal 與 report 都帶它。MOT txt 的位元組不變，所以既有的 MOT parity 證據不受影響。
-  2. **Run journal（N-T1）**：`<out>` 內一個小 JSON 檔（名稱與 schema 版本在實作 PR 定），每次都用 temp 檔加 rename 改寫。內容：`run_id`、`state`（`running`／`failed`／`complete`）、依 argv 順序列出每個 sequence 的 `pending`／`written`（含 txt 路徑與 sha256）、`identity`（見 CC-536-01-02），失敗時另記失敗的 sequence（可為 null）與 stderr 的同一則訊息。這只是逐 run 的完成紀錄，不是統一的 failure-report schema。各 state 之間怎麼轉換、失敗怎麼分類，由 #537 擁有，本卡只要求這三個值可以被觀察到。
-  3. **順序**：建立 journal 是解析參數後第一個寫檔動作，寫入 `state=running`，同時作廢這次會寫的舊產物（舊 journal、`--report` 路徑、這次各 sequence 的 `<seq>.txt`）→ CUDA-free preflight（N-T2）→ GPU 初始化與載入 → 每個 sequence 寫 temp 檔、rename 成 `<seq>.txt`，再在 journal 登記為 `written` → 全部完成後，report 一樣用 temp 加 rename 寫出（沿用「全部完成後才寫」）→ journal 改成 `complete`，**這是唯一的 commit point**。被捕捉的錯誤會盡力寫成 `failed` 後 exit 2；被 kill 或 abort 時 journal 會停在 `running`，caller 應視為未完成。
-  4. **Exit code**：沿用 0／2／127／128+N，不新增。exit 0 必須同時有 `state=complete` 的 journal；非零代表本輪未完成，哪些 sequence 已完成以 journal 為準。
-- **Caller 判讀規則**：只有 journal 的 `run_id` 等於這次 invocation、而且 `state=complete`，才算本輪完整成功。`written` 的 txt 是本輪的完整輸出；`pending` 的 sequence 沒有本輪輸出，因為舊檔已在開頭作廢。
+  2. **`<out>` 的獨占權**：建立或改寫任何東西之前，先對 `<out>` 內一個固定的 lock 檔取得非阻塞的獨占 `flock`。已經被另一個 process 持有時，立刻 exit 2，不建 journal，也不作廢或改寫任何檔案。lock 由 process 一直持有到結束（被 kill 時由 kernel 釋放），lock 檔本身不刪除，避免刪檔與重建之間的 race。這是同一 `--out` 並行執行時的明確拒絕機制，不是通用的交易框架。
+  3. **Run journal（N-T1）**：`<out>` 內一個小 JSON 檔（名稱在實作 PR 定，有自己的 format 字串），每次都用 temp 檔加 rename 改寫。內容：`run_id`、`state`（`running`／`failed`／`complete`）、依 argv 順序列出每個 sequence 的 `pending`／`written`（`written` 帶 txt 路徑與 sha256）、`identity`（見 CC-536-01-02），失敗時另記失敗的 sequence（可為 null）與 stderr 的同一則訊息。這只是逐 run 的完成紀錄，不是統一的 failure-report schema。各 state 之間怎麼轉換、失敗怎麼分類，由 #537 擁有，本卡只要求這些值可以被觀察到。
+  4. **順序**：解析參數 → 取得 `<out>` 的 lock → 建立 journal（`state=running`、所有 sequence `pending`、`identity.level=null`）→ 作廢本輪會覆寫的路徑，**只限**舊 journal、`--report` 路徑、本輪各 sequence 的 `<seq>.txt` 與 trace 檔，`<out>` 內其他檔案不動 → CUDA-free preflight（N-T2）→ GPU 初始化與載入 → 每個 sequence 寫 temp 檔、rename 成 `<seq>.txt`，再把 journal 的該 sequence 改成 `written` → 全部完成後，report 一樣用 temp 加 rename 寫出（沿用「全部完成後才寫」）→ journal 改成 `complete`，**這是唯一的 commit point**。被捕捉的錯誤會盡力寫成 `failed` 後 exit 2；被 kill 或 abort 時 journal 會停在 `running`，caller 應視為未完成。
+  5. **Exit code**：沿用 0／2／127／128+N，不新增。exit 0 必須同時有 `state=complete` 的 journal；非零代表本輪未完成，哪些 sequence 已確認提交以 journal 為準。
+  6. **Report schema**：report 加上 `run_id` 與 `identity` 後，format 改成新版本（例如 `saccade.native_track_report/v3`），不在 v2 名下改語義。[native_track_parity](../../scripts/eval/diagnostics/native_track_parity.py) 把 format 釘死在 v2，所以要在同一個實作 PR 更新；已歸檔的 v2 report 維持原本的意思。
+- **Caller 判讀規則**：只有 journal 的 `run_id` 等於這次 invocation、而且 `state=complete`，才算本輪完整成功。只有 `written`、且檔案 sha256 等於 journal 所記值的 txt，才算本輪已提交的輸出。`pending` 的意思是**尚未確認提交**，不是「沒有本輪檔案」：rename 成功、journal 還沒改成 `written` 時被中斷，`<seq>.txt` 可能已經是本輪的完整檔案，但它不能當作本輪完成的證據。
 - **取捨**：
-  - *作廢舊產物 vs 保留舊檔、只靠 journal 判斷*：建議作廢。下游計分工具是按檔名讀 txt，不會讀 journal。代價是：重跑如果失敗，先前同名的輸出也會沒有；要保留舊輸出，caller 應換一個 `--out`。這是行為變更，需要 owner 在批准時決定。
+  - *作廢舊產物 vs 保留舊檔、只靠 journal 判斷*：作廢。下游計分工具是按檔名讀 txt，不會讀 journal。代價是：重跑如果失敗，先前同名的輸出也會沒有；要保留舊輸出，caller 應換一個 `--out`。這是行為變更，實作 PR 要把它寫進 CLI 說明與 package README。
+  - *並行保護用 lock vs 不處理*：沒有 lock 時，兩個 process 會互相作廢、改寫 journal 與 txt，`run_id` 擋不住，所以需要 lock。
   - *要求 `--out` 必須是空目錄*：比較簡單，但會破壞「重跑到同一個目錄」的既有用法，而且失敗時仍然沒有診斷檔，所以不建議。
   - *新增 exit 3 表示部分完成*：會改到 inherited 的 exit 契約，ledger 已把這類 schema 列為非目標，所以不建議。
 - **State writer**：只有 `run_sequences` 與 `main` 的錯誤處理會寫 journal，其他元件不得寫。
-- **允許的依賴**：只用 C++ std filesystem 與既有的 `strict_json`／`sha256`，不新增第三方依賴。
-- **副作用**：`<out>` 會多一個 journal 檔；開頭會刪除本輪會寫的舊產物。
-- **Evidence（現有 check pointers）**：[saccade_track schedule CLI](../../tests/unit/test_saccade_track_schedule_cli.py)（在載入模型前拒絕）、[serial](../../tests/native/test_shipping_serial_runtime.cpp)、[double-buffer](../../tests/native/test_shipping_double_buffer_runtime.cpp)。目前沒有任何檢查涵蓋 completion。新的正控制與負控制（例如在第 k 個 sequence 注入失敗、mid-write kill、舊 report 存在時的失敗 run）交給 #541 對應。
-- **Known limits**：rename 只在同一個檔案系統內是原子的；`<out>` 無法寫入時，journal 也建不出來，只能 exit 2，此時目錄內若有舊 journal，它的 `run_id` 不會等於本輪；F3 的 127 可能發生在任何時點，這時 journal 會停在 `running`；不提供 whole-run rollback／resume（ledger 非目標）。
+- **允許的依賴**：只用 C++ std filesystem、POSIX `flock`／`rename`，以及既有的 `strict_json`／`sha256`，不新增第三方依賴。
+- **副作用**：`<out>` 會多一個 journal 檔與一個 lock 檔；開頭會刪除本輪會覆寫的舊產物（範圍見順序第 4 步）。
+- **Evidence（現有 check pointers）**：[saccade_track schedule CLI](../../tests/unit/test_saccade_track_schedule_cli.py)（在載入模型前拒絕）、[serial](../../tests/native/test_shipping_serial_runtime.cpp)、[double-buffer](../../tests/native/test_shipping_double_buffer_runtime.cpp)。目前沒有任何檢查涵蓋 completion。新的正控制與負控制（例如在第 k 個 sequence 注入失敗、mid-write kill、rename 與 journal 更新之間 kill、舊 report 存在時的失敗 run、同一 `--out` 的第二個 process）交給 #541 對應。實作時也要確認 `saccade_track_measurement` 的介面沒有因為共用 `run_sequences` 而改變（F5）。
+- **Known limits**：rename 只在同一個檔案系統內是原子的；`flock` 是 advisory lock，只約束同樣會取 lock 的 `saccade_track`，在網路檔案系統或 WSL 掛載的 Windows 磁碟上的行為沒有驗證；放在 `<out>` 以外的 `--report`／`--trace` 不受這個 lock 保護，實作 PR 要決定是否也鎖它們，或把這點寫成限制；拿不到 lock 或 `<out>` 無法寫入時，只能 exit 2，此時目錄內若有舊 journal，它的 `run_id` 不會等於本輪；F3 的 127 可能發生在任何時點，這時 journal 會停在 `running`；不提供 whole-run rollback／resume（ledger 非目標）。
 
 ### <a id="cc-536-01-02"></a>CC-536-01-02：identity 與 fail-closed 點
 
@@ -163,16 +166,17 @@ flowchart TB
 - **Producer → consumer**：caller 給的 config、lineage、attestation、model root（L-14）→ N-R4／N-R6 的檢查 → journal 與 report 的 `identity` 欄位 → caller 或 reviewer。
 - **現況**：config 走 strict loader；lineage 與 config 的欄位一致性、attestation 是否綁到這份 lineage 的 sha256，都在 CUDA-free 階段檢查；三個 artifact 的 sha256 在 GPU 初始化之後才比對；期望值全部來自 caller 檔案（2.2 第 7 點）。report 沒有「驗證等級」欄位。
 - **目標接口**：
-  1. **兩級驗證輸出（N-T3）**：journal 與 report 都帶 `identity.level`，再加上每個 bound 檔案（config、lineage、attestation、op library、head、engine）的 `{path, sha256}`。
-     - `checksum_matched`：每個 bound 檔案的位元組都與 supplied lineage／attestation 記的值相符。這是現行行為，可以直接實作。
-     - `expected_source_verified`：此外，supplied 的 config、lineage、attestation 的 sha256 也等於某個**認可 expected 來源**的值，並在 `identity.expected_source` 寫出來源名稱。來源要用 compiled-in 期望值、installed MANIFEST，或 #549 的 bundle manifest，由 #549 S1 決定；在決定之前，這一級不可能出現。
+  1. **兩級驗證輸出（N-T3）**：journal 與 report 都帶 `identity.level`，再加上每個 bound 檔案（config、lineage、attestation、op library、head、engine）的 `{path, expected_sha256, observed_sha256, status}`，其中 `status` 是 `matched`／`mismatch`／`missing`／`unchecked`。
+     - `null`：journal 建立時的初值，代表還沒驗證，不代表任何等級。Gate A 失敗時，level 維持 `null`，但各 binding 的 `status` 保留已經檢查到的範圍。
+     - `checksum_matched`：每個 bound 檔案的位元組都與 supplied lineage／attestation 記的值相符，在 Gate A 全部通過後才寫入。這是現行行為的明確化，可以直接實作。它只說明位元組，不說明載入相容性：Gate B 失敗時，level 仍是 `checksum_matched`，但 run 是 `failed`。
+     - `expected_source_verified`：此外，supplied 的 config、lineage、attestation 的 sha256 也等於某個**認可 expected 來源**的值，並在 `identity.expected_source` 寫出來源名稱。哪個來源算數由 #549 S1 決定，本卡不定義判準；判準至少要回答，那個來源能不能和模型被同一個 caller 一起替換。例如 installed MANIFEST 和模型在同一個 caller 可寫的 tree 裡時，它本身不構成獨立的 trust anchor。在 #549 S1 決定之前，這一級不可能出現。
      - 兩級都要固定寫出 `publisher_authentication: not_checked_by_runtime`。執行期不驗簽章，任何一級都不得寫成「原 bundle」、「authenticated」或「signed」。
   2. **Fail-closed 點**：
      - **Gate A（N-T2，CUDA-free，第一個 CUDA API 呼叫之前）**：strict config、lineage 與 attestation 的一致性（沿用 N-R4）、三個 artifact 的存在性與 sha256（從 N-R6 移過來）、所有 sequence 的 seqinfo.ini 與 img1 frame 清單（從 N-R7 移過來）、`--out`／`--report`／`--trace` 可以寫入。任何一項失敗：exit 2，journal 記 `failed`，不呼叫 CUDA。
      - **Gate B（N-R6，GPU，第一個 sequence 之前）**：`dlopen`、runtime requirements 讀回、`jit::load` 與 graph 檢查、TRT engine 的反序列化與 I/O。這些本質上需要 GPU，所以留在原地；它們已經在任何推論之前。
-     - 是否要求 `expected_source_verified` 才能執行，屬於 policy，不在本卡決定。REQ 只要求等級不足時不得宣稱更高的等級。
+     - **分階段強制**：現階段允許以 `checksum_matched` 執行，但輸出不得宣稱可信來源；#549 S1 批准 expected 來源之後，正式 shipping policy 才要求 `expected_source_verified`，那是另一個實作 PR。
 - **取捨**：把 hash 移到 Gate A 的代價，是在 CUDA 初始化之前同步讀完整個 engine 與 head 檔（現在也會讀，只是順序不同）。移動 sequence 輸入檢查的代價，是在開頭多走訪一次各個 img1 目錄；frame 的解碼錯誤仍然只能在執行時發現。不在 runtime 內驗 minisign，因為那會引入新的 crypto 依賴，而且 local-only package 不要求簽章（#546）。
-- **State writer**：`identity` 只由 Gate A／Gate B 寫入，之後不再改變。
+- **State writer**：`identity` 只由 Gate A 寫入（`null` → 各 binding 的 status → level），之後不再改變；Gate B 的結果記在 run 的 `state`，不改 identity。
 - **Evidence**：[detector plan](../../tests/native/test_shipping_detector_plan.cpp)、[resolved config](../../tests/unit/test_resolved_shipping_config.py)、[bundle](../../tests/unit/test_shipping_bundle_checks.py)、[package](../../tests/unit/test_shipping_package.py)、[signature](../../tests/unit/test_package_signature.py)。新的負控制（替換 head、替換 lineage 但仍自洽、缺 attestation、不可讀的 sequence）都應該在 Gate A 失敗，而且不呼叫 CUDA；這部分交給 #541 對應。
 - **Known limits**：F4 的 TOCTOU；auditor 只比路徑與名稱（F3）；`checksum_matched` 不保證來源，一份自洽但被換掉的 lineage＋attestation 也能達到這一級；本卡不定義 bundle schema。
 
@@ -184,7 +188,11 @@ flowchart TB
   1. `exported`：檔案已在磁碟上，check 還沒過或已經失敗；
   2. `check_passed`：export 或 `--check` exit 0。這代表 structural check 逐位元相等、`backbone_engine_sha256_match`、`git_dirty=false`，也就是 consumer 會拒絕的條件，在 producer 端就先擋下；
   3. `shipping_accepted`：有一份 committed 的接受紀錄（目前是 realization attestation，未來可能是 #549 的 bundle manifest）綁定這份 lineage 的 sha256，而且 N-X6 與 runtime 都會驗證這個綁定。**exporter 不得自己寫出這一級**：自己宣稱接受等於讓 caller 控制的 lineage 替自己背書，而且改動 lineage 的位元組會讓 attestation 綁定失效。
-- **目標接口（N-T4）**：exporter 先把 `.pt` 與 lineage 寫到同目錄的 temp 檔，只有 `check_passed` 的條件全部成立才 rename 到正式路徑；失敗時 exit 非零，正式路徑保持原狀（失敗的產物要刪掉或留在明確標成 rejected 的名稱，由實作 PR 決定）。目標 stem 是 committed attestation 綁定的那個路徑時，即使有 `--overwrite` 也拒絕，除非另外加上明確的旗標（處理 F1）。
+- **目標接口（N-T4）**：
+  1. **Staging**：exporter 把 `.pt` 與 lineage 寫到正式路徑同一個檔案系統上、帶版本的 staging 位置（例如 `<stem>.staging-<id>/`），structural check 與 `check_passed` 的條件都在 staging 內判定。任何一項不成立：exit 非零，**正式路徑完全不碰**；staging 內的產物要刪掉或標成 rejected，由實作 PR 決定。
+  2. **單一 publication commit**：兩次 rename 不是原子交易，所以把 lineage 定為唯一的發布標記：先 rename `.pt`，**最後**才 rename lineage。lineage 的 `torchscript.sha256` 綁定 `.pt` 的位元組，所以兩次 rename 之間中斷時，正式路徑會出現新 `.pt` 配舊 lineage（或沒有 lineage）的半發布狀態。
+  3. **Consumer 規則**：只有 lineage 存在、且其 `torchscript.sha256` 等於正式路徑上 `.pt` 的 sha256，才算一組已發布的配對；不符就拒絕。N-X6、N-R6、`--check` 目前都已經比對這個 hash，所以半發布會被拒絕；但這需要負控制證明（交 #541）。半發布發生在覆寫既有 stem 時，舊配對也一起失效，所以本卡**不**宣稱正式路徑永遠保持原狀。
+  4. **Frozen stem 保護（處理 F1）**：預設輸出改用新的 stem。目標 stem 已經存在時，沒有 `--overwrite` 就拒絕；目標 stem 是 committed attestation 綁定的那一個時，只有 `--overwrite` 仍然拒絕，必須再加上一個專門指名 frozen stem 的維護旗標。
 - **Producer → consumer 綁定欄位**（lineage `saccade.head_artifact_lineage_torchscript/v1`）：
 
 | lineage 欄位 | 誰讀 | 怎麼檢查 |
@@ -199,7 +207,7 @@ flowchart TB
 
 - **取捨**：沒有選擇在 lineage 內加 `accepted` 欄位，理由見上面的 `shipping_accepted`。每次重新 export，`.pt` 的檔案位元組都會不同（serialization id），所以新的 export 一定需要新的接受紀錄，並依 op library 重新 attest 的規則送 owner review；可攜的 identity 是 `content_sha256`。
 - **State writer**：`exported`／`check_passed` 由 exporter 寫；`shipping_accepted` 只由 committed 接受紀錄的 PR 寫。
-- **Evidence**：[TorchScript export](../../tests/unit/test_headline_head_torchscript_export.py)、[export binding](../../tests/unit/test_headline_head_export_binding.py)、[detector plan](../../tests/native/test_shipping_detector_plan.cpp)。目前沒有任何檢查涵蓋「check 失敗時不留在正式路徑」；這項交給 #541。
+- **Evidence**：[TorchScript export](../../tests/unit/test_headline_head_torchscript_export.py)、[export binding](../../tests/unit/test_headline_head_export_binding.py)、[detector plan](../../tests/native/test_shipping_detector_plan.cpp)。目前沒有任何檢查涵蓋「check 失敗時不碰正式路徑」、半發布被拒絕、frozen stem 保護；這些交給 #541。
 - **Known limits**：structural check 只用合成輸入，不是 MOT parity；本卡不涵蓋 ONNX、TRT、ReID 或其他 export；SM、TRT、ABI 的相容性由 #549 定。
 
 ## 5. ID 索引
@@ -222,13 +230,21 @@ Owner 欄寫的是 ledger 的 CAP accountable owner，以及語義的去向。ev
 | N-R6、L-12 | load 與 hash | 01-02 | CC-536-01-02 Gate B | `DetectorHost` | G2、G3、F2、F4 | CAP-01；#549 S1 |
 | N-R7、L-13、L-16 | sequence loop | 01-01 | CC-536-01-01 | `run_sequences` | serial／DB tests；G1、F5 | CAP-01；#537 |
 | N-R8 | report | 01-01 | CC-536-01-01 | `run_sequences` 結尾 | report v2；G1 | CAP-01；#537 |
-| N-T1、L-T0、L-T4…L-T6 | 目標：journal | 01-01 | CC-536-01-01 | 未實作 | 未驗證 | CAP-01；狀態語義 #537；check #541 |
+| N-T1、L-T0、L-T4…L-T6 | 目標：lock＋journal | 01-01 | CC-536-01-01 | 未實作 | 未驗證 | CAP-01；狀態語義 #537；check #541 |
 | N-T2、L-T1、L-T2 | 目標：preflight | 01-02、01-01 | CC-536-01-02 Gate A | 未實作 | 未驗證 | CAP-01；check #541 |
 | N-T3、L-T3 | 目標：identity level | 01-02 | CC-536-01-02 | 未實作 | expected source 待 #549 S1 | CAP-01；#549 S1 |
-| N-T4、L-T7、L-T8 | 目標：export commit gate | 08-02 | CC-536-08-02 | 未實作 | 未驗證 | CAP-08；check #541 |
+| N-T4、L-T7、L-T8 | 目標：export publication gate | 08-02 | CC-536-08-02 | 未實作 | 未驗證 | CAP-08；check #541 |
 
 ## 6. 本稿之後
 
-- 本稿批准後，才決定實作 PR 的範圍與切法。候選的單位是三張卡各自的目標接口；CC-536-01-02 的 `expected_source_verified` 要等 #549 S1。
-- 本稿批准時需要 owner 決定的事：CC-536-01-01 的「作廢舊產物」行為變更；CC-536-01-02 是否要求較高的 identity 等級才能執行；CC-536-08-02 對 frozen stem 的覆寫保護。
+- **批准時要確認的三項決策**（PR #558 review 建議的方向已寫進上面三張卡；本稿批准前仍是 proposed）：
+  1. CC-536-01-01：作廢舊產物，只限本輪會覆寫的路徑，而且要先取得 `<out>` 的獨占權並建立 journal；
+  2. CC-536-01-02：分階段強制，現階段允許 `checksum_matched` 但不宣稱可信來源，#549 S1 批准後才要求 `expected_source_verified`；
+  3. CC-536-08-02：保護 frozen stem，`--overwrite` 不能單獨覆寫，預設改用新 stem。
+- **候選的實作切法**（批准後再定案，一次一個 PR）：
+  1. Export safety：F1、frozen stem 保護、staging 與 publication commit、失敗注入測試；
+  2. Completion：`run_id`、lock、journal、逐檔 temp→rename 的 txt、report 新 format，MOT 位元組不變，並檢查 `saccade_track_measurement`；狀態轉換的細節由 #537 擁有；
+  3. Preflight：sha256 與輸入檢查移到 GPU 初始化之前，並用負控制證明不碰 CUDA；
+  4. Identity integration：等 #549 S1 決定可信來源後，才加上 `expected_source_verified` 與強制 policy。
+- 除了第 4 項，這一批不需要等其餘 19 項 REQ，也不需要先完成 #549 S1。
 - 其他 profile（public-library、eval、online-service）、B2 設定與控制面、C／D／E 的視圖，之後沿用同一份圖源與 ID 規則擴充，不另開一份總圖。
