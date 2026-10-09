@@ -1890,7 +1890,7 @@ PR-C4 是 Phase C 的最後一個 PR（[Phase C scope](native_runtime_phase_c_sc
   | cusparseLt | `grant_in_bundled_and_official` | wheel 與官方頁的 supplement 相同（v. October 12, 2020）；官方頁沒有版本 |
   | NCCL | `grant_in_bundled_and_official` | BSD-3-Clause；wheel 的 `License.txt` 與 tag v2.28.9-1 的 `LICENSE.txt` 逐位元組相同 |
   | torch 系列（6 個） | `grant_in_bundled_and_official` | wheel 的 `LICENSE` 開頭等於 tag v2.11.0 的 `LICENSE`（後面接 66 段 bundled 第三方），`NOTICE` 逐位元組相同 |
-  | **libgomp** | `no_licence_text_shipped` | GNU libgomp（字串帶 `../../../libgomp/`），上游為 GPL-3.0-or-later WITH GCC-exception-3.1；torch 的 `LICENSE`／`NOTICE` 都沒有提到它（`LICENSE` 裡的 GPL-3.0 全文屬於 `cpr/test`）。package 沒有附 GPL／exception 文本與 source offer，物件也沒有記錄 GCC 版本 |
+  | **libgomp** | `no_licence_text_shipped` | GNU libgomp（字串帶 `../../../libgomp/`），上游為 GPL-3.0-or-later WITH GCC-exception-3.1；torch 的 `LICENSE`／`NOTICE` 都沒有提到它（`LICENSE` 裡的 GPL-3.0 全文屬於 `cpr/test`）。package 沒有附 GPL／exception 文本與 source offer，物件也沒有記錄 GCC 版本（**更正見 §22.1**：版本有記錄；#547 已附文本與 source 指引） |
 
   分佈：17 筆 `grant_in_bundled_and_official`，6 筆 `grant_in_both_texts_differ`，3 筆 `grant_in_official_only`，1 筆 `no_licence_text_shipped`。`distribution.status`＝`local-only`，`owner_confirmation`＝null。
 - **仍待 owner 的項目**（`THIRD_PARTY.md` 的「Open items」逐物件列出）：
@@ -2298,3 +2298,203 @@ review 在 `59de3f28` 重現了三個稽核的假 PASS，以及一個舊 MANIFES
 .venv/bin/python scripts/native/check_shipping_package.py tarball --dist <dist> --pubkey <pub> --report package.json  # signed, opt in
 bash results/546_closeout/<label>/run.sh && .venv/bin/python results/546_closeout/<label>/evaluate.py
 ```
+
+---
+
+## 22. 公開散佈的授權證據：L-1～L-3 補正、L-4 稽核（#547）
+
+#547 追蹤 `ENGINEERING_COMPLETE` 與 `PUBLIC_DISTRIBUTION_READY` 之間的 blocker（[closeout](native_runtime_closeout.md) §6）。本節照 owner 的兩次決定（2026-10-08）補齊 L-1～L-3 的文本與來源證據，並記錄 L-4 的稽核。**本節不宣告合規，不填 `owner_confirmation`，`distribution.status` 維持 `local-only`，所有 open item 維持 OPEN。** 不改模型、tracker、runtime 行為與任何 benchmark 數字：entrypoint pin（`92f74ef4…`）、operator library（`aa84cccd…`）、27 個第三方物件、launcher、auditor、安裝器、SM 清單與 glibc baseline 都不變。
+
+| 項目 | 位置 |
+|:--|:--|
+| 稽核（schema v2：`supplied_texts`、`open_items`、`corresponding_source`、`downstream_terms`） | `shipping/license_audit.json` |
+| package 自己附的授權文本 | `shipping/licenses/terms/`（4 份 NVIDIA 官方條款）、`shipping/licenses/libgomp/`（`COPYING3`、`COPYING.RUNTIME`、`SOURCE.txt`） |
+| 下游條款草稿（不在 package 裡、不生效） | `shipping/DOWNSTREAM_TERMS.draft.md`（由稽核 render） |
+| 檢查、render、HTML 條款抽取、RPM／ELF 比對 | `scripts/native/license_audit.py` |
+| 安裝 | `shipping/cmake/install_third_party.cmake`（依 `supplied_texts` 安裝並比對 sha256） |
+| tree／package 檢查 | `scripts/native/check_shipping_bundle.py`（`expected_files`、`licenses`）、`check_shipping_package.py`（`pinned_tree`） |
+| L-4 稽核紀錄 | `results/547_l4_audit/20261008T125352Z/audit.md`（不納入版本控制）；摘要在 `open_items` 的 L-4 |
+| 測試 | `tests/unit/test_license_audit.py`、`tests/unit/test_shipping_bundle_checks.py` |
+
+### 22.1 設計決定
+
+- **三層分開。** 每個 open item（L-1、L-2、L-3、L-4，以及新的 M-1）都有三個各自非空的清單：`technical_evidence`（量到或讀到的）、`licence_interpretation`（條款文字的讀法）、`legal_uncertainty`（只有法律結論能定的）。`check_coverage` 要求三層都在；只要有一項是 OPEN，`distribution.status` 就必須是 `local-only`、`owner_confirmation` 必須是 null。工具不會關閉任何一項；只有 owner 能關。
+- **L-1（nvJitLink、cuFile、nvshmem）**：保留 wheel 的 `License.txt`，另附版本對應的官方條款全文（`licenses/terms/cuda_eula_13.0.2.txt`、`nvshmem_sla_3.4.5.txt`），每份記錄來源 snapshot 與 sha256。**附上全文不代表那份文本優先適用**；兩份文本的差異與適用性的疑問寫在 L-1，狀態仍是 `grant_in_official_only`。
+- **L-2（cuDNN×5、TensorRT）**：兩套條款都附（wheel 與 `licenses/terms/` 的官方版）。TensorRT wheel §12.2 的期間（一年、自動續約、NVIDIA 可在續約年開始前 90 天書面通知終止）加進 `tensorrt_wheel` conditions 並逐字檢查。新發現的疑問：wheel SLA §2 (iii)(d) 禁止「by means of the internet」提供，除非 AGREEMENT 明示授權，記入 `libnvinfer` 的 risk 與 L-2。
+  - **下游條款**整理成 `downstream_terms`（D-1～D-6），與 L-4 的共通條件合成同一份草稿。
+  - 每一條都標出適用的物件（以物件或 conditions key 表示）。每一句引文另有自己的適用範圍，並在**每一個被引用物件自己 wheel 的文本**裡逐字檢查。例如 D-2 原本引用的「stand-alone product」在 cuDNN wheel 的文本裡找不到，於是改用每個 NVIDIA wheel 都有的「as incorporated in object code format into a software application」。
+  - 條款不得涵蓋 Saccade（Apache-2.0）、torch／NCCL（BSD-3）與 libgomp（GPL-3.0）：GPL 禁止附加限制，checker 會擋。
+  - 草稿不在 package 裡、不生效；README 明寫 package 裡的檔案是 notice、不是協議：**README 的聲明不能視為已完成「與 Customers 的協議」義務**（L-2 的 legal uncertainty）。
+- **L-3（libgomp）**：
+  - 附上 `COPYING3` 與 `COPYING.RUNTIME`，從物件的 source package 取出，逐位元組相同。`COPYING3` 與 gnu.org 現行的 `gpl-3.0.txt` 只差 4 個 http→https 的網址。
+  - `SOURCE.txt` 寫明 source package 的名稱、sha256、大小與取得位置。
+  - **對應關係以比對建立，不以 debuglink 或字串宣告**：
+    1. shipped `libgomp.so.1`（`e28fb289…`）與 AlmaLinux `libgomp-8.5.0-28.el8_10.alma.1.x86_64.rpm` 的 `/usr/lib64/libgomp.so.1.0.0`（`e985bcbb…`）有相同的 build ID，24 個 code／data section 逐位元組相同且位址不變。
+    2. 只有 `.dynamic`、`.dynstr`、`.dynsym` 不同：多一筆 DT_RPATH（torch wheel 的 build 加的），`.dynstr` 搬移並加長；`.dynsym` 的名稱、值、大小、binding 都相同，只有 section index 重編。
+    3. 這個 binary package 的 RPM header `SOURCERPM` 是 `gcc-8.5.0-28.el8_10.alma.1.src.rpm`（sha256 `c94dbbd2…`，65715094 bytes）。
+    4. 兩個 package 的 sha256 都在 AlmaLinux 的 repository metadata 裡（primary.xml，其 checksum 在 repomd.xml），repomd.xml 的 detached signature 以 key `BC5EDDCA…CED7258B` 驗證為 Good。key 本身取自 repo.almalinux.org，沒有經獨立管道核對指紋。
+    5. **沒有從 source 重建出相同的位元組。** 這是比對證據，不是可重現 build 的證明。
+  - `license_audit.py check --gomp-rpm --srpm` 會重做比對：任何 section 不同、RPATH 以外的 `.dynamic` 差異、或 COPYING 文本不是 source package 裡的那一份，都會 FAIL。
+  - **source 提供機制**：
+    - 公開 release 時，把 source package 以同名、同 sha256 放在 package 旁邊，同一個地方發布；AlmaLinux 的網址是第二來源，不是 offer（`corresponding_source.mirror`）。
+    - 目前沒有公開 release，所以狀態是 `not published`；位置取決於 owner 的發布決定。
+  - 未確認的部分維持 OPEN：被第三方工具改寫過的物件，它的 Corresponding Source 是否需要包含那個改寫步驟；RLE 的 Eligible Compilation Process；source 要提供多久。
+- **L-4**：依 owner 的指示逐項稽核三個條件，`--library-path` 不算證明。結論：
+  - material additional functionality：事實支持，OPEN；
+  - only accessed by your application：inward 充分，outward 沒有技術上的排他，OPEN；
+  - 不受 open source 授權約束：Apache-2.0 與 libgomp 不構成，YOLO26 的 AGPL 血統可能構成，OPEN。
+- **M-1（新）**：model root 的授權（YOLO26s engine 的 Ultralytics AGPL-3.0 血統，ADR 023；訓練資料的條款未取得）不在 `lib/vendor/` 的稽核範圍內，原本完全沒有紀錄；現在以 open item 記錄。模型與 runtime 的分離由 #549 處理，**不改變任何授權狀態**。
+- **官方條款文本的抽取是確定性的**（`terms_text`）：
+  - 只取文件頁的 article body（`itemprop="articleBody"` 或 `<article class="bd-article">`）；
+  - 去掉導覽、script、heading 的 permalink；
+  - 每個 block 一行，`td`／`th` 也算 block。
+  
+  checker 從 snapshot 重新抽取並逐位元組比對 shipped 文本。
+- **libgomp 的狀態**由 `no_licence_text_shipped` 改為新的 `grant_in_supplied_text`：wheel 的文本沒有涵蓋它，由 package 自己附上授權文本。它的 conditions（`gpl3_rle`）在 package 附的文本裡逐字檢查，不在 torch wheel 的文本裡檢查。
+- **runtime identity**：`license_audit.json`、`install_third_party.cmake` 與新的 `COPYING3`／`COPYING.RUNTIME`（不是 `.txt`，不算 prose）屬於 implementation 軸，所以要依 [runbook](runbooks/runtime_identity_republication.md) republish（stacked PR）。`*.txt`、`*.md` 是 prose，不在軸上。
+
+> 更正（#547）：§20.1 表中 libgomp 那一列的「物件也沒有記錄 GCC 版本」不成立。物件有 `.gnu_debuglink`（`libgomp.so.1.0.0-8.5.0-28.el8_10.alma.1.x86_64.debug`）與 annobin 註記（`running gcc 8.5.0 20210514`）；PR-C4 只查了 `.comment` section。版本與對應關係的證據見上。
+
+### 22.2 改了什麼
+
+- `shipping/license_audit.json` 改為 schema v2：
+  - L-1／L-2 的物件多了 `supplied` claim；libgomp 改為 `grant_in_supplied_text` 與 `gpl3_rle`；
+  - TensorRT 多了 conditions 與 risk；
+  - 新增 `supplied_texts`（7 份）、`corresponding_source`、`open_items`（5 項）、`downstream_terms`（6 條）。
+- `scripts/native/license_audit.py`：
+  - `terms_text`（HTML 條款抽取）；
+  - RPM header／cpio、tar.xz、ELF section／dynamic 的讀取；
+  - `check_supplied_records`、`check_open_items`、`check_downstream_records`、`check_corresponding_records`（都在 `coverage` 裡）；
+  - 新的檢查項 `supplied_texts`、`downstream_basis`、`corresponding_source`；`official_terms` 多了重新抽取的比對；
+  - `render` 也產生 `DOWNSTREAM_TERMS.draft.md`。
+- `shipping/cmake/install_third_party.cmake`：依 `supplied_texts` 安裝到 `licenses/terms/`、`licenses/libgomp/`，sha256 不符就中止。
+- `check_shipping_bundle.py`：`expected_files` 與 `licenses` 涵蓋 supplied texts。`check_shipping_package.py`：`pinned_tree` 比對它們的 sha256。
+- `shipping/package/README.txt`：Licenses 一節列出各目錄，並寫明 package 裡的檔案是 notice、不是協議。`THIRD_PARTY.md`：open items 以三層呈現，另有 supplied texts、corresponding source 與 downstream terms 的說明。
+- **沒有動的**：`install.sh`、launcher、auditor、shipping 與 tracking 的 C++ 原始碼、`third_party_set.json`、`entrypoint_pin.json`、model root、operator library、任何 benchmark 數字。
+
+### 22.3 驗證契約（量測之前寫定）
+
+不跑 GPU 的 parity：runtime 的位元組不變（V3、E1 檢查），7-seq parity 沿用 PR-C4 r2（gate 7–8 `EXACT`）。結果目錄 `results/547_licence/full_<commit>/`，在 republish 之後的乾淨 head 上跑。
+
+**有效性**（任一不成立 ⇒ 受影響的項目 `UNRESOLVED`）：
+- V1：乾淨 commit；`check_runtime_identity_staleness.py --mode attested` exit 0（republish 之後）。
+- V2：operator library 與 pin 的 entrypoint 的 sha256 等於 attestation 與 `entrypoint_pin.json`。
+- V3：`git diff 54be85ad HEAD -- shipping` 只動 `license_audit.json`、`THIRD_PARTY.md`、`DOWNSTREAM_TERMS.draft.md`、`licenses/**`、`cmake/install_third_party.cmake`、`package/README.txt`；`install.sh` 對 `9217ed92` 沒有 diff。
+
+**PASS 規則**（全部成立 ⇒ `PASS`）：
+
+1. **E1 tree**：
+   - `cmake --install build-release --component shipping`（不 configure、不 build）到 `$R/tree`；`static` 全部 PASS。
+   - 與 #546 的 tree（`results/546_closeout/full_c7581100/e1_tree.sha256`，57 個檔案）相比：只有 `README.txt` 與 `licenses/THIRD_PARTY.md` 的 sha256 不同，多出的恰好是 7 份 supplied texts（共 64 個檔案）。
+2. **E2 稽核**：`license_audit.py check --licenses $R/tree/licenses --sources results/465_prc4_license/sources_20261008 --gomp-rpm … --srpm …` exit 0。`coverage`、`bundled_texts`、`supplied_texts`、`downstream_basis`、`official_terms`、`corresponding_source`、`notice` 七項 PASS，`complete: true`，`distribution`＝`local-only`。
+3. **E3 未簽的 package**：
+   - builder（不帶 `--trial`）exit 0；`tarball` 七項 PASS；`authentication`＝`none`。
+   - MANIFEST 的 `files` 等於 `$R/tree`；`licenses.distribution`＝`local-only`；`licenses.sha256` 等於 `shipping/license_audit.json` 的 sha256。
+4. **E4 安裝到乾淨容器**：`run_package_container.sh install-strace` exit 0；`install-trace` PASS；`static --manifest` PASS；容器內 `--verify` exit 0；除 MANIFEST 外與 `$R/tree` 逐位元組相同。
+
+**負控制**：
+
+| # | 操作 | 必須的結果 |
+|:--|:--|:--|
+| N1 | tree 的副本：`licenses/terms/cuda_eula_13.0.2.txt` 加一行 | `static` 的 `licenses` FAIL；`license_audit.py check --licenses <副本>` 的 `supplied_texts` FAIL |
+| N2 | tree 的副本：刪掉 `licenses/libgomp/SOURCE.txt` | `static` 的 `layout_exact` FAIL |
+| N3 | repo root 的最小副本（只有安裝需要的檔），其中 `shipping/licenses/libgomp/COPYING3` 被改，以 `cmake -P install_third_party.cmake` 安裝 | exit 非 0，訊息含 `sha256`，`licenses/libgomp/COPYING3` 沒有寫出 |
+| N4 | `check --srpm` 改給 binary package | `corresponding_source` FAIL（source package 的 sha256／大小不符） |
+| N5 | 稽核副本：`distribution.status` 改為 `public`（open items 仍為 OPEN） | `coverage` FAIL（`while items are OPEN`） |
+
+**不做的**：GPU、parity、FPS；release key；source package 的公開 mirror；任何散佈；任何 open item 的關閉。
+
+### 22.4 驗收
+
+同一台機器，沒有 GPU 步驟。head `664208d1`＝§22.1–§22.3 的契約 commit `048034ec` 加上 republish（stacked，契約早於任何量測），工作樹乾淨。第一次執行在 E1 安裝途中中斷（主機磁碟滿，session 結束）；清掉該次的部分產物後，同一個 head 從頭重跑，以下是重跑的結果。判定由 `evaluate.py` 從產物讀出（`evaluation.json` sha256 `645940a1…`）。
+
+| 項目 | 結果 |
+|:--|:--|
+| V1 | 工作樹乾淨；`--mode attested` exit 0（implementation `8e758b23…`） |
+| V2 | operator library `aa84cccd…`＝attestation；entrypoint `92f74ef4…`＝pin |
+| V3 | `git diff 54be85ad HEAD -- shipping` 只有契約列出的檔案（12 個）；`install.sh` 對 `9217ed92` 沒有 diff |
+| E1 | `cmake --install` exit 0；`static` 12 項 PASS；64 個檔案。與 #546 的 tree 相比，只有 `README.txt`、`licenses/THIRD_PARTY.md` 的 sha256 不同，多出的恰好是 7 份 supplied texts |
+| E2 | `license_audit.py check` exit 0：`coverage`、`bundled_texts`、`supplied_texts`、`downstream_basis`、`official_terms`、`corresponding_source`、`notice` 七項 PASS，`complete: true`，`distribution`＝`local-only` |
+| E3 | builder exit 0；`tarball` 七項 PASS，`authentication`＝`none`／`publisher_authenticated: false`；安裝器 `afa5d06a…`（＝PR-C3）；tarball `3e7f0c5c…`；MANIFEST 的 `files` 等於 tree（64 個），`licenses.sha256`＝`1e884f44…`＝`shipping/license_audit.json`，`licenses.distribution`＝`local-only` |
+| E4 | 乾淨容器安裝 exit 0；`install-trace` 5 項 PASS；`static --manifest` 13 項 PASS；容器內 `--verify` exit 0（`64 files match`）；除 MANIFEST 外與 tree 逐位元組相同 |
+| **verdict** | **`PASS`** |
+
+**負控制**（`negctl/`）：
+
+| # | 結果 |
+|:--|:--|
+| N1 | `static` 的 `licenses` FAIL（`licenses/terms/cuda_eula_13.0.2.txt`）；稽核的 `supplied_texts` FAIL（`tree: … is not sha256 1762c8a0…`） |
+| N2 | `layout_exact` FAIL（missing `licenses/libgomp/SOURCE.txt`） |
+| N3 | `cmake -P install_third_party.cmake` exit 1（`CMake Error … COPYING3 sha256 … != …`）；`licenses/libgomp/COPYING3` 沒有寫出 |
+| N4 | `corresponding_source` FAIL（`source package is not sha256 c94dbbd2… / 65715094 bytes`） |
+| N5 | `coverage` FAIL（`distribution 'public' while items are OPEN`） |
+
+**這個 PASS 只表示**：補上的文本與證據都在 package 裡，而且可以重新驗證。**它不表示任何授權項目已經滿足。** L-1～L-4 與 M-1 全部仍是 OPEN。
+
+結果目錄：`results/547_licence/full_664208d1/`（`run.sh`、`evaluate.py`、`evaluation.json`、`tree/`、`dist/`、`install/`、`installed/`、`negctl/`、各 log）；republish 的捕捉在 `results/547_licence/republish/`；libgomp 的下載、repository metadata 與比對在 `results/547_l3_gomp/20261008/`；L-4 稽核在 `results/547_l4_audit/20261008T125352Z/`。以上都不納入版本控制。
+
+### 22.5 限制
+
+- **不是法律意見。** 三層紀錄中，`licence_interpretation` 只是條款文字的讀法；`legal_uncertainty` 是未解的問題，不是風險評估。
+- **libgomp 的對應關係是比對出來的，不是重建出來的。** source package 沒有被重新 build。AlmaLinux 簽章 key 的指紋沒有經獨立管道核對。
+- **source package 還沒有公開 mirror。** 規則已寫定（`corresponding_source.mirror`），位置取決於 owner 的發布決定。
+- **官方條款的文本是 2026-10-08 的 snapshot。** `terms_text` 抽取的是 article body 的文字，不保留原頁面的版面（表格一格一行）。cuSPARSELt 的官方頁沒有版本（PR-C4 的 risk 沿用）。
+- **下游條款只是草稿**，不在 package 裡、不生效；條文的措辭與是否「at least as restrictive」需要 owner 與法律意見。
+- **M-1（模型）只做了紀錄**，沒有稽核：權重血統與訓練資料的條款都沒有結論。
+- 其餘同 §20.6、§21.5。
+
+### 22.6 重現
+
+```bash
+.venv/bin/python scripts/native/license_audit.py render --check
+.venv/bin/python scripts/native/license_audit.py check --licenses <tree>/licenses \
+    --sources results/465_prc4_license/sources_20261008 \
+    --gomp-rpm <libgomp-8.5.0-28.el8_10.alma.1.x86_64.rpm> --srpm <gcc-8.5.0-28.el8_10.alma.1.src.rpm> --report audit.json
+bash results/547_licence/<label>/run.sh && .venv/bin/python results/547_licence/<label>/evaluate.py
+```
+
+兩個 package 的取得位置與 sha256 見 `shipping/license_audit.json` 的 `corresponding_source`。
+
+### 22.7 Review 修正（#552 的合併前審查，2026-10-09）
+
+審查沒有發現 P0／P1；以下四項照審查處理。本節不改 §22.4 的判定。
+
+| # | 審查項目 | 修正 |
+|:--|:--|:--|
+| R-1 | `check_corresponding` 比對 `identical_sections` 時只看 sha256 與位址；`SHT_NOBITS`（`.bss`、`.tbss`）沒有位元組，sha256 恆為空字串的值，改了 size 也比不出來 | 一併比對 `size`。負控制：把 shipped 物件的 `.bss` section header 的 size 加 64，必須得到 `section .bss differs`（`test_corresponding_source_on_the_real_packages`）。整檔 sha256 pin 本來就擋得住改過的物件，所以這不是封裝完整性的繞過，而是對應關係檢查自己的缺口 |
+| R-2 | `supplied_texts` 只限制 package 內的 `file`，沒有限制來源 `repo_file`；安裝的 cmake 直接讀 `${SACCADE_REPO_ROOT}/${repo_file}` | checker 與 `install_third_party.cmake` 都要求 `repo_file == "shipping/" + file`，`file` 的最後一段不得是 `.`／`..`。負控制：`../../outside/…`、`docs/…`、`licenses/terms/..` 都被 `coverage` 拒絕；cmake 對逸出的 `repo_file` 以 FATAL_ERROR 中止（§22.8 N6） |
+| R-3 | `check_open_items` 只在有 OPEN 項目時才檢查散佈狀態；全部改為 CLOSED 後，沒有 `owner_confirmation` 也不會失敗 | 新增 `check_public_gate`：`distribution.status` 不是 `local-only` 就要求 `owner_confirmation`、每一項 CLOSED、每個 corresponding source 的 `mirror.status`＝`published`、`downstream_terms.status`＝`adopted`。這個 gate 與 open items 無關：全部 CLOSED 但仍是 `local-only` 是允許的，關閉項目本身不打開散佈。CLOSED 的項目必須帶非空的 `owner_conclusion`（工具不會寫它）。`downstream_terms` 只有在非 local-only 時才可以是 `adopted`。簽章：`check_shipping_package.py tarball` 對 MANIFEST `licenses.distribution` 不是 `local-only` 而沒帶 `--pubkey` 的 package 判 `metadata` FAIL（closeout §1 D2）。沒有 `licenses` 鍵的 MANIFEST（PR-C4 之前）視為 local-only |
+| R-4 | 正式 run 的 head `664208d1` 不在任何推上去的 branch（chore branch 之後 rebase 到 §22.4 的 docs commit 上），產物在不納入版本控制的 `results/` | `docs/reference/native_runtime_licence_evidence_547.json` 記錄完整的 commit／tree（`664208d1b722…`／`540c6a14…`）、與 rebase 後 head（`91a7e61d`，tree `109dc801…`）的差異（只有本文件 §22.4–§22.6 的 51 行）、`evaluation.json`、50 個產物的 sha256（大 tree 以 `e1_tree.sha256` 間接涵蓋）、release 檔案的 sha256，以及外部輸入（條款 snapshot、兩個 RPM）的 URL 與 sha256 和重新檢查的步驟。這仍是單機的本機驗收，沒有獨立重播 |
+
+另外：#547 的 checklist 加上 M-1（model root 的授權）作為公開發行的 blocker。
+
+`install_third_party.cmake` 是 implementation 軸的輸入，所以 R-2 又要一次 republish（stacked PR）。其餘修改在 `scripts/native/`、`tests/`、`docs/`，不在軸上。
+
+### 22.8 Review 修正的重播契約（量測之前寫定）
+
+在 republish 之後的乾淨 head 上，結果目錄 `results/547_licence/review_<commit>/`：
+
+- **V**：工作樹乾淨；`--mode attested` exit 0；`git diff bcd6f833 HEAD -- shipping` 只動 `shipping/cmake/install_third_party.cmake`。
+- **R1 tree**：`cmake --install build-release --component shipping` 到 `$R/tree`，`static` 12 項 PASS，每個檔案的 sha256 與正式 run 的 `e1_tree.sha256` 相同（64 個，沒有差異）。
+- **R2 稽核**：`license_audit.py check --licenses $R/tree/licenses --sources … --gomp-rpm … --srpm …` exit 0，七項 PASS，`complete: true`。
+- **N6**：最小 repo root 副本，稽核中 `licenses/libgomp/COPYING3` 的 `repo_file` 改為 `../outside/COPYING3`（該處放一份正確 sha256 的檔案），以 `cmake -P install_third_party.cmake` 安裝 ⇒ exit 非 0，訊息含 `not shipping/licenses/libgomp/COPYING3`，`licenses/libgomp/COPYING3` 沒有寫出。
+- **N7–N9**（單元測試，在同一 head 上跑）：`.bss` size 改變 ⇒ `section .bss differs`；全部 CLOSED 且 `public` 但沒有 `owner_confirmation` ⇒ `coverage` FAIL；非 local-only 的 MANIFEST 不帶 `--pubkey` ⇒ `metadata` FAIL。
+
+package 的 E3／E4 不重跑：builder、安裝器與安裝出的 tree 都沒有變（R1 檢查 tree 逐位元組相同）；`tarball` 只多了一條只在非 local-only 時生效的規則（N9）。
+
+### 22.9 Review 修正的重播結果
+
+head `cec6af39`＝review 修正 `16104f4e` 加上 republish（implementation `8e758b23…` → `3d85835c…`，只有 `install_third_party.cmake` 改了；probe `2dabed0b` 不變），工作樹乾淨，沒有 GPU 步驟。結果目錄 `results/547_licence/review_cec6af39/`（不納入版本控制）。
+
+| 項目 | 結果 |
+|:--|:--|
+| V | 工作樹乾淨；`--mode attested` exit 0；`git diff bcd6f833 HEAD -- shipping` 只有 `shipping/cmake/install_third_party.cmake` |
+| R1 | `cmake --install` exit 0；`static` 12 項 PASS；`r1_tree.sha256` 與正式 run 的 `e1_tree.sha256` 逐位元組相同（64 個檔案） |
+| R2 | `license_audit.py check` 七項 PASS，`complete: true` |
+| N6 | `cmake -P` exit 1：`supplied text licenses/libgomp/COPYING3 has repo_file ../outside/COPYING3, not shipping/licenses/libgomp/COPYING3`；`licenses/libgomp/COPYING3` 沒有寫出；`coverage` 也 FAIL（`repo_file '../outside/COPYING3' is not shipping/licenses/libgomp/COPYING3`） |
+| N7–N9 | 指定的單元測試 27 個 PASS（`.bss` size、`repo_file` 與 `..`、CLOSED 沒有結論、全部 CLOSED 的 public gate、非 local-only 的 package 必須簽章；local-only 與沒有 `licenses` 鍵的 package 可以不簽） |
+| **verdict** | **`PASS`** |
+
+所有 open item 仍是 OPEN，`distribution.status` 仍是 `local-only`。
+
+`r1_tree.sha256` 與 `e1_tree.sha256` 相同，所以 `cec6af39` 是可由 GitHub 取得的重新檢查 anchor。`native_runtime_licence_evidence_547.json` 的 `recheck.anchors` 分三層：`664208d1` 只作紀錄（不在任何推上去的 branch）；`91a7e61d` 是可取得的對應版本（只差本文件 §22.4–§22.6，不安裝）；`cec6af39` 是修正後的重播 anchor（`review_replay` 記錄其 commit、tree 與產物 sha256）。仍是同一台機器的重播，不是獨立重播。

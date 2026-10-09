@@ -1,0 +1,54 @@
+GNU libgomp: corresponding source
+=================================
+
+lib/vendor/libgomp.so.1 is GNU libgomp. It is licensed under the GNU General
+Public License, version 3 or later (COPYING3), with the GCC Runtime Library
+Exception, version 3.1 (COPYING.RUNTIME). Both files are in this directory,
+copied from the source package named below.
+
+
+Origin of the object
+--------------------
+
+The file is the libgomp.so.1 that the PyTorch 2.11.0 wheel (torch-2.11.0)
+carries. Saccade copies it from the wheel unchanged.
+
+Its code and data are those of AlmaLinux 8's binary package
+libgomp-8.5.0-28.el8_10.alma.1.x86_64.rpm (/usr/lib64/libgomp.so.1.0.0):
+
+  - The build ID is the same: 2244452c1de4759ccb52adc5352b501d4c2ee9ce.
+  - Every section other than the dynamic-linking tables is byte for byte the
+    same.
+
+The wheel's build added a DT_RPATH entry ($ORIGIN/../../nvidia/...). That
+rewrote .dynamic and .dynstr, and renumbered the section indices in .dynsym.
+
+
+Corresponding source
+--------------------
+
+The source package of that binary package (the SOURCERPM field of its RPM
+header) is:
+
+  gcc-8.5.0-28.el8_10.alma.1.src.rpm
+  sha256 c94dbbd2cd6d5d01a5a6822ea18f8ce34942c25a80e17b4682d547d5e652dbd0
+  65715094 bytes
+
+It contains the GCC 8.5.0 source (gcc-8.5.0-20210514.tar.xz), AlmaLinux's
+patches and the build recipe (gcc.spec).
+
+
+Where to get it
+---------------
+
+- From the same place as this package. A public release of Saccade publishes
+  the source package above next to the package.
+- From AlmaLinux:
+  https://vault.almalinux.org/8.10/BaseOS/Source/Packages/gcc-8.5.0-28.el8_10.alma.1.src.rpm
+
+Check a copy against the sha256 above:
+
+  sha256sum gcc-8.5.0-28.el8_10.alma.1.src.rpm
+
+This package is local-only: it has not been released publicly, and no copy
+of the source package has been published next to it yet.

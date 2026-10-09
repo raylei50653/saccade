@@ -143,6 +143,17 @@ def test_expected_files_cover_the_bundle() -> None:
     assert sum(f.startswith("lib/vendor/") for f in files) == 27
     assert "share/saccade/build/libsaccade_scan_torchop.so" in files
     assert "licenses/THIRD_PARTY.md" in files
+    # #547: the licence texts the package supplies itself
+    assert {
+        "licenses/terms/cuda_eula_13.0.2.txt",
+        "licenses/terms/nvshmem_sla_3.4.5.txt",
+        "licenses/terms/cudnn_sla_9.19.0.txt",
+        "licenses/terms/tensorrt_sla_10.16.1.txt",
+        "licenses/libgomp/COPYING3",
+        "licenses/libgomp/COPYING.RUNTIME",
+        "licenses/libgomp/SOURCE.txt",
+    } <= files
+    assert not any(f.startswith("shipping/") for f in files)
 
 
 def _elf(

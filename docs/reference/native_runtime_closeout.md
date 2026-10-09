@@ -127,6 +127,8 @@ PR-12 r1（`full_c44dd876/`，INVALID）、PR-C4 r1（`full_bfd086c7/`，FAIL）
 
 **不從任何一項推出可以再散佈**：授權檔 sha256 相同不代表授權相同，稽核也不是法律意見。
 
+> **#547 進度（2026-10-08）**：L-1～L-3 的文本與來源證據已補，L-4 已逐項稽核，另新增 M-1（model root 的授權，含 YOLO26 的 AGPL 血統），見 [resolved config](native_runtime_resolved_config.md) §22 與 `shipping/license_audit.json` 的 `open_items`。**全部仍為 OPEN**；`distribution.status` 仍是 `local-only`，`owner_confirmation` 仍是 null。
+
 ### 6.2 簽章
 
 - release 公鑰 `shipping/package/minisign.pub` 還不存在。owner 產生，另以 PR 加入（§20.1 的 key 管理）。

@@ -7,6 +7,10 @@
 # here, not at the first run. Each wheel's license files go to
 # licenses/<wheel>/ (hash-checked too), with THIRD_PARTY.md (the object ->
 # license table) and Saccade's own LICENSE / NOTICE under licenses/saccade/.
+# The licence texts the package supplies itself (#547: version-matched official
+# terms under licenses/terms/, GNU libgomp's licence and source directions
+# under licenses/libgomp/) come from shipping/licenses/, each checked against
+# the sha256 shipping/license_audit.json records (supplied_texts).
 # README.txt (requirements, verify / install / run, named limits; PR-C4) goes
 # to the top of the tree.
 foreach(_v SACCADE_REPO_ROOT SACCADE_PREFIX_DEST SACCADE_THIRD_PARTY_SET
@@ -22,7 +26,7 @@ function(_saccade_install_checked src dst want)
     endif()
     file(SHA256 "${src}" _got)
     if(NOT _got STREQUAL want)
-        message(FATAL_ERROR "shipping bundle: ${src} sha256 ${_got} != ${want} (shipping/third_party_set.json)")
+        message(FATAL_ERROR "shipping bundle: ${src} sha256 ${_got} != ${want} (shipping/third_party_set.json or shipping/license_audit.json)")
     endif()
     get_filename_component(_dir "${dst}" DIRECTORY)
     file(MAKE_DIRECTORY "${_dir}")
@@ -62,6 +66,28 @@ foreach(_i RANGE ${_last})
                 "${SACCADE_PREFIX_DEST}/licenses/${_wheel}/${_lname}" "${_lsha}")
         endforeach()
     endif()
+endforeach()
+
+file(READ "${SACCADE_REPO_ROOT}/shipping/license_audit.json" _audit)
+string(JSON _schema GET "${_audit}" schema)
+if(NOT _schema STREQUAL "saccade.shipping_license_audit/v2")
+    message(FATAL_ERROR "shipping bundle: shipping/license_audit.json has schema ${_schema}")
+endif()
+string(JSON _nt LENGTH "${_audit}" supplied_texts)
+math(EXPR _lastt "${_nt} - 1")
+foreach(_i RANGE ${_lastt})
+    string(JSON _tfile GET "${_audit}" supplied_texts ${_i} file)
+    string(JSON _trepo GET "${_audit}" supplied_texts ${_i} repo_file)
+    string(JSON _tsha GET "${_audit}" supplied_texts ${_i} sha256)
+    if(NOT _tfile MATCHES "^licenses/(terms|libgomp)/[^/]+$" OR _tfile MATCHES "/\\.\\.?$")
+        message(FATAL_ERROR "shipping bundle: supplied text ${_tfile} is outside licenses/terms/ and licenses/libgomp/")
+    endif()
+    # The source is the versioned copy under shipping/, at the same relative
+    # path; nothing else in (or outside) the repository is read.
+    if(NOT _trepo STREQUAL "shipping/${_tfile}")
+        message(FATAL_ERROR "shipping bundle: supplied text ${_tfile} has repo_file ${_trepo}, not shipping/${_tfile}")
+    endif()
+    _saccade_install_checked("${SACCADE_REPO_ROOT}/${_trepo}" "${SACCADE_PREFIX_DEST}/${_tfile}" "${_tsha}")
 endforeach()
 
 file(MAKE_DIRECTORY "${SACCADE_PREFIX_DEST}/licenses/saccade")
