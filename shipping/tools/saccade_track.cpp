@@ -14,11 +14,13 @@
 // read.
 //
 // Exit 0: every sequence written and the journal's state=complete written;
-// 2: any error (message on stderr; a refused argument, config or input stops
-// before or at that sequence; an argument that is not listed below is refused
-// before any file is read). Once the arguments parse, stderr's first line is
-// "saccade_track: run_id <id>"; the run id names this run in
-// <out>/saccade_track.journal.json and the report. --out is exclusive: a
+// 2: any error (message on stderr; an argument that is not listed below is
+// refused before any file is read; a refused config, lineage, attestation,
+// model file, sequence input or output directory stops in Gate A, before any
+// CUDA call; a frame the decoder refuses stops at that sequence). Once the
+// arguments parse, stderr's first line is "saccade_track: run_id <id>"; the
+// run id names this run in <out>/saccade_track.journal.json and the report;
+// "saccade_track: preflight passed" follows when Gate A passes. --out is exclusive: a
 // second run on the same <out> exits 2 and changes nothing. A run removes its
 // own sequences' earlier <out>/<sequence>.txt, trace files and the --report
 // file before it starts, so a failed rerun leaves none of them; keep earlier
@@ -39,6 +41,7 @@
 #include <exception>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "saccade_shipping/double_buffer_runtime.hpp"
 #include "saccade_shipping/serial_runtime.hpp"
@@ -72,13 +75,14 @@ track::Options parse_args(int argc, char** argv) {
 }
 
 int run(const track::Options& opt, sh::RunCompletion& completion) {
-    const sh::ResolvedShippingConfig cfg = sh::load_resolved_shipping_config_file(opt.config);
-    const sh::DetectorInputs inputs{opt.lineage, opt.attestation};
-    if (sh::select_schedule(cfg, /*serial_requested=*/false) == sh::Schedule::Serial) {
-        sh::SerialRuntime rt(cfg, inputs, opt.model_root);
+    // Gate A (track_driver.hpp): no CUDA call happens before it returns.
+    sh::PreflightResult pre =
+        track::preflight(opt, "saccade_track", completion, 0, /*serial_requested=*/false);
+    if (pre.schedule == sh::Schedule::Serial) {
+        sh::SerialRuntime rt(pre.config, std::move(pre.detector), opt.model_root);
         return track::run_sequences(rt, opt, completion, "saccade_track", "serial", 0, nullptr);
     }
-    sh::DoubleBufferRuntime rt(cfg, inputs, opt.model_root);
+    sh::DoubleBufferRuntime rt(pre.config, std::move(pre.detector), opt.model_root);
     return track::run_sequences(rt, opt, completion, "saccade_track", "double_buffer", 0, nullptr);
 }
 

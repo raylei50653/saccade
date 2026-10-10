@@ -71,6 +71,11 @@ public:
     // sequence runs. Model paths are resolved against `model_root`.
     DoubleBufferRuntime(const ResolvedShippingConfig& cfg, const DetectorInputs& detector_inputs,
                         const std::string& model_root);
+    // The same, from a detector plan already made from the lineage and the
+    // attestation (Gate A, preflight.hpp): the files Gate A hashed are the
+    // ones loaded, without reading the lineage again.
+    DoubleBufferRuntime(const ResolvedShippingConfig& cfg, DetectorPlan detector_plan,
+                        const std::string& model_root);
     ~DoubleBufferRuntime();
     DoubleBufferRuntime(const DoubleBufferRuntime&) = delete;
     DoubleBufferRuntime& operator=(const DoubleBufferRuntime&) = delete;

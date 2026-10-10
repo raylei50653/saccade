@@ -95,9 +95,13 @@ struct SerialRuntime::DeviceDetections {
 
 SerialRuntime::SerialRuntime(const ResolvedShippingConfig& cfg,
                              const DetectorInputs& detector_inputs, const std::string& model_root)
+    : SerialRuntime(cfg, plan_detector_files(cfg, detector_inputs), model_root) {}
+
+SerialRuntime::SerialRuntime(const ResolvedShippingConfig& cfg, DetectorPlan detector_plan,
+                             const std::string& model_root)
     : cfg_(cfg),
       ingest_plan_(plan_ingest(cfg)),
-      detector_plan_(plan_detector_files(cfg, detector_inputs)),
+      detector_plan_(std::move(detector_plan)),
       output_plan_(plan_sequence_output(cfg)) {
     if (!output_plan_.write_output) {
         throw ConfigError("the config writes no MOT output (steps.tail.write_output)");

@@ -26,6 +26,13 @@
 // that fails therefore leaves no earlier output of its sequences: keep those
 // with another --out. --report / --trace outside <out> are not under the lock:
 // a report or trace counts only when the journal records its sha256.
+//
+// Gate A (#536 CC-536-01-02 N-T2, saccade_shipping/preflight.hpp): after
+// <out> is taken and before any runtime is built (the first CUDA API call),
+// the config and its plans, the lineage and attestation, every sequence's
+// seqinfo.ini and img1 listing, the output directories and the three model
+// files' sha256 are checked; a failure exits 2 with the journal failed and
+// no CUDA call. Passing prints "<entrypoint>: preflight passed" to stderr.
 #pragma once
 
 #include <cstdint>
@@ -40,6 +47,7 @@
 #include <string>
 #include <vector>
 
+#include "saccade_shipping/preflight.hpp"
 #include "saccade_shipping/run_completion.hpp"
 #include "saccade_shipping/serial_runtime.hpp"
 #include "saccade_shipping/sha256.hpp"
@@ -101,6 +109,19 @@ inline void begin_run(const Options& o, const char* entrypoint, std::optional<Ru
     RunOutputs outputs{o.out, o.report, o.trace, {}};
     for (const std::string& s : o.sequences) outputs.sequences.push_back(sequence_name(s));
     completion.emplace(run_id, entrypoint, std::move(outputs));
+}
+
+// Gate A, right after begin_run; the runtime is built from what it returns.
+// `max_frames` and `serial_requested` are the developer build's (0 / false in
+// saccade_track).
+inline PreflightResult preflight(const Options& o, const char* entrypoint, const RunCompletion& completion,
+                                 int max_frames, bool serial_requested) {
+    PreflightResult p = run_preflight(
+        PreflightInputs{o.config, o.lineage, o.attestation, o.model_root, o.sequences, max_frames,
+                        serial_requested},
+        completion);
+    std::cerr << entrypoint << ": preflight passed" << std::endl;
+    return p;
 }
 
 class DetectorTrace : public FrameObserver {

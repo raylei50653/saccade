@@ -78,6 +78,13 @@ public:
 
     const std::string& run_id() const { return run_id_; }
 
+    // Gate A's output check (preflight.hpp): in every directory this run
+    // publishes into -- `<out>`, the --report file's directory (which must
+    // exist; it is not created), each `<trace>/<seq>/` (created, as run()
+    // does) -- a probe file `.saccade_track.preflight.<run_id>.tmp` is created
+    // and removed. Throws when one cannot be.
+    void check_writable() const;
+
     // Sequence i in order: `sequence(i, trace_tmp)` computes it, writing its
     // trace to trace_tmp when the run has --trace (empty path otherwise), and
     // returns its MOT text; each is committed before the next starts. Then,

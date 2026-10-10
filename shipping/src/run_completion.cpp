@@ -169,6 +169,29 @@ RunCompletion::RunCompletion(std::string run_id, std::string entrypoint, RunOutp
     }
 }
 
+void RunCompletion::check_writable() const {
+    std::vector<fs::path> dirs{out_};
+    if (!report_.empty()) {
+        const fs::path dir = report_.parent_path().empty() ? fs::path(".") : report_.parent_path();
+        if (!fs::is_directory(dir)) {
+            throw std::runtime_error("the directory of --report " + report_.string() + " does not exist");
+        }
+        dirs.push_back(dir);
+    }
+    for (const Sequence& s : sequences_) {
+        if (s.trace.empty()) continue;
+        fs::create_directories(s.trace.parent_path());
+        dirs.push_back(s.trace.parent_path());
+    }
+    for (const fs::path& dir : dirs) {
+        const fs::path probe = dir / (".saccade_track.preflight." + run_id_ + ".tmp");
+        const int fd = ::open(probe.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0666);
+        if (fd < 0) fail_errno("cannot write in " + dir.string() + " (" + probe.filename().string() + ")");
+        ::close(fd);
+        if (::unlink(probe.c_str()) != 0) fail_errno("cannot remove " + probe.string());
+    }
+}
+
 RunCompletion::~RunCompletion() {
     if (lock_fd_ >= 0) ::close(lock_fd_);  // releases the flock
 }
