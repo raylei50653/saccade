@@ -63,12 +63,42 @@ installer／launcher／auditor 未改，歷史安裝器與 loader 負控制不�
 
 ## 3. 重播入口與證據
 
-本機 runner 保留在 `results/536_package_repin/run.sh`，Completion GPU controls 在
-`results/536_package_repin/completion_controls.py`；正式 run 使用獨立的 `full_<commit>/`
-目錄。run 前先檢查 runner，並把 SHA-256 留在 raw 證據中；runner 不在 CI 執行。
-package／GPU run 尚未執行；結果與 retained manifest 將在本節回寫。
-raw build logs 保留在 `results/536_package_repin/pin_{configure,build,install}.log`。
-CI 的 CPU checks 與本機的 installed-package／GPU evidence 分開認定。
+正式 run 在乾淨的 `b24c27f8e37bcc6fe85706007ed813b3c7d07448` 執行，raw 證據保留於
+`results/536_package_repin/full_b24c27f/`；入口 pin 與 operator hashes 前後不變，
+執行前後工作樹乾淨。全數 gate 通過，詳見版本控制的
+[evidence JSON](native_runtime_package_repin_536.evidence.json)。這是本機 package 驗證，
+不是 CI 跑到 GPU、一般主機驗收、身份來源認證或公開發行批准。
+
+| Gate | 已核對的結果 |
+|:--|:--|
+| Package | static 12/12、tarball 7/7；unsigned／local-only；同一 tree／commit 第二次產生的三個 release 檔案 bytes 相同 |
+| Install | clean Ubuntu 24.04 container 安裝成功；install-trace 5/5、installed static 13/13；`--verify` 成功；64 個檔案逐項與 CMake tree 相同（另有 MANIFEST） |
+| Installed CLI | 10 passed、0 skipped：4 Completion checks、5 Gate A 拒絕與 1 實際觀察到 `cuInit` 的正控制 |
+| Installed Completion GPU | R1 完成、R2 後段壞 JPEG 的失敗重跑、R3 真正第二次 invocation 競爭 lock、R4 真正 SIGKILL 均 PASS；每項有實際 run_id、log、journal 與 reader 判讀，非合成 journal |
+| Oracle | fresh anchor 與 PR-2L `A_L_1` 七個 sequence 相同；fresh serial oracle rows OK |
+| Installed GPU parity | normal 與 traced container run 均 EXACT：detector 5316/5316、MOT 7/7、graph counts 7/7；normal 與 PR-C4 package baseline 的 txt／trace hashes 及 graph counts 相同，traced 與 normal 相同；report v3／complete journal 的 run_id 與 hashes 相符 |
+| Runtime boundary | `-yy` trace 的三項檢查全部 PASS：exec chain、無 Python／Triton open、開啟的第三方集合與 bundle 相符；trace 無 incomplete evidence |
+| CPU 本機補驗 | package／signature／surface／reader pytest 304 passed、coordinate pytest 55 passed、native Completion／preflight protocol ctest 2/2 |
+
+Raw manifest 是 `full_b24c27f/SHA256SUMS`，綁定 1275 個檔案，SHA-256
+`5605664e2272039845b5efccd2ae0155f0a269800021f005eed8cf141e7b3d72`。
+原始 `run.sh`、`completion_controls.py` 與獨立 aggregation `evaluate.py` 的精確副本
+保留於 `results/536_package_repin/harness_b24c27f/`，另有 SHA256SUMS，hash 也寫入
+evidence JSON。這些 runner 為 gitignored 本機產物，沒有提交到 formal head，沒有在
+CI 執行；不是 portable replay。重播需要保留的固定 binary、資料／模型與同類 controlled host。
+pin build logs 在 `results/536_package_repin/pin_{configure,build,install}.log`。
+runtime coordinate 的 implementation axis 只有 pin 這個 member 改變；README 為
+prose-excluded。其餘四軸與 fresh probe 的 behavior digest 未變，probe build witness
+改綁 `build/` 的實際 artifacts，hash 已核對；不宣稱完整 probe object 相同或 equivalence。
+
+重跑 installed CLI controls（使用獨立 temp outputs）：
+
+```bash
+SACCADE_SHIPPING_TEST_PREFIX=results/536_package_repin/full_b24c27f/installed/saccade \
+  .venv/bin/python tools/resctl.py run --wait gpu0 -- \
+  .venv/bin/python -m pytest -q \
+  tests/unit/test_saccade_track_completion_cli.py tests/unit/test_saccade_track_preflight_cli.py
+```
 
 既有 [Completion known limits](../architecture/ship_export_contracts_536.md#cc-536-01-01-status)
 與 [Gate A TOCTOU 邊界](../architecture/ship_export_contracts_536.md#cc-536-01-02-status)
