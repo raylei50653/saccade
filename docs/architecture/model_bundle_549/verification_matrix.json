@@ -1,6 +1,6 @@
 {
   "schema": "saccade.model_bundle_verification_matrix/v1",
-  "status": "proposed",
+  "status": "accepted target (ADR 028 S1 design decision); no row is implemented by the design",
   "reading": "Positive/negative control matrix for #549 S1 (ADR 028). Rows with layer schema/semantic run now against the example files and must fail at their expect_error location/rule (tests/contract/test_model_bundle_contract_549.py). Every other row is a design obligation: 'enforced'/'partial'/'missing' describe the source at the S1 baseline, not a verification of the S1 design.",
   "source_baseline": "46ab79c1785b85f8afbef1d43909f1a7cb2eff23",
   "examples": {
@@ -1091,12 +1091,12 @@
         "G07"
       ],
       "polarity": "negative",
-      "case": "Gate A passes, then Gate B fails a load (or the process is killed during loading)",
+      "case": "Gate A passes, then Gate B fails a load check, or the process ends uncatchably during loading (auditor _exit(127), SIGKILL, abort)",
       "layer": "gate_b",
       "target": null,
       "mutation": null,
       "expect_error": null,
-      "expected": "identity unchanged from Gate A; load_verification is failed (or stays null when killed), never verified; run state failed/running",
+      "expected": "identity unchanged from Gate A and never verified load; catchable failure: load_verification=failed and run state failed; uncatchable end: load_verification may stay null and the journal running (no failed write promised)",
       "current": "missing",
       "existing_enforcement": [],
       "slice": "S2-1",

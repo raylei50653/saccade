@@ -1,4 +1,4 @@
-<!-- doc-status: proposed -->
+<!-- doc-status: accepted -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-10-10 -->
 <!-- doc-module: cross -->
@@ -7,9 +7,21 @@
 
 ## Status
 
-**Proposed**（2026-10-10）。對應 [#549](https://github.com/raylei50653/saccade/issues/549) S1。
+**Accepted — S1 design targets only**（2026-10-10）。對應 [#549](https://github.com/raylei50653/saccade/issues/549) S1；決策內容與邊界見 [S1 設計決策](#decision-549-s1)。
 
-本 ADR 只是設計提案，還沒有實作或驗證。它不批准 S2 實作、模型替換、新 repository、公開發行或 merge。介面契約、fail-closed 規則、G01–G07 處置與控制矩陣放在 [model bundle 契約](../architecture/model_bundle_contract_549.md)，本文不重述。owner 裁決之前，任何段落都不得被引用成 implemented、verified 或 accepted。
+被接受的只是**設計目標**：D1–D4、D6、D7，以及 D5 的安全目標（不含任何實作技術）。沒有任何部分已實作或驗證，不得被引用成 implemented 或 verified。本決策不批准 S2 實作、模型替換、trusted allowlist 的內容、新 repository、公開發行，也不是 merge 授權。介面契約、fail-closed 規則、G01–G07 處置與控制矩陣放在 [model bundle 契約](../architecture/model_bundle_contract_549.md)，本文不重述。
+
+<a id="decision-549-s1"></a>**S1 設計決策（2026-10-10，Asia/Taipei）**：`owner=raylei50653; decision=accepted (design targets only); scope=#549 S1`。Decision source：[#571 owner design decision](https://github.com/raylei50653/saccade/pull/571#issuecomment-6097834145)（權威來源；comment 可編輯，因此具體內容以本段的版本控制紀錄保存）。審查的 PR head 是 `c5de7abe6ea91cca8d8e79080005ee44aa28ba29`（source baseline `46ab79c1`），該 head 的 PR CI 8/8 SUCCESS。review 修正（resolved bindings、Gate A 專屬的 `identity`、Gate B 專屬的 `load_verification`）被接受為**設計**，不是 runtime 行為已實作的證據。
+
+- **D1**：接受 B，model-free runtime 加上另外管理的 **private** model bundle。不授權新 repository、模型替換或散佈；A、C 只是比較，不是被選定的實作。
+- **D2**：接受 TR-1b 作為工程上的 expected identity：release 審查過的 allowlist 列出 bundle manifest 的精確 sha256，allowlist 自己的 hash 釘在 runtime build／entrypoint 層級。caller 控制的 lineage／attestation，以及和模型放在一起的 manifest，都不是獨立的 trust anchor。這**不是**發行者認證、模型權利批准或 benchmark 資格；runtime 驗簽章（TR-2）延後。
+- **D3**：N01、N02、N04、N05、N06 屬於 private model bundle；N03 scan operator 屬於 runtime package，以精確 sha256 和相容性契約綁定。N03 不得被當成違規夾帶的模型檔。
+- **D4**：legacy 模式和 `--model-bundle` 模式互斥；只用一個 `--require-identity {none,checksum_matched,expected_source_verified}` policy。**S2-1** 所有 entrypoint 預設 `none`，維持現行行為。只有在 **S2-3**，有可用的 approved allowlist 並做版本化的 CLI／package 變更時，installed launcher 的預設才改成 `expected_source_verified`。legacy 模式維持明確 opt-in 的較低等級，不繼承已發表的模型性能宣稱。
+- **D5**：**只接受不變式**：在任何 `load_verification.byte_scope=loaded_buffer` 宣稱之前，實際載入的 bytes 必須等於核對過的 bytes。**沒有批准任何實作技術。** sealed-memfd `dlopen` 只是 S2-2 的候選：必須先在**不放寬 auditor** 的前提下，驗證現行 `loader_audit.c` `la_objopen` 的 realpath 限制、N03 RUNPATH、依賴與真實 GPU 行為。operator 做不到這個不變式時，記成明確的殘留風險，不宣稱 `loaded_buffer`。
+- **D6**：manifest 模式下 N06 realization attestation 必填；legacy 模式的既有行為不變。
+- **D7**：v1 允許 `engine_precision: unresolved`，代表明確的未知值，**不是**已驗證的相容性、精度或性能宣稱。資格認定仍需要證據。
+- **狀態與寫入邊界**：Gate A 是不可變 `identity` 唯一的寫入者，`identity` 報告核對過的 bytes 和 expected-source level，不報告載入成功。Gate B 另外擁有 `load_verification`，初值 `null`；只有三個載入與檢查全部成功後才可以寫 `verified`，在完整 qualified 的 S2-2 路徑存在之前 `byte_scope=hashed_before_load`。Gate B 失敗永遠不改 `identity`。可捕捉的 Gate B 失敗會把 `load_verification` 寫成 `failed`；無法捕捉的 loader-auditor `_exit(127)`、SIGKILL 或 abort 可能讓 `load_verification` 維持 `null`（journal 維持 `running`），不承諾寫入 `failed`。F3 known limit 保留，這個區分由之後的實作測試涵蓋。state machine 細節歸 #537。
+- **本決策的邊界（全文唯一陳述，其他段落引用此處）**：只批准 S1 設計目標。不是在任何 head 上 merge #571 的授權，不啟動 S2-1a／S2-1 或其他 runtime／package／CI 工作，不批准 trusted allowlist 中的 N01–N06 內容，不開新 repository，不替換 weights，不公開散佈。#547 維持 `distribution.status=local-only`、`owner_confirmation=null`；權利問題、#535 A3 與 #541 as-built／check 交接各自獨立。#550 的跨 Issue checkpoint 只在 S1 PR merge 且 main 驗證成功後更新。
 
 Source baseline 是 `46ab79c1785b85f8afbef1d43909f1a7cb2eff23`（[#570](https://github.com/raylei50653/saccade/pull/570) 合併 S0 後的 main）。本文的現況描述都是讀原始碼得到的（source-inspected），沒有跑 runtime、GPU 或 package。事實來源只引用、不複製：模型 bytes、producer 與權利未知項見 [S0 inventory](../reference/model_runtime_inventory_549.md)；#536 的節點與邊 ID 見 [S-SHIP／S-EXPORT 總圖](../architecture/ship_export_contracts_536.md#1-總圖)；訓練血統見 [#421 inventory](../research/training/training_lineage_inventory.md)；權利與發行門檻見 [#547](https://github.com/raylei50653/saccade/issues/547) 和 [license audit](../../shipping/license_audit.json)。
 
@@ -63,9 +75,9 @@ flowchart LR
 | caller → process | 只檢查 caller 檔案之間是否一致，以及 bytes 是否等於 caller 宣稱的值 | 期望值本身的來源；config 的 bytes；路徑是否限制在 root 內；hash 之後到載入之前的 TOCTOU |
 | launcher → loader | auditor 只比路徑和名稱（F3） | 不比 bytes |
 
-## 3. 目標架構（提案）
+## 3. 目標架構（accepted design target）
 
-六角框是新的目標節點，虛線是目標邊，ID 前綴 `N-M*`／`L-M*`。`N-T3` 是 #536 已批准的 identity level 節點。本 ADR 提議它的 expected source。
+六角框是新的目標節點，虛線是目標邊，ID 前綴 `N-M*`／`L-M*`。`N-T3` 是 #536 已批准的 identity level 節點。本 ADR 決定它的 expected source（D2，設計目標）。
 
 ```mermaid
 flowchart LR
@@ -128,9 +140,9 @@ flowchart LR
 | 對 #549 目標 | 不達成分離 | 達成邏輯和發行上的分離，模型可以先留在同一個 repository | 達成分離，同時改變模型 |
 | 風險 | 繼續混合發行 | TR-1b 讓每次 bundle approve 都要重建 runtime（見第 7 節） | 品質和時程都未知，而且 #549 明列不立即替換 YOLO26s |
 
-**推薦 B**：B 在不改模型、不改性能宣稱的前提下，讓 runtime 和模型有各自的 identity、MANIFEST 和發行 gate，使 #547 可以分開裁決兩個 channel。C 是 M-1 的選項之一，由 #547 owner 決定，需要時可以接在 B 之後，因為 B 的 bundle 契約本來就允許換模型。**最終裁決保留給 owner。**
+**推薦 B**：B 在不改模型、不改性能宣稱的前提下，讓 runtime 和模型有各自的 identity、MANIFEST 和發行 gate，使 #547 可以分開裁決兩個 channel。C 是 M-1 的選項之一，由 #547 owner 決定，需要時可以接在 B 之後，因為 B 的 bundle 契約本來就允許換模型。owner 已接受 B（[D1](#decision-549-s1)）；C 仍只是比較。
 
-## 6. 提議的決策（待 owner 裁決）
+## 6. 決策選項與推薦（裁決見 [S1 設計決策](#decision-549-s1)）
 
 | ID | 決策 | 推薦 | 其他選項與取捨 |
 |:--|:--|:--|:--|

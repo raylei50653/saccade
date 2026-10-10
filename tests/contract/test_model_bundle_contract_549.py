@@ -1,6 +1,6 @@
 """#549 S1 model-bundle contract draft: schemas, examples and the control matrix agree.
 
-The schemas and the R-01..R-09 rules below are a PROPOSED design (ADR 028); no
+The schemas and the R-01..R-09 rules below are an accepted design target (ADR 028), not implemented; no
 runtime reads them. This test keeps the draft machine-checkable: the example
 manifest is the S0 inventory's N01-N06 bytes, the example allowlist can never
 yield a trusted identity, and every schema/semantic row of the verification

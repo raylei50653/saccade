@@ -1,13 +1,13 @@
-<!-- doc-status: proposed -->
+<!-- doc-status: active -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-10-10 -->
 <!-- doc-module: cross -->
 
 # Model bundle 契約與 G01–G07 處置（#549 S1）
 
-本稿是 [#549](https://github.com/raylei50653/saccade/issues/549) S1 的介面契約，對應 [ADR 028](../decisions/028-model-bundle-runtime-separation.md)。架構圖、信任邊界、責任分工、A／B／C 比較，以及待裁決的 D1–D7，都只放在 ADR 028，本稿只引用。
+本稿是 [#549](https://github.com/raylei50653/saccade/issues/549) S1 的介面契約，對應 [ADR 028](../decisions/028-model-bundle-runtime-separation.md)。架構圖、信任邊界、責任分工、A／B／C 比較，以及 D1–D7 與其裁決，都只放在 ADR 028，本稿只引用。
 
-**狀態**：全文是 `proposed`，只有本段負責記錄狀態。owner 批准之前，本稿描述的介面一律不得寫成 implemented、verified 或 accepted。第 6 節「已存在的 enforcement」一欄記的是 source baseline `46ab79c1785b85f8afbef1d43909f1a7cb2eff23` 讀原始碼的現況，不是對本設計的驗證。跨 Issue 排序只在 [#550](https://github.com/raylei50653/saccade/issues/550)。
+**狀態**：全文是 `accepted target`，依 [ADR 028 S1 設計決策](../decisions/028-model-bundle-runtime-separation.md#decision-549-s1)，只有本段負責記錄狀態；決策的範圍與邊界以該段為準，本稿不重述。D5 只接受安全目標，第 5 節與第 7 節提到的 memfd 等做法都只是候選。**沒有任何介面已實作或驗證**，本稿描述的介面一律不得寫成 implemented 或 verified。第 6 節「已存在的 enforcement」一欄記的是 source baseline `46ab79c1785b85f8afbef1d43909f1a7cb2eff23` 讀原始碼的現況，不是對本設計的驗證。跨 Issue 排序只在 [#550](https://github.com/raylei50653/saccade/issues/550)。
 
 **本稿不擁有的內容**（只引用）：N01–N06 的 bytes、producer、權利未知項歸 [S0 inventory](../reference/model_runtime_inventory_549.md)；identity 輸出欄位和 Gate A／B 的位置歸 [CC-536-01-02](ship_export_contracts_536.md#cc-536-01-02)；狀態轉換語義歸 #537；requirement↔check 對應歸 #541；權利和 channel 歸 [#547](https://github.com/raylei50653/saccade/issues/547)。
 
@@ -103,8 +103,8 @@ level 和 binding 的格式沿用 CC-536-01-02：`null` → `checksum_matched` �
 - **`checksum_matched`**：manifest 通過 schema 和 R-01..R-09，路徑都在 root 內，每個 member 的 size 和 sha256 都相符。
 - **`expected_source_verified`**：在 `checksum_matched` 之上，manifest sha256 是 allowlist 中某筆 `state: approved` 的 entry，而 allowlist 檔的 sha256 等於 entrypoint 建置時記錄的值。此時寫 `identity.expected_source = "runtime_allowlist"`，並記錄 `allowlist_sha256` 和 `bundle_manifest_sha256`。`example`、`revoked` 或沒列在 allowlist 的 manifest，最高只到 `checksum_matched`。
 - **`identity` 只描述 Gate A 檢查過的 bytes**：它是 Gate A 的不可變證據，不描述載入。Gate A 寫完之後，任何 gate 都不再改它，也不在其中預先寫入任何載入保證。
-- <a id="load-verification"></a>**`load_verification`（Gate B 寫入，與 `identity` 分開）**：journal 建立時是 `null`。Gate B **全部**載入（operator、head、engine）與載入檢查都成功之後，才寫入一次 `{status: "verified", byte_scope}`；任何一項失敗寫 `{status: "failed", byte_scope: null}`；被 kill 或 abort 時維持 `null`。`byte_scope` 的值：S2-1 是 `hashed_before_load`（Gate B 在載入前以 [resolved bindings](#resolved-bindings) 重新 hash 過，但 hash 與開檔是兩次）；S2-2 讓**每一個**載入檔都從 hash 過的 bytes 載入並驗證成功之後，才可能是 `loaded_buffer`。只要有一個檔案還是以路徑重新開檔，就不得寫 `loaded_buffer`。legacy 模式一律 `hashed_before_load`。這是對 [CC-536-01-02](ship_export_contracts_536.md#cc-536-01-02) journal／report 的新增欄位提案，不改變它「identity 只由 Gate A 寫入」的規則；欄位格式、report 版本與負控制由實作切片定案，state 轉換語義仍歸 #537。
-- **寫入者**：identity 只由 Gate A 寫入，之後不再改變（沿用 #536 的 State writer 規則）。Gate B 失敗只影響 run state。
+- <a id="load-verification"></a>**`load_verification`（Gate B 寫入，與 `identity` 分開）**：journal 建立時是 `null`。Gate B **全部**載入（operator、head、engine）與載入檢查都成功之後，才寫入一次 `{status: "verified", byte_scope}`；可捕捉的失敗寫 `{status: "failed", byte_scope: null}`。無法捕捉的結束（loader auditor 的 `_exit(127)`、SIGKILL、abort）可能讓 `load_verification` 維持 `null`、journal 維持 `running`，本契約不承諾這些情況會寫入 `failed`；F3 known limit 保留。`byte_scope` 的值：S2-1 是 `hashed_before_load`（Gate B 在載入前以 [resolved bindings](#resolved-bindings) 重新 hash 過，但 hash 與開檔是兩次）；S2-2 讓**每一個**載入檔都從 hash 過的 bytes 載入並驗證成功之後，才可能是 `loaded_buffer`。只要有一個檔案還是以路徑重新開檔，就不得寫 `loaded_buffer`。legacy 模式一律 `hashed_before_load`。這是對 [CC-536-01-02](ship_export_contracts_536.md#cc-536-01-02) journal／report 的新增欄位提案，不改變它「identity 只由 Gate A 寫入」的規則；欄位格式、report 版本與負控制由實作切片定案，state 轉換語義仍歸 #537。
+- **寫入者**：identity 只由 Gate A 寫入，之後不再改變（沿用 #536 的 State writer 規則）。Gate B 失敗永遠不改 identity；可捕捉的 Gate B 失敗會更新 run state（`failed`）**和** `load_verification`（`failed`），無法捕捉的結束見上一項。
 
 ### 4.2 `--lineage`／attestation 可以證明什麼
 

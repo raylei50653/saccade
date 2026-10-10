@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/raylei50653/saccade/blob/main/docs/architecture/model_bundle_549/saccade.trusted_model_bundles.v1.schema.json",
-  "title": "saccade.trusted_model_bundles/v1 (PROPOSED draft, #549 S1)",
-  "description": "Release-side expected identity proposed by ADR 028 (trust root TR-1b): the runtime package carries this file and the entrypoint is built with its sha256, so a caller who can replace a model bundle cannot also replace its expected identity without replacing the pinned entrypoint. Design status: proposed; no runtime reads it. An entry approves engineering identity only; it is not a rights grant (#547).",
+  "title": "saccade.trusted_model_bundles/v1 (accepted design target, #549 S1; not implemented)",
+  "description": "Release-side expected identity of ADR 028 (trust root TR-1b, decision D2): the runtime package carries this file and the entrypoint is built with its sha256, so a caller who can replace a model bundle cannot also replace its expected identity without replacing the pinned entrypoint. Design status: accepted target, not implemented; no runtime reads it. An entry approves engineering identity only; it is not a rights grant (#547).",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "reading", "detector_contract", "entries"],
