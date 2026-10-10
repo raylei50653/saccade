@@ -4,6 +4,7 @@
 
 | 文件 | 內容 |
 |------|------|
+| [model_runtime_inventory_549.md](model_runtime_inventory_549.md) | #549 S0：native unchanged-model freeze 與其他 runtime 模型入口的逐檔 bytes／SHA、producer／consumer、權利路由盤點（[JSON](model_runtime_inventory_549.json)）；非 S1 bundle schema |
 | [native_runtime_package_repin_536.md](native_runtime_package_repin_536.md) | #536 package re-pin：固定 entrypoint bytes、installed Completion／Gate A 控制與正式 package GPU parity 的契約／證據 |
 | [ci_timing_baseline_509.md](ci_timing_baseline_509.md) | #509 前段：remote main/PR CI job/step、cache 與本機 pytest/build 的可追溯耗時基線；不承載跨 Issue 排程 |
 | [saccade_module_reference.md](saccade_module_reference.md) | 模組化前背景筆記：既有能力、封裝與依賴邊界、native delivery、failure semantics 與 public/runtime surface；非設計方案 |

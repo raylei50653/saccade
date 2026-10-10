@@ -1,0 +1,4229 @@
+{
+  "schema": "saccade.model_runtime_inventory_snapshot/v1",
+  "issue": "#549 S0",
+  "source_commit": "b56ad9f4cd4d982fc3f0b293206a32f7c8675332",
+  "capture_date": "2026-10-10",
+  "capture_workspace": "/home/ray/developer/ai/saccade",
+  "reading": "Documentation-only observed-byte inventory, not a model-bundle/loader schema, source authentication, compatibility qualification or rights grant. Source code, configs, models and identity publications unchanged.",
+  "scope": {
+    "native_required_ids": [
+      "N01",
+      "N02",
+      "N03",
+      "N04",
+      "N05",
+      "N06"
+    ],
+    "concrete_selection": "All model-like literals in checked-in configs YAML and named runtime source default registries plus documented loaded-artifact/provenance references and opt-in JSON candidates. Arbitrary caller paths and remote/service selections recorded separately.",
+    "excluded": "Historical full training zoo and every standalone research/comparison script default; #421 owns genealogy. No deserialization, download, model rebuild or GPU parity rerun."
+  },
+  "artifacts": [
+    {
+      "path": "build/libsaccade_scan_plugin.so",
+      "source_refs": [
+        "src/saccade/perception/temporal_yolo/mamba_gated_detector.py:470-504"
+      ],
+      "scope": "python_model_coupled_operator",
+      "id": "A001",
+      "availability": "present",
+      "bytes": 239616,
+      "sha256": "af6171b5b053a50046a7b63b76283b13015041a348968f35986c48ea492b8078",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "CMakeLists.txt",
+        "description": "SelectiveScan TensorRT plugin; current bytes identified, no general ABI claim."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_operator_binary",
+        "audit_item": null,
+        "evidence": [
+          "pyproject.toml:13",
+          "shipping/license_audit.json:1036-1157"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "Project operator source under the repository software licence expression; the binary links third-party runtime libraries whose terms are #547 L-1..L-4 (lib/vendor objects). The operator binary itself is not an audit object. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Optional TRTMambaHead Python TRT plugin; native shipping rejects TRT head and does not consume this plugin."
+      },
+      "compatibility": {
+        "status": "unresolved",
+        "description": "No newly deserialized metadata or GPU execution; source contract only, no expanded support."
+      }
+    },
+    {
+      "path": "build/libsaccade_scan_torchop.so",
+      "source_refs": [
+        "shipping/cmake/install_model_root.cmake:42-66"
+      ],
+      "scope": "native_required",
+      "id": "N03",
+      "availability": "present",
+      "bytes": 3517632,
+      "sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "tool": "CMakeLists.txt:492-515",
+        "source_files": [
+          "src/tracking/mamba_scan_torchop.cpp",
+          "src/tracking/mamba_scan.cu",
+          "include/tracking/mamba_scan.cuh"
+        ],
+        "attestation": "configs/shipping/mamba_head_realization.attestation.json"
+      },
+      "ancestry": {
+        "status": "not_applicable",
+        "description": "Model-coupled native operator, not learned weights."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Native operator."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_operator_binary",
+        "audit_item": null,
+        "evidence": [
+          "pyproject.toml:13",
+          "shipping/license_audit.json:1036-1157"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "Project operator source under the repository software licence expression; the binary links third-party runtime libraries whose terms are #547 L-1..L-4 (lib/vendor objects). The operator binary itself is not an audit object. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "DetectorHost dlopen; registers saccade_native::selective_scan_fwd."
+      },
+      "compatibility": {
+        "status": "recorded_and_source_inspected",
+        "description": "Recorded same-host LibTorch/CUDA operator realization, sm_120 SASS-only, fixed N02 pairing; original lineage op build differs, current realized hash applied. Absolute build RUNPATH is named exception."
+      }
+    },
+    {
+      "path": "configs/presets/mamba_whole_graph.yaml",
+      "source_refs": [
+        "configs/shipping/mamba_whole_graph.resolved.json:4",
+        "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json:11"
+      ],
+      "scope": "reference_only",
+      "id": "A003",
+      "availability": "present",
+      "bytes": 5535,
+      "sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "s.deployment_preset",
+        "edges": [
+          {
+            "relation": "names",
+            "target_path": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+            "target_node": "s.t3t1_phase_b",
+            "target_exists": true,
+            "detail": {
+              "preset_key": "mamba_ckpt"
+            }
+          },
+          {
+            "relation": "names",
+            "target_path": "models/yolo/yolo26s_backbone_640_best.engine",
+            "target_node": null,
+            "target_exists": true,
+            "detail": {
+              "preset_key": "fpn_backbone_engine"
+            }
+          }
+        ],
+        "description": "Headline s preset. Deployment identity = the artifacts this file names.",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "data_root": null,
+        "seqs": null,
+        "holdout_seqs": null,
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "historical_inventory_identity_matches": true,
+      "reference_basis": "Preset named by N04 and N05 as the export source; its hash is a recorded claim."
+    },
+    {
+      "path": "configs/shipping/mamba_head_realization.attestation.json",
+      "source_refs": [
+        "shipping/cmake/install_model_root.cmake:42-66"
+      ],
+      "scope": "native_required",
+      "id": "N06",
+      "availability": "present",
+      "bytes": 4052,
+      "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "tool": "PR-8 realization / PR-10 re-attestation at 44cc91a4",
+        "description": "Metadata used by native and packaging."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata; referenced model/data claims do not add rights."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Strict config/plans or selected lineage/attestation fields; caller-controlled path; no independent publisher authentication."
+      },
+      "compatibility": {
+        "status": "recorded",
+        "schema": "saccade.head_realization_attestation/v1",
+        "description": "Config exhaustive unknown-field checks; lineage/attestation selected-field validation. Attestation optional in direct CLI, required by current package install."
+      }
+    },
+    {
+      "path": "configs/shipping/mamba_whole_graph.resolved.json",
+      "source_refs": [
+        "shipping/cmake/install_model_root.cmake:42-66"
+      ],
+      "scope": "native_required",
+      "id": "N04",
+      "availability": "present",
+      "bytes": 28648,
+      "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "tool": "scripts/model/export_resolved_shipping_config.py",
+        "description": "Metadata used by native and packaging."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata; referenced model/data claims do not add rights."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Strict config/plans or selected lineage/attestation fields; caller-controlled path; no independent publisher authentication."
+      },
+      "compatibility": {
+        "status": "recorded",
+        "schema": "saccade.resolved_shipping_config/v1",
+        "description": "Config exhaustive unknown-field checks; lineage/attestation selected-field validation. Attestation optional in direct CLI, required by current package install."
+      }
+    },
+    {
+      "path": "docs/reference/runtime_identity.generated.json",
+      "source_refs": [
+        "results/536_package_repin/full_b24c27f/installed/saccade/MANIFEST.json:117-127",
+        "docs/reference/runbooks/runtime_identity_republication.md:95"
+      ],
+      "scope": "reference_only",
+      "id": "A006",
+      "availability": "present",
+      "bytes": 36617,
+      "sha256": "171017c356d2e71cf4104a36f5334286de87670793a17c274c0c341271c572a2",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "reference_basis": "Current coordinate publication; byte-equal to the #536 package MANIFEST runtime_identity sha256."
+    },
+    {
+      "path": "docs/reference/runtime_identity/archive/runtime_identity.2026-10-08.1927e740d4267aec.json",
+      "source_refs": [
+        "results/465_prc3_package/full_9217ed92/installed/saccade/MANIFEST.json:117-127"
+      ],
+      "scope": "reference_only",
+      "id": "A007",
+      "availability": "present",
+      "bytes": 35975,
+      "sha256": "8f7638c6b1234d233bd08578be54f5bf0ceeff5d9e2a5adeac1620138e2c97f8",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "reference_basis": "Byte-equal to the C3 package MANIFEST runtime_identity sha256."
+    },
+    {
+      "path": "docs/reference/runtime_identity/archive/runtime_identity.2026-10-08.221cc25330c5422d.json",
+      "source_refs": [
+        "results/465_prc4_release/full_bc75dcab/installed/saccade/MANIFEST.json:117-127"
+      ],
+      "scope": "reference_only",
+      "id": "A008",
+      "availability": "present",
+      "bytes": 36064,
+      "sha256": "feb7a5d538f7d5cc0f187008d1a68da2660ebaee9a112bf345d813608af004a2",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "reference_basis": "Byte-equal to the C4 package MANIFEST runtime_identity sha256."
+    },
+    {
+      "path": "docs/reference/runtime_identity/archive/runtime_identity.2026-10-10.9ef960e0fd1683ee.json",
+      "source_refs": [],
+      "scope": "reference_only",
+      "id": "A009",
+      "availability": "present",
+      "bytes": 36667,
+      "sha256": "0dfac5443eb9ea9ebf4999d08df19fc2445b2a50503f5a76bb18dfe329851476",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "git_refs": [
+        "ea619545",
+        "b24c27f8"
+      ],
+      "reference_basis": "Coordinate published by ea619545 for #536 Gate A and archived by b24c27f8 (implementation axis 9ef960e0 -> 9a0fe01a); no checked-in file names this archive."
+    },
+    {
+      "path": "models/embedding/facebook_dinov2-base.engine",
+      "source_refs": [
+        "src/saccade/perception/feature_extractor.py:13"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A010",
+      "availability": "present",
+      "bytes": 177095964,
+      "sha256": "ffb5a9f8690e434c802d033e79834a275b484337d7f5ece0de5f06ec5438a566",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/export_dinov2.py",
+        "description": "Exact engine-to-ONNX-to-checkpoint build binding absent."
+      },
+      "ancestry": {
+        "status": "source_family_only",
+        "model_id": "facebook/dinov2-base",
+        "description": "No immutable upstream revision/engine build manifest; local MobileNet manifest licence is a metadata claim."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTFeatureExtractor, eval ReID/Cheb-GR or optional app extractor; C++ unavailable -> Python TRT on same path."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "TRTFeatureExtractor float32 crops in [0,1], backend/engine-derived shapes and batch; 224x224, CLS embedding; unpinned HF revision",
+        "evidence": [
+          "src/saccade/perception/feature_extractor.py:83-85",
+          "src/saccade/perception/feature_extractor.py:141-170",
+          "src/saccade/perception/feature_extractor.py:228-259"
+        ]
+      }
+    },
+    {
+      "path": "models/embedding/fastreid_256x128.engine",
+      "source_refs": [
+        "src/saccade/perception/feature_extractor.py:16"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A011",
+      "availability": "unavailable",
+      "bytes": null,
+      "sha256": null,
+      "identity_basis": "no_substitution",
+      "producer": {
+        "status": "unresolved",
+        "tool": null,
+        "description": "Exact engine-to-ONNX-to-checkpoint build binding absent."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "model_id": null,
+        "description": "No immutable upstream revision/engine build manifest; local MobileNet manifest licence is a metadata claim."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTFeatureExtractor, eval ReID/Cheb-GR or optional app extractor; C++ unavailable -> Python TRT on same path."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "TRTFeatureExtractor float32 crops in [0,1], backend/engine-derived shapes and batch; 256x128 filename is not verified engine metadata; default unavailable",
+        "evidence": [
+          "src/saccade/perception/feature_extractor.py:83-85",
+          "src/saccade/perception/feature_extractor.py:141-170",
+          "src/saccade/perception/feature_extractor.py:228-259"
+        ]
+      }
+    },
+    {
+      "path": "models/embedding/google_siglip2-base-patch16-224.engine",
+      "source_refs": [
+        "configs/yolo_config.yaml:16",
+        "src/saccade/perception/feature_extractor.py:11"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A012",
+      "availability": "present",
+      "bytes": 190235364,
+      "sha256": "cf10c831a398a89265b5dabc3df580e11e2e6bc1fa025e8bda28736b0b6b0215",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/export_siglip.py",
+        "description": "Exact engine-to-ONNX-to-checkpoint build binding absent."
+      },
+      "ancestry": {
+        "status": "source_family_only",
+        "model_id": "google/siglip2-base-patch16-224",
+        "description": "No immutable upstream revision/engine build manifest; local MobileNet manifest licence is a metadata claim."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTFeatureExtractor, eval ReID/Cheb-GR or optional app extractor; C++ unavailable -> Python TRT on same path."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "TRTFeatureExtractor float32 crops in [0,1], backend/engine-derived shapes and batch; 224x224, last_hidden_state/image_embeds; unpinned HF revision",
+        "evidence": [
+          "src/saccade/perception/feature_extractor.py:83-85",
+          "src/saccade/perception/feature_extractor.py:141-170",
+          "src/saccade/perception/feature_extractor.py:228-259"
+        ]
+      }
+    },
+    {
+      "path": "models/embedding/marketaju_siglip2_reid_224.engine",
+      "source_refs": [
+        "src/saccade/perception/feature_extractor.py:12"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A013",
+      "availability": "present",
+      "bytes": 189870220,
+      "sha256": "54e76b079361556caaba3281ef1a3b9c8e062b904e36b59443f3fa6a822f2014",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "unresolved",
+        "tool": null,
+        "description": "Exact engine-to-ONNX-to-checkpoint build binding absent."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "model_id": null,
+        "description": "No immutable upstream revision/engine build manifest; local MobileNet manifest licence is a metadata claim."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTFeatureExtractor, eval ReID/Cheb-GR or optional app extractor; C++ unavailable -> Python TRT on same path."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "TRTFeatureExtractor float32 crops in [0,1], backend/engine-derived shapes and batch; SigLIP2-ReID source/engine attribution unresolved; filename does not attest dataset",
+        "evidence": [
+          "src/saccade/perception/feature_extractor.py:83-85",
+          "src/saccade/perception/feature_extractor.py:141-170",
+          "src/saccade/perception/feature_extractor.py:228-259"
+        ]
+      }
+    },
+    {
+      "path": "models/embedding/mobilenetv4_reid_visclean_224.engine",
+      "source_refs": [
+        "configs/modules/reid_mnv4_dynamic.yaml:11",
+        "configs/modules/reid_mnv4_dynamic_guarded.yaml:16",
+        "configs/modules/reid_mnv4_extract.yaml:22",
+        "configs/modules/reid_mnv4_mainline.yaml:13",
+        "configs/modules/reid_mobilenetv4_visclean.yaml:7",
+        "configs/presets/mamba_whole_graph_m_extract_ho_live.yaml:59",
+        "src/saccade/perception/feature_extractor.py:17"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A014",
+      "availability": "present",
+      "bytes": 5525276,
+      "sha256": "a41d627c9188de709a3f463a6b17585eb35a4a64b3447303d7a8689cac2a03a7",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/export_mobilenetv4_reid.py",
+        "description": "Exact engine-to-ONNX-to-checkpoint build binding absent."
+      },
+      "ancestry": {
+        "status": "source_family_only",
+        "model_id": "timm/mobilenetv4_conv_small.e2400_r224_in1k",
+        "description": "No immutable upstream revision/engine build manifest; local MobileNet manifest licence is a metadata claim."
+      },
+      "finetuning_data": {
+        "status": "documented_unbound",
+        "description": "Market1501 + MOT20/DanceTrack/SportsMOT visclean crops; epoch45 selection on MOT17 gap31+. Exact engine/build/data identity and terms unresolved.",
+        "evidence": [
+          "docs/modules/reid/mobilenetv4_integration_options.md:214-241",
+          "scripts/train/finetune_mobilenetv4_reid.py:56-62"
+        ]
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTFeatureExtractor, eval ReID/Cheb-GR or optional app extractor; C++ unavailable -> Python TRT on same path."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "TRTFeatureExtractor float32 crops in [0,1], backend/engine-derived shapes and batch; 224x224 -> image_embeds; GPU-decode variant distinct/unbound",
+        "evidence": [
+          "src/saccade/perception/feature_extractor.py:83-85",
+          "src/saccade/perception/feature_extractor.py:141-170",
+          "src/saccade/perception/feature_extractor.py:228-259"
+        ]
+      }
+    },
+    {
+      "path": "models/embedding/mobilenetv4_reid_visclean_gpu_decode_224.engine",
+      "source_refs": [
+        "configs/modules/online_ho_mnv4_evfifo_live_gpu_decode.yaml:6",
+        "configs/modules/reid_mnv4_extract_gpu_decode.yaml:5"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A015",
+      "availability": "present",
+      "bytes": 5526620,
+      "sha256": "a5d42fbbf5784d923268e34924b7db0aaa3f29f4c1a3e67f8e7f9f092600cc4c",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/export_mobilenetv4_reid.py",
+        "description": "Exact engine-to-ONNX-to-checkpoint build binding absent."
+      },
+      "ancestry": {
+        "status": "source_family_only",
+        "model_id": "timm/mobilenetv4_conv_small.e2400_r224_in1k",
+        "description": "No immutable upstream revision/engine build manifest; local MobileNet manifest licence is a metadata claim."
+      },
+      "finetuning_data": {
+        "status": "documented_unbound",
+        "description": "Market1501 + MOT20/DanceTrack/SportsMOT visclean crops; epoch45 selection on MOT17 gap31+. Exact engine/build/data identity and terms unresolved.",
+        "evidence": [
+          "docs/modules/reid/mobilenetv4_integration_options.md:214-241",
+          "scripts/train/finetune_mobilenetv4_reid.py:56-62"
+        ]
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTFeatureExtractor, eval ReID/Cheb-GR or optional app extractor; C++ unavailable -> Python TRT on same path."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "TRTFeatureExtractor float32 crops in [0,1], backend/engine-derived shapes and batch; 224x224 -> image_embeds; GPU-decode variant distinct/unbound",
+        "evidence": [
+          "src/saccade/perception/feature_extractor.py:83-85",
+          "src/saccade/perception/feature_extractor.py:141-170",
+          "src/saccade/perception/feature_extractor.py:228-259"
+        ]
+      }
+    },
+    {
+      "path": "models/embedding/osnet_x1_0_256x128.engine",
+      "source_refs": [
+        "src/saccade/perception/feature_extractor.py:15"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A016",
+      "availability": "present",
+      "bytes": 5365236,
+      "sha256": "e5f43730debc8cfa3befd30a558a493fb8722736122986b556f7b4013de5f09d",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_osnet.py",
+        "description": "Exact engine-to-ONNX-to-checkpoint build binding absent."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "model_id": null,
+        "description": "No immutable upstream revision/engine build manifest; local MobileNet manifest licence is a metadata claim."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTFeatureExtractor, eval ReID/Cheb-GR or optional app extractor; C++ unavailable -> Python TRT on same path."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "TRTFeatureExtractor float32 crops in [0,1], backend/engine-derived shapes and batch; 256x128 -> embedding; builder input name input, Python consumer assumes pixel_values",
+        "evidence": [
+          "src/saccade/perception/feature_extractor.py:83-85",
+          "src/saccade/perception/feature_extractor.py:141-170",
+          "src/saccade/perception/feature_extractor.py:228-259"
+        ]
+      }
+    },
+    {
+      "path": "models/embedding/transreid_256x128.engine",
+      "source_refs": [
+        "src/saccade/perception/feature_extractor.py:14"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A017",
+      "availability": "present",
+      "bytes": 175688260,
+      "sha256": "2a9df589515050cbbb1034d7ece69e379af2e5d823a402c3fd4f25a813a4e7f7",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/export_transreid.py",
+        "description": "Exact engine-to-ONNX-to-checkpoint build binding absent."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "model_id": null,
+        "description": "No immutable upstream revision/engine build manifest; local MobileNet manifest licence is a metadata claim."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTFeatureExtractor, eval ReID/Cheb-GR or optional app extractor; C++ unavailable -> Python TRT on same path."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "TRTFeatureExtractor float32 crops in [0,1], backend/engine-derived shapes and batch; 256x128 -> embedding; exporter checkpoint optional and unbound",
+        "evidence": [
+          "src/saccade/perception/feature_extractor.py:83-85",
+          "src/saccade/perception/feature_extractor.py:141-170",
+          "src/saccade/perception/feature_extractor.py:228-259"
+        ]
+      }
+    },
+    {
+      "path": "models/external_fp/cascade_config.json",
+      "source_refs": [
+        "src/saccade/perception/eval/external_fp_model.py:1093-1157"
+      ],
+      "scope": "optional_caller_selected",
+      "id": "A018",
+      "availability": "present",
+      "bytes": 302,
+      "sha256": "52ef06c5fa0c489e4d601f00568821480668ede981d39f9070eda84b6834b775",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/eval/appearance/train_cascade_stage2.py",
+        "description": "Exact recipe/data/run identity is not in the weight JSON."
+      },
+      "ancestry": {
+        "status": "source_inspected",
+        "description": "Logistic/rule-cascade JSON; no pretrained ancestor fields."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Docs describe CrowdHuman/yolo26m and MOT17 controls; per-file dataset binding absent."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_learned_policy_json",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-fitted policy coefficients; training-data terms unresolved and no #547 audit item covers them. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Opt-in evaluator/load_logistic_model or apply_cascade_from_json; not shipping."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "JSON logistic/softmax3/banded schema and feature-vector validation; cascade may proceed without nonexistent stage2 model."
+      }
+    },
+    {
+      "path": "models/external_fp/cascade_full_dataset_logistic.json",
+      "source_refs": [
+        "src/saccade/perception/eval/external_fp_model.py:1093-1157"
+      ],
+      "scope": "optional_caller_selected",
+      "id": "A019",
+      "availability": "present",
+      "bytes": 958,
+      "sha256": "59a86a6fd0199dd8042e6992d4962021143e69dc64e9771c3ed67a3cf82c22e7",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/eval/appearance/train_cascade_stage2.py",
+        "description": "Exact recipe/data/run identity is not in the weight JSON."
+      },
+      "ancestry": {
+        "status": "source_inspected",
+        "description": "Logistic/rule-cascade JSON; no pretrained ancestor fields."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Docs describe CrowdHuman/yolo26m and MOT17 controls; per-file dataset binding absent."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_learned_policy_json",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-fitted policy coefficients; training-data terms unresolved and no #547 audit item covers them. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Opt-in evaluator/load_logistic_model or apply_cascade_from_json; not shipping."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "JSON logistic/softmax3/banded schema and feature-vector validation; cascade may proceed without nonexistent stage2 model."
+      }
+    },
+    {
+      "path": "models/external_fp/cascade_mot17_config.json",
+      "source_refs": [
+        "src/saccade/perception/eval/external_fp_model.py:1093-1157"
+      ],
+      "scope": "optional_caller_selected",
+      "id": "A020",
+      "availability": "present",
+      "bytes": 310,
+      "sha256": "9811818d866401ec6a1b44cd683a9a14747057438839dcc679af1aad65dc8a0c",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/eval/appearance/train_cascade_stage2.py",
+        "description": "Exact recipe/data/run identity is not in the weight JSON."
+      },
+      "ancestry": {
+        "status": "source_inspected",
+        "description": "Logistic/rule-cascade JSON; no pretrained ancestor fields."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Docs describe CrowdHuman/yolo26m and MOT17 controls; per-file dataset binding absent."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_learned_policy_json",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-fitted policy coefficients; training-data terms unresolved and no #547 audit item covers them. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Opt-in evaluator/load_logistic_model or apply_cascade_from_json; not shipping."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "JSON logistic/softmax3/banded schema and feature-vector validation; cascade may proceed without nonexistent stage2 model."
+      }
+    },
+    {
+      "path": "models/external_fp/cascade_mot17_stage2_logistic.json",
+      "source_refs": [
+        "src/saccade/perception/eval/external_fp_model.py:1093-1157"
+      ],
+      "scope": "optional_caller_selected",
+      "id": "A021",
+      "availability": "present",
+      "bytes": 956,
+      "sha256": "a172d2a5ecbd588a522440ae5264fe54ac57627d325d07b5a62fee29343b049f",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/eval/appearance/train_cascade_stage2.py",
+        "description": "Exact recipe/data/run identity is not in the weight JSON."
+      },
+      "ancestry": {
+        "status": "source_inspected",
+        "description": "Logistic/rule-cascade JSON; no pretrained ancestor fields."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Docs describe CrowdHuman/yolo26m and MOT17 controls; per-file dataset binding absent."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_learned_policy_json",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-fitted policy coefficients; training-data terms unresolved and no #547 audit item covers them. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Opt-in evaluator/load_logistic_model or apply_cascade_from_json; not shipping."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "JSON logistic/softmax3/banded schema and feature-vector validation; cascade may proceed without nonexistent stage2 model."
+      }
+    },
+    {
+      "path": "models/external_fp/cascade_stage2_logistic.json",
+      "source_refs": [
+        "src/saccade/perception/eval/external_fp_model.py:1093-1157"
+      ],
+      "scope": "optional_caller_selected",
+      "id": "A022",
+      "availability": "present",
+      "bytes": 950,
+      "sha256": "e0f94c4197666330818464cbcb58f4b0686406c8d8199df406cd962ed802fb8c",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/eval/appearance/train_cascade_stage2.py",
+        "description": "Exact recipe/data/run identity is not in the weight JSON."
+      },
+      "ancestry": {
+        "status": "source_inspected",
+        "description": "Logistic/rule-cascade JSON; no pretrained ancestor fields."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Docs describe CrowdHuman/yolo26m and MOT17 controls; per-file dataset binding absent."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_learned_policy_json",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-fitted policy coefficients; training-data terms unresolved and no #547 audit item covers them. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Opt-in evaluator/load_logistic_model or apply_cascade_from_json; not shipping."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "JSON logistic/softmax3/banded schema and feature-vector validation; cascade may proceed without nonexistent stage2 model."
+      }
+    },
+    {
+      "path": "models/mobilenetv4/manifest.json",
+      "source_refs": [
+        "models/mobilenetv4/manifest.json:2-47",
+        "docs/modules/reid/mobilenetv4_integration_options.md:29-39",
+        "scripts/train/finetune_mobilenetv4_reid.py:377-382"
+      ],
+      "scope": "training_or_export_only",
+      "id": "A023",
+      "availability": "present",
+      "bytes": 3239,
+      "sha256": "cd493f42ca140d180384315757d4c29d35bdfbe90eaf39a6868684085b24d158",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "metadata_claim",
+        "description": "Local timm/mobilenetv4_conv_small.e2400_r224_in1k initializer/manifest; no immutable upstream revision/build binding."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "metadata_claim",
+        "description": "ImageNet ancestor family in model identifier; exact upstream data/revision/terms not authenticated."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "not_native_required",
+        "description": "Training initialization/reference; scripts/train/finetune_mobilenetv4_reid.py consumes caller/default --init .pth."
+      },
+      "compatibility": {
+        "status": "metadata_claim",
+        "description": "MobileNetV4 conv-small, input224 and ImageNet normalization metadata; initializer not native loaded."
+      }
+    },
+    {
+      "path": "models/mobilenetv4/mobilenetv4_conv_small.pth",
+      "source_refs": [
+        "models/mobilenetv4/manifest.json:2-47",
+        "docs/modules/reid/mobilenetv4_integration_options.md:29-39",
+        "scripts/train/finetune_mobilenetv4_reid.py:377-382"
+      ],
+      "scope": "training_or_export_only",
+      "id": "A024",
+      "availability": "present",
+      "bytes": 10174685,
+      "sha256": "586917cba7925cb62d21a934f7c54521e2377e83b26028b7bff20fd81bf3e89c",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "metadata_claim",
+        "description": "Local timm/mobilenetv4_conv_small.e2400_r224_in1k initializer/manifest; no immutable upstream revision/build binding."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "metadata_claim",
+        "description": "ImageNet ancestor family in model identifier; exact upstream data/revision/terms not authenticated."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "not_native_required",
+        "description": "Training initialization/reference; scripts/train/finetune_mobilenetv4_reid.py consumes caller/default --init .pth."
+      },
+      "compatibility": {
+        "status": "metadata_claim",
+        "description": "MobileNetV4 conv-small, input224 and ImageNet normalization metadata; initializer not native loaded."
+      }
+    },
+    {
+      "path": "models/yolo/mamba_head_26m.engine",
+      "source_refs": [
+        "configs/presets/mamba_whole_graph_m.yaml:43"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A025",
+      "availability": "present",
+      "bytes": 22549364,
+      "sha256": "c0c0e3e1a99e1707996d876334af2217c9c725d03bb1fe6838073a47723806cf",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_mamba_head_trt.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "m.head_engine",
+        "edges": [
+          {
+            "relation": "onnx_matches_checkpoint",
+            "target_path": "runs/mamba_distill_yolo26m_v14replica/best.ckpt",
+            "target_node": "m.distill",
+            "target_exists": true,
+            "detail": {
+              "verdict": "ambiguous",
+              "onnx": "models/yolo/mamba_head_26m.onnx"
+            }
+          },
+          {
+            "relation": "onnx_matches_checkpoint",
+            "target_path": "runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
+            "target_node": "m.gt1",
+            "target_exists": true,
+            "detail": {
+              "verdict": "ambiguous",
+              "onnx": "models/yolo/mamba_head_26m.onnx"
+            }
+          },
+          {
+            "relation": "onnx_matches_checkpoint",
+            "target_path": "runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
+            "target_node": "m.gt2_plain",
+            "target_exists": true,
+            "detail": {
+              "verdict": "ambiguous",
+              "onnx": "models/yolo/mamba_head_26m.onnx"
+            }
+          },
+          {
+            "relation": "onnx_matches_checkpoint",
+            "target_path": "runs/mamba_gt_yolo26m_v14replica_t3/best.ckpt",
+            "target_node": "m.t3t1_phase_a",
+            "target_exists": true,
+            "detail": {
+              "verdict": "ambiguous",
+              "onnx": "models/yolo/mamba_head_26m.onnx"
+            }
+          },
+          {
+            "relation": "onnx_matches_checkpoint",
+            "target_path": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
+            "target_node": "m.t3t1_phase_b",
+            "target_exists": true,
+            "detail": {
+              "verdict": "ambiguous",
+              "onnx": "models/yolo/mamba_head_26m.onnx"
+            }
+          },
+          {
+            "relation": "onnx_matches_checkpoint",
+            "target_path": "runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best.ckpt",
+            "target_node": "m.t3t1_phase_b_gpu_decode",
+            "target_exists": true,
+            "detail": {
+              "verdict": "ambiguous",
+              "onnx": "models/yolo/mamba_head_26m.onnx"
+            }
+          }
+        ],
+        "description": "Mamba head TRT engine named by the m preset.",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "data_root": null,
+        "seqs": null,
+        "holdout_seqs": null,
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "models/yolo/mamba_head_best.pt",
+      "source_refs": [
+        "src/saccade/perception/eval/multi_stream.py:123",
+        "src/saccade/perception/eval/multi_stream.py:46",
+        "src/saccade/perception/multistream_mamba_server.py:108",
+        "src/saccade/perception/temporal_yolo/mamba_gated_detector.py:49"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A026",
+      "availability": "present",
+      "bytes": 44382425,
+      "sha256": "16310ddafe76e9f2e3f90929937eea7b167eacf2a7dc8d239a69151ef41aeb02",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "unresolved",
+        "description": "Legacy TorchScript source checkpoint not recorded machine-readably."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "s.cpp_head_script",
+        "edges": [],
+        "description": "Default C++ Mamba head TorchScript (DEFAULT_CPP_MAMBA_HEAD_SCRIPT). Source checkpoint not recorded anywhere machine-readable.",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "data_root": null,
+        "seqs": null,
+        "holdout_seqs": null,
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Legacy C++ Mamba/batched/multistream head; different bytes from native N02."
+      },
+      "compatibility": {
+        "status": "unresolved",
+        "description": "No newly deserialized metadata or GPU execution; source contract only, no expanded support."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+      "source_refs": [
+        "shipping/cmake/install_model_root.cmake:42-66"
+      ],
+      "scope": "native_required",
+      "id": "N05",
+      "availability": "present",
+      "bytes": 7539,
+      "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "tool": "scripts/model/export_headline_mamba_head_torchscript.py",
+        "description": "Metadata used by native and packaging."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata; referenced model/data claims do not add rights."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "m1_model_root",
+        "audit_item": "M-1",
+        "evidence": [
+          "shipping/license_audit.json:1158-1174",
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "Shipped model-root member named in M-1 scope; M-1 is OPEN. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Strict config/plans or selected lineage/attestation fields; caller-controlled path; no independent publisher authentication."
+      },
+      "compatibility": {
+        "status": "recorded",
+        "schema": "saccade.head_artifact_lineage_torchscript/v1",
+        "description": "Config exhaustive unknown-field checks; lineage/attestation selected-field validation. Attestation optional in direct CLI, required by current package install."
+      }
+    },
+    {
+      "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+      "source_refs": [
+        "shipping/cmake/install_model_root.cmake:42-66"
+      ],
+      "scope": "native_required",
+      "id": "N02",
+      "availability": "present",
+      "bytes": 45656246,
+      "sha256": "1663ec97022879e8078fb5b9dc3b65f4d2b76e4f8df6d5848300c2b3c999d879",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "tool": "scripts/model/export_headline_mamba_head_torchscript.py",
+        "git_commit": "37d4d21d0fb5a702e69f2b8c8f7b6aa4683f3864",
+        "reading": "Recorded clean exporter; S0 does not regenerate."
+      },
+      "ancestry": {
+        "status": "recorded",
+        "source_checkpoint": {
+          "path": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+          "sha256": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+          "bytes": 126211713,
+          "epoch": 15,
+          "selection": {
+            "best_by": "train-loss",
+            "holdout_seqs": [],
+            "status": "diagnostic_train_loss"
+          }
+        },
+        "evidence": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json"
+      },
+      "finetuning_data": {
+        "status": "historical_record",
+        "description": "MOT17, s T3->T1 ancestry; exact data/rights unknown.",
+        "evidence": "report_data/training_lineage_inventory.json: s.t3t1_phase_b"
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "m1_model_root",
+        "audit_item": "M-1",
+        "evidence": [
+          "shipping/license_audit.json:1158-1174",
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "Shipped model-root member named in M-1 scope; M-1 is OPEN. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "DetectorHost torch::jit::load; native required."
+      },
+      "compatibility": {
+        "status": "recorded_and_source_inspected",
+        "inputs": {
+          "p3": [
+            1,
+            128,
+            80,
+            80
+          ],
+          "p4": [
+            1,
+            256,
+            40,
+            40
+          ],
+          "p5": [
+            1,
+            512,
+            20,
+            20
+          ]
+        },
+        "outputs": [
+          "cls_p3",
+          "cls_p4",
+          "cls_p5",
+          "reg_p3",
+          "reg_p4",
+          "reg_p5"
+        ],
+        "dtype": "float32",
+        "batch": 1,
+        "num_classes": 80,
+        "reg_channels": 4,
+        "native_scan_calls": 3,
+        "runtime_flags": {
+          "graph_executor_optimize": false,
+          "cudnn_benchmark": false,
+          "cudnn_allow_tf32": true,
+          "matmul_allow_tf32": false
+        },
+        "scope": "Single-frame T=1; cuda:0 params, CPU graph constants; frozen operator pairing required."
+      }
+    },
+    {
+      "path": "models/yolo/yolo11n_pose_batch6.engine",
+      "source_refs": [
+        "src/saccade/perception/detector_trt.py:30"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A029",
+      "availability": "present",
+      "bytes": 8909596,
+      "sha256": "46d8b31dc9e592c6dea4b98276cc2744baeba1f9d4054b90bb95d128ba4d4478",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26l_960_batch1.engine",
+      "source_refs": [
+        "configs/presets/accuracy.yaml:5"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A030",
+      "availability": "present",
+      "bytes": 53800380,
+      "sha256": "df0bc46653718c889c76ddbe5453fdb6dc8a54f60a443e6c6995abdc5a2290b8",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26l_batch4.engine",
+      "source_refs": [
+        "src/saccade/perception/eval/evaluator.py:2118-2130"
+      ],
+      "scope": "conditional_filename_substitution",
+      "id": "A031",
+      "availability": "unavailable",
+      "bytes": null,
+      "sha256": null,
+      "identity_basis": "no_substitution",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26l_batch6.engine",
+      "source_refs": [
+        "src/saccade/perception/eval/evaluator.py:2118-2130"
+      ],
+      "scope": "conditional_filename_substitution",
+      "id": "A032",
+      "availability": "unavailable",
+      "bytes": null,
+      "sha256": null,
+      "identity_basis": "no_substitution",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26m.pt",
+      "source_refs": [
+        "configs/presets/mamba_whole_graph_m.yaml:33",
+        "configs/presets/mamba_whole_graph_m_extract_ho_live.yaml:36"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A033",
+      "availability": "present",
+      "bytes": 44255705,
+      "sha256": "401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "unresolved",
+        "description": "Actual build/export identity not independently bound; candidate tool family only."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "m.pretrained_yolo",
+        "edges": [],
+        "description": "",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "data_root": null,
+        "seqs": null,
+        "holdout_seqs": null,
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Conditional/caller-selected consumer; see source_refs and runtime_surfaces."
+      },
+      "compatibility": {
+        "status": "unresolved",
+        "description": "No newly deserialized metadata or GPU execution; source contract only, no expanded support."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "models/yolo/yolo26m_960_batch1.engine",
+      "source_refs": [
+        "configs/dancetrack.yaml:16",
+        "configs/presets/baseline.yaml:7",
+        "configs/sportsmot.yaml:17",
+        "scripts/eval/config/core.py:18",
+        "scripts/eval/config/core.py:80"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A034",
+      "availability": "present",
+      "bytes": 44854500,
+      "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26m_backbone_640.onnx",
+      "source_refs": [
+        "report_data/training_lineage_inventory.json"
+      ],
+      "scope": "provenance_or_export_only",
+      "id": "A035",
+      "availability": "present",
+      "bytes": 75900061,
+      "sha256": "2154f937dec832dcefc4229a66dfc438c8fb99ee0c1547d80c00cc0143e56a6a",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "unresolved",
+        "description": "Actual build/export identity not independently bound; candidate tool family only."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "not_native_required",
+        "description": "Producer/training/export reference; no installed native load."
+      },
+      "compatibility": {
+        "status": "unresolved",
+        "description": "No newly deserialized metadata or GPU execution; source contract only, no expanded support."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26m_backbone_640_best.engine",
+      "source_refs": [
+        "configs/presets/mamba_whole_graph_m.yaml:42",
+        "configs/presets/mamba_whole_graph_m_extract_ho_live.yaml:37"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A036",
+      "availability": "present",
+      "bytes": 40186740,
+      "sha256": "fdf0f4550f584e73d5b7ca8393def25b74715f5ab639449dd01873becd66e580",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "m.backbone_engine",
+        "edges": [
+          {
+            "relation": "onnx_matches_checkpoint",
+            "target_path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+            "target_node": "m.adapted_teacher",
+            "target_exists": true,
+            "detail": {
+              "verdict": "unique_exact",
+              "onnx": "models/yolo/yolo26m_backbone_640.onnx"
+            }
+          }
+        ],
+        "description": "Preset comment says exported from the m teacher ckpt. The ONNX associated here has a different stem (`yolo26m_backbone_640` vs `_best`); the association is this file's claim, checked only at the ONNX-initializer level.",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "data_root": null,
+        "seqs": null,
+        "holdout_seqs": null,
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "models/yolo/yolo26m_batch4.engine",
+      "source_refs": [
+        "src/saccade/perception/eval/evaluator.py:2118-2130"
+      ],
+      "scope": "conditional_filename_substitution",
+      "id": "A037",
+      "availability": "present",
+      "bytes": 43661308,
+      "sha256": "374e0827b8934117e1e78b5e5cdbe1c0ac3a3474b9a52f3343682b5911b06f52",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26m_batch6.engine",
+      "source_refs": [
+        "src/saccade/perception/eval/evaluator.py:2118-2130"
+      ],
+      "scope": "conditional_filename_substitution",
+      "id": "A038",
+      "availability": "unavailable",
+      "bytes": null,
+      "sha256": null,
+      "identity_basis": "no_substitution",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26n_native.engine",
+      "source_refs": [
+        "src/main.cpp:20-22",
+        "CMakeLists.txt:586-588"
+      ],
+      "scope": "legacy_cpp_hardcoded_default",
+      "id": "A066",
+      "availability": "unavailable",
+      "bytes": null,
+      "sha256": null,
+      "identity_basis": "no_substitution",
+      "producer": {
+        "status": "unresolved",
+        "tool": null,
+        "description": "No exporter, build record or lineage names this engine; producer unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "Filename suggests YOLO26n; no recorded checkpoint, ONNX or #421 node."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to any bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics lineage inferred from filename only (no bytes or lineage record); ADR 023 states the lineage rule; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "saccade_node (legacy C++ perception demo, built only with SACCADE_WITH_OPENCV=ON) passes this hardcoded relative path to TRTEngine; no CLI override, no fallback; exceptions caught and exit -1. Not shipping."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Source allocates input [1,3,640,640] float32 and output [1,300,6] float32; engine metadata unverified, default unavailable.",
+        "evidence": [
+          "src/main.cpp:21-33"
+        ]
+      }
+    },
+    {
+      "path": "models/yolo/yolo26s.pt",
+      "source_refs": [
+        "scripts/eval/config/core.py:404",
+        "src/saccade/perception/eval/multi_stream.py:124",
+        "src/saccade/perception/eval/multi_stream.py:47",
+        "src/saccade/perception/multistream_mamba_server.py:100"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A039",
+      "availability": "present",
+      "bytes": 20422725,
+      "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "unresolved",
+        "description": "Actual build/export identity not independently bound; candidate tool family only."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "s.pretrained_yolo",
+        "edges": [],
+        "description": "External pretrained YOLO26s with the original Detect head (hashed as a blob; not unpickled).",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "data_root": null,
+        "seqs": null,
+        "holdout_seqs": null,
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Conditional/caller-selected consumer; see source_refs and runtime_surfaces."
+      },
+      "compatibility": {
+        "status": "unresolved",
+        "description": "No newly deserialized metadata or GPU execution; source contract only, no expanded support."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "models/yolo/yolo26s_960_batch1.engine",
+      "source_refs": [
+        "configs/presets/speed.yaml:6",
+        "configs/yolo_config.yaml:4"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A040",
+      "availability": "present",
+      "bytes": 22998716,
+      "sha256": "c11c340f73c712b6c90aa5524a831f70d04253a633dee7ce01599d6ab89d45e2",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26s_backbone_640_batch16.engine",
+      "source_refs": [
+        "src/saccade/perception/eval/multi_stream.py:121"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A041",
+      "availability": "present",
+      "bytes": 20147924,
+      "sha256": "22502900a86f72d0e9f541cb3dbe532438072a66157cf68a73ac2d5560fce1d8",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26s_backbone_640_best.engine",
+      "source_refs": [
+        "configs/base/mamba_detector.yaml:7",
+        "configs/presets/mamba_detail_b2_native_p3.yaml:12",
+        "configs/presets/mamba_eager_temporal_probe.yaml:19",
+        "configs/presets/mamba_optimal.yaml:18",
+        "configs/presets/mamba_whole_graph.yaml:26",
+        "shipping/cmake/install_model_root.cmake:42-66",
+        "src/saccade/perception/temporal_yolo/mamba_gated_detector.py:48"
+      ],
+      "scope": "native_required",
+      "id": "N01",
+      "availability": "present",
+      "bytes": 20298516,
+      "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "s.backbone_engine",
+        "edges": [
+          {
+            "relation": "onnx_matches_checkpoint",
+            "target_path": "runs/gated_det_v1/best.ckpt",
+            "target_node": "s.legacy_teacher",
+            "target_exists": true,
+            "detail": {
+              "verdict": "unique_exact",
+              "onnx": "models/yolo/yolo26s_backbone_640_best.onnx"
+            }
+          }
+        ],
+        "description": "FPN backbone TRT engine named by the s preset. Engine bytes are not attributable; the associated ONNX (same stem, this file's claim) is matched against teacher checkpoints by BN-folded conv weights and biases.",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "data_root": null,
+        "seqs": null,
+        "holdout_seqs": null,
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "m1_model_root",
+        "audit_item": "M-1",
+        "evidence": [
+          "shipping/license_audit.json:1158-1174",
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "Shipped model-root member named in M-1 scope; M-1 is OPEN. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "DetectorHost/TRTEngine native; Python Mamba backbone also uses same file."
+      },
+      "compatibility": {
+        "status": "recorded_and_source_inspected",
+        "expected_input": [
+          1,
+          3,
+          640,
+          640
+        ],
+        "expected_output_features": {
+          "p3": [
+            1,
+            128,
+            80,
+            80
+          ],
+          "p4": [
+            1,
+            256,
+            40,
+            40
+          ],
+          "p5": [
+            1,
+            512,
+            20,
+            20
+          ]
+        },
+        "dtype_assumption": "float32; native does not query TRT I/O dtype",
+        "supported_evidence": "same host sm_120, TRT10.16.1.11, torch2.11.0+cu130; no new GPU verification"
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "models/yolo/yolo26s_backbone_640_best.onnx",
+      "source_refs": [
+        "report_data/training_lineage_inventory.json"
+      ],
+      "scope": "provenance_or_export_only",
+      "id": "A043",
+      "availability": "present",
+      "bytes": 36082672,
+      "sha256": "a643bc2fd2213321964c2773b2796d5e62f82c9d0c330db125d8747d20827d24",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "unresolved",
+        "description": "Actual build/export identity not independently bound; candidate tool family only."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "not_native_required",
+        "description": "Producer/training/export reference; no installed native load."
+      },
+      "compatibility": {
+        "status": "unresolved",
+        "description": "No newly deserialized metadata or GPU execution; source contract only, no expanded support."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26s_batch4.engine",
+      "source_refs": [
+        "src/saccade/perception/eval/evaluator.py:2118-2130"
+      ],
+      "scope": "conditional_filename_substitution",
+      "id": "A044",
+      "availability": "present",
+      "bytes": 21733452,
+      "sha256": "c61463bddc6276757ebd376db398578217c347384775e4240283b38a5c41b76c",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26s_batch6.engine",
+      "source_refs": [
+        "src/saccade/perception/eval/evaluator.py:2118-2130"
+      ],
+      "scope": "conditional_filename_substitution",
+      "id": "A045",
+      "availability": "present",
+      "bytes": 21853884,
+      "sha256": "e7e486a0804caf83f80c689cbee56eb2da0bab6b4c55985c52db8fbacdc6832c",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26s_pose_960_batch1.engine",
+      "source_refs": [
+        "configs/yolo_config.yaml:5"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A046",
+      "availability": "present",
+      "bytes": 25323284,
+      "sha256": "99440d38798bd9c6e9677f004bf9fb0ed3c56730a11d2aeb9a4bc50b72078328",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/model/build_yolo.py",
+        "description": "Candidate builder family; actual engine build binding unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "TRTYoloDetector or Mamba TRT backbone/head, chosen by config/default/caller/fallback; not interchangeable."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "report_data/training_lineage_inventory.json",
+      "source_refs": [
+        "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json:17",
+        "scripts/provenance/training_lineage.py:78"
+      ],
+      "scope": "reference_only",
+      "id": "A047",
+      "availability": "present",
+      "bytes": 272517,
+      "sha256": "b722ec9bb0f8606980ea6f53faf366444c48f2e6d1a9f1a63530179716cc4b4f",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "reference_basis": "#421 inventory bound by N05; producer default output."
+    },
+    {
+      "path": "results/465_prc3_package/full_9217ed92/installed/saccade/MANIFEST.json",
+      "source_refs": [
+        "docs/reference/native_runtime_resolved_config.md:1802"
+      ],
+      "scope": "reference_only",
+      "id": "A048",
+      "availability": "present",
+      "bytes": 14169,
+      "sha256": "090a446920551590d62eb458939f570622d947f575eab35fd9c6dbbdef4c28e1",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "reference_basis": "C3 formal result directory."
+    },
+    {
+      "path": "results/465_prc4_release/full_bc75dcab/installed/saccade/MANIFEST.json",
+      "source_refs": [
+        "docs/reference/native_runtime_resolved_config.md:2121"
+      ],
+      "scope": "reference_only",
+      "id": "A049",
+      "availability": "present",
+      "bytes": 14626,
+      "sha256": "fcd200aa821695d89dc57fab2544d3fbb13c87e93b0d624dc126aabb5fd66e19",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "reference_basis": "C4 r2 formal result directory."
+    },
+    {
+      "path": "results/536_package_repin/full_b24c27f/installed/saccade/MANIFEST.json",
+      "source_refs": [
+        "docs/reference/native_runtime_package_repin_536.md:67",
+        "docs/reference/native_runtime_package_repin_536.md:97"
+      ],
+      "scope": "reference_only",
+      "id": "A050",
+      "availability": "present",
+      "bytes": 15749,
+      "sha256": "83b70e1168f9973ddbc64115dd2a72b0f3674d3e951c7c169de6a7230c2f98ff",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "reference_basis": "#536 re-pin result directory and installed prefix."
+    },
+    {
+      "path": "runs/gated_det_v1/best.ckpt",
+      "source_refs": [
+        "scripts/eval/config/core.py:399"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A051",
+      "availability": "present",
+      "bytes": 116736565,
+      "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "s.legacy_teacher",
+        "edges": [
+          {
+            "relation": "base_yolo",
+            "target_path": "models/yolo/yolo26s.pt",
+            "target_node": "s.pretrained_yolo",
+            "target_exists": true,
+            "detail": {}
+          }
+        ],
+        "description": "Historical gated teacher (trained to epoch 12). Parent of the legacy v14 line and source of the production s backbone engine ONNX.",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "historical_record",
+        "data_root": "datasets/MOT17",
+        "seqs": "",
+        "holdout_seqs": null,
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "runs/gated_det_v14replica/epoch_0012.ckpt",
+      "source_refs": [
+        "report_data/training_lineage_inventory.json:745",
+        "scripts/eval/run_native_s_speed.sh:10",
+        "scripts/eval/run_nopost_eval.sh:15",
+        "scripts/eval/run_teacher_head_matched_baseline.sh:15",
+        "scripts/train/temporal_yolo/run_v14replica_t3t1.sh:12"
+      ],
+      "scope": "provenance_or_export_only",
+      "id": "A052",
+      "availability": "present",
+      "bytes": 116838679,
+      "sha256": "08d1d68dc8fb6c2bb304642cedcd42a29efaed8d420e2f87f690c774f24d57fc",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "s.adapted_teacher",
+        "edges": [
+          {
+            "relation": "base_yolo",
+            "target_path": "models/yolo/yolo26s.pt",
+            "target_node": "s.pretrained_yolo",
+            "target_exists": true,
+            "detail": {}
+          }
+        ],
+        "description": "Domain-adapted gated teacher, protocol-fixed at epoch 12 (run continued to epoch 19; best.ckpt is NOT the protocol teacher).",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "historical_record",
+        "data_root": "datasets/MOT17",
+        "seqs": "",
+        "holdout_seqs": "",
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "not_native_required",
+        "description": "No configs/ preset selects it. Teacher input for excluded eval/training scripts (source_refs); native keeps no path claim to it."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+      "source_refs": [
+        "configs/presets/mamba_whole_graph_m.yaml:32",
+        "configs/presets/mamba_whole_graph_m_extract_ho_live.yaml:35"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A053",
+      "availability": "present",
+      "bytes": 251885507,
+      "sha256": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "m.adapted_teacher",
+        "edges": [
+          {
+            "relation": "base_yolo",
+            "target_path": "models/yolo/yolo26m.pt",
+            "target_node": "m.pretrained_yolo",
+            "target_exists": true,
+            "detail": {}
+          }
+        ],
+        "description": "m gated teacher, protocol-fixed at epoch 12 (best.ckpt is not the protocol teacher).",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "historical_record",
+        "data_root": "datasets/MOT17",
+        "seqs": "",
+        "holdout_seqs": "",
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "runs/mamba_detail_b2_native_p3/best.ckpt",
+      "source_refs": [
+        "configs/presets/mamba_detail_b2_native_p3.yaml:11"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A054",
+      "availability": "present",
+      "bytes": 122979589,
+      "sha256": "f53310ffb32e1acbdbf496f9b337d2cba1e8ad2e0323802dbd3087681e7350f0",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      }
+    },
+    {
+      "path": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+      "source_refs": [
+        "configs/presets/mamba_optimal.yaml:17",
+        "configs/presets/mamba_pyt_backbone.yaml:27",
+        "configs/presets/mamba_pyt_gmconly.yaml:30",
+        "configs/presets/mamba_whole_graph.yaml:25"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A055",
+      "availability": "present",
+      "bytes": 126211713,
+      "sha256": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "s.t3t1_phase_b",
+        "edges": [
+          {
+            "relation": "init",
+            "target_path": "runs/mamba_gt_v14replica_t3/best.ckpt",
+            "target_node": "s.t3t1_phase_a",
+            "target_exists": true,
+            "detail": {}
+          },
+          {
+            "relation": "teacher",
+            "target_path": "runs/gated_det_v14replica/epoch_0012.ckpt",
+            "target_node": "s.adapted_teacher",
+            "target_exists": true,
+            "detail": {}
+          },
+          {
+            "relation": "base_yolo",
+            "target_path": "models/yolo/yolo26s.pt",
+            "target_node": "s.pretrained_yolo",
+            "target_exists": true,
+            "detail": {}
+          },
+          {
+            "relation": "cache",
+            "target_path": "runs/mamba_teacher_cache_v14replica",
+            "target_node": "s.teacher_cache",
+            "target_exists": false,
+            "detail": {}
+          }
+        ],
+        "description": "T3->T1 Phase B: clip_len 1 spatial re-adaptation. Production s checkpoint per configs/presets/mamba_whole_graph.yaml.",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "historical_record",
+        "data_root": "datasets/MOT17",
+        "seqs": "",
+        "holdout_seqs": "",
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "runs/mamba_gt_vgt_1024_headft/best.ckpt",
+      "source_refs": [
+        "configs/presets/mamba_eager_1024.yaml:14"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A056",
+      "availability": "present",
+      "bytes": 54967916,
+      "sha256": "61a25b42f106132ab3d511ad1f62a4bc591065c6e040e8263f60a2c192f09e6e",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      }
+    },
+    {
+      "path": "runs/mamba_gt_vgt_1024_v2/best.ckpt",
+      "source_refs": [
+        "configs/presets/mamba_eager_1024_full.yaml:14"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A057",
+      "availability": "present",
+      "bytes": 121590729,
+      "sha256": "287232d3167af63a17c67e9241065540f895c532af5425b0715e927ec1693756",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      }
+    },
+    {
+      "path": "runs/mamba_gt_vgt_mamba_v14/best.ckpt",
+      "source_refs": [
+        "configs/presets/mamba_eager_temporal_probe.yaml:18",
+        "src/saccade/perception/eval/multi_stream.py:122"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A058",
+      "availability": "present",
+      "bytes": 121231556,
+      "sha256": "7d424c82729a8a1e130dbb4f1340806ddc85b85870e554857846e535a1d32575",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "s.legacy_v14",
+        "edges": [
+          {
+            "relation": "self_resume",
+            "target_path": "runs/mamba_gt_vgt_mamba_v14/best.ckpt",
+            "target_node": "s.legacy_v14",
+            "target_exists": true,
+            "detail": {}
+          },
+          {
+            "relation": "resume",
+            "target_path": "runs/mamba_gt_vgt_mamba_v14/best.ckpt",
+            "target_node": "s.legacy_v14",
+            "target_exists": true,
+            "detail": {}
+          },
+          {
+            "relation": "teacher",
+            "target_path": "runs/gated_det_v1/best.ckpt",
+            "target_node": "s.legacy_teacher",
+            "target_exists": true,
+            "detail": {}
+          },
+          {
+            "relation": "base_yolo",
+            "target_path": "models/yolo/yolo26s.pt",
+            "target_node": "s.pretrained_yolo",
+            "target_exists": true,
+            "detail": {}
+          },
+          {
+            "relation": "cache",
+            "target_path": "runs/trt_feat_cache_v2",
+            "target_node": "s.legacy_cache",
+            "target_exists": false,
+            "detail": {}
+          }
+        ],
+        "description": "Previous production checkpoint (epochs 1-30 warm-start + 31-60 resume; see report_data/mamba_v14_training_audit.md). The stored args are the RESUME invocation, so the recorded mamba_ckpt points at itself.",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "historical_record",
+        "data_root": "datasets/MOT17",
+        "seqs": "",
+        "holdout_seqs": null,
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "runs/mamba_gt_vgt_mamba_v2/best.ckpt",
+      "source_refs": [
+        "configs/presets/mamba_vgt_v1.yaml:19"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A059",
+      "availability": "present",
+      "bytes": 43513567,
+      "sha256": "3dc7dbac2dbcd3d576bdab34a7e4d2efc1d45dd292060f7a89069f901f5e4876",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      }
+    },
+    {
+      "path": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
+      "source_refs": [
+        "configs/presets/mamba_whole_graph_m.yaml:31"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A060",
+      "availability": "present",
+      "bytes": 126802369,
+      "sha256": "a5a0e7091cd854ad68210ae4bbd43af73c7d3d098ea119f02ea65fab59c0676c",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "historical_record",
+        "inventory_node": "m.t3t1_phase_b",
+        "edges": [
+          {
+            "relation": "init",
+            "target_path": "runs/mamba_gt_yolo26m_v14replica_t3/best.ckpt",
+            "target_node": "m.t3t1_phase_a",
+            "target_exists": true,
+            "detail": {}
+          },
+          {
+            "relation": "teacher",
+            "target_path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+            "target_node": "m.adapted_teacher",
+            "target_exists": true,
+            "detail": {}
+          },
+          {
+            "relation": "base_yolo",
+            "target_path": "models/yolo/yolo26m.pt",
+            "target_node": "m.pretrained_yolo",
+            "target_exists": true,
+            "detail": {}
+          },
+          {
+            "relation": "cache",
+            "target_path": "runs/mamba_teacher_cache_yolo26m_v14replica",
+            "target_node": "m.teacher_cache",
+            "target_exists": false,
+            "detail": {}
+          }
+        ],
+        "description": "Production m checkpoint per configs/presets/mamba_whole_graph_m.yaml.",
+        "evidence": "report_data/training_lineage_inventory.json"
+      },
+      "finetuning_data": {
+        "status": "historical_record",
+        "data_root": "datasets/MOT17",
+        "seqs": "",
+        "holdout_seqs": "",
+        "reading": "Historical checkpoint metadata from #421; not deserialized anew, no dataset rights conclusion."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      },
+      "historical_inventory_identity_matches": true
+    },
+    {
+      "path": "runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best_recall.ckpt",
+      "source_refs": [
+        "configs/presets/mamba_whole_graph_m_extract_ho_live.yaml:34"
+      ],
+      "scope": "python_runtime_candidate",
+      "id": "A061",
+      "availability": "present",
+      "bytes": 126816653,
+      "sha256": "dc186f546a9e33afe3566a07346f2cf5e42735fcac7274cb8f362355ac912626",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/temporal_yolo/",
+        "description": "Named training family; use #421 node when present. Uncatalogued probe checkpoint producer unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to these bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Python torch/Ultralytics checkpoint schema/architecture; caller variant dependent, not native TorchScript compatibility."
+      }
+    },
+    {
+      "path": "runs/reid_mnv4_ft_visclean/best.ckpt",
+      "source_refs": [
+        "scripts/model/export_mobilenetv4_reid.py:43-71"
+      ],
+      "scope": "training_or_export_only",
+      "id": "A062",
+      "availability": "present",
+      "bytes": 10181552,
+      "sha256": "4109306c0a5db6525f285e8ecd64d6181a9e59502f78894b0e04681ca36c30d3",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "source_family_only",
+        "tool": "scripts/train/finetune_mobilenetv4_reid.py",
+        "description": "Exact engine/ONNX/checkpoint build binding unresolved."
+      },
+      "ancestry": {
+        "status": "documented_unbound",
+        "model_id": "timm/mobilenetv4_conv_small.e2400_r224_in1k",
+        "description": "Local initializer and manifest metadata identified separately; exact model revision/build/data rights unbound."
+      },
+      "finetuning_data": {
+        "status": "documented_unbound",
+        "description": "Market1501 + MOT20/DanceTrack/SportsMOT visclean; MOT17 gap31+ selection. Dataset snapshots and terms unresolved.",
+        "evidence": [
+          "docs/modules/reid/mobilenetv4_integration_options.md:214-241",
+          "scripts/train/finetune_mobilenetv4_reid.py:56-62"
+        ]
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "not_native_required",
+        "description": "scripts/model/export_mobilenetv4_reid.py:43-71 producer input (default at :70, loaded by _load_model :43-66); not native runtime loaded."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "MobileNetV4 ReID checkpoint arch/input_hw/mean/std/backbone/bnneck fields, strict backbone/BNNeck load; separate from Mamba/teacher schemas."
+      }
+    },
+    {
+      "path": "scripts/provenance/training_lineage_roles.json",
+      "source_refs": [
+        "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json:24",
+        "scripts/provenance/training_lineage.py:77"
+      ],
+      "scope": "reference_only",
+      "id": "A063",
+      "availability": "present",
+      "bytes": 14805,
+      "sha256": "2d06c23de961d5606c9bd1c52fca8ac0a431b0e1703898761cbeb82f63b970c5",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "reference_basis": "Roles file bound by N05 lineage; producer default input."
+    },
+    {
+      "path": "shipping/entrypoint_pin.json",
+      "source_refs": [
+        "docs/reference/native_runtime_package_repin_536.md:8",
+        "results/536_package_repin/full_b24c27f/installed/saccade/MANIFEST.json:70-74"
+      ],
+      "scope": "reference_only",
+      "id": "A064",
+      "availability": "present",
+      "bytes": 1220,
+      "sha256": "76b822a87f6969a9656f8db29ab03504f8c6f6e68891021c97cef269f8c326ab",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "reference_basis": "Current entrypoint pin; recorded in the #536 package MANIFEST pins."
+    },
+    {
+      "path": "shipping/license_audit.json",
+      "source_refs": [
+        "results/465_prc4_release/full_bc75dcab/installed/saccade/MANIFEST.json:128-129",
+        "results/536_package_repin/full_b24c27f/installed/saccade/MANIFEST.json:128-129",
+        "shipping/cmake/install_third_party.cmake:71"
+      ],
+      "scope": "reference_only",
+      "id": "A065",
+      "availability": "present",
+      "bytes": 59437,
+      "sha256": "1e884f44868127a3032132753bd735b8dc5f4d62cf8597f74d27033e1e048e43",
+      "identity_basis": "observed_bytes",
+      "producer": {
+        "status": "recorded",
+        "description": "Version-controlled or retained evidence/reference; not a loaded model."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "No authenticated complete ancestry for these exact bytes."
+      },
+      "finetuning_data": {
+        "status": "not_applicable",
+        "description": "Metadata/reference."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
+        "decision_owner": "#547 release owner",
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "reference_only",
+        "description": "Developer/package/review reference; no native model loading implied."
+      },
+      "compatibility": {
+        "status": "not_applicable",
+        "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
+      },
+      "reference_basis": "Licence audit recorded by C4/#536 MANIFESTs and read by the shipping install step."
+    }
+  ],
+  "runtime_surfaces": [
+    {
+      "id": "P01",
+      "name": "raw_trt",
+      "selector": "--engine / --pose-engine; app pose default and filename batch substitutions",
+      "consumer": "src/saccade/perception/detector_trt.py:30-80",
+      "behavior_and_limits": "caller path; resolved metadata/ABI unverified; C++/Python TRT backend",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P02",
+      "name": "python_mamba",
+      "selector": "mamba_ckpt, yolo weights, teacher ckpt, backbone/head engine",
+      "consumer": "src/saccade/perception/temporal_yolo/mamba_gated_detector.py:702-745",
+      "behavior_and_limits": "TRT branch skips YOLO construction; eager branch loads teacher; builder still reads ckpt/config; recorded ancestor hash checks conditional",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P03",
+      "name": "legacy_cpp_multistream",
+      "selector": "caller head/backbone; mamba_head_best.pt default",
+      "consumer": "src/saccade/perception/eval/multi_stream.py:121-124",
+      "behavior_and_limits": "Multistream skips C++ head for temporal operation/missing script. Import/construction failures propagate; detail/channel mismatch rejected by cpp_ptr, no general failure recovery.",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P03b",
+      "name": "legacy_cpp_saccade_node",
+      "selector": "hardcoded ./models/yolo/yolo26n_native.engine (A066); no override",
+      "consumer": "src/main.cpp:20-22",
+      "behavior_and_limits": "Built only with SACCADE_WITH_OPENCV=ON (CMakeLists.txt:586-588); cwd-relative path; TRTEngine construction failure caught and exits -1; default unavailable locally.",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P04a",
+      "name": "teacher_head",
+      "selector": "--teacher-head-ckpt / --teacher-head-backbone-engine default empty",
+      "consumer": "src/saccade/perception/temporal_yolo/teacher_head_detector.py:119-131",
+      "behavior_and_limits": "required caller checkpoint when selected",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P04b",
+      "name": "fpn_reid",
+      "selector": "--fpn-reid-ckpt default empty",
+      "consumer": "src/saccade/perception/eval/evaluator.py:2149-2183",
+      "behavior_and_limits": "caller projection/BN state; trained output128 or raw896 branch",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P04c",
+      "name": "jde_projector",
+      "selector": "jde_proj_ckpt default empty",
+      "consumer": "src/saccade/perception/temporal_yolo/mamba_gated_detector.py:844-855",
+      "behavior_and_limits": "optional caller checkpoint and emb_dim",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P04d",
+      "name": "standalone_reid_head",
+      "selector": "required caller path",
+      "consumer": "src/saccade/perception/temporal_yolo/reid_head.py:96-105",
+      "behavior_and_limits": "weights_only=True; no concrete default",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P04e",
+      "name": "temporal_yolo",
+      "selector": "weights_path/model_path default empty",
+      "consumer": "src/saccade/perception/temporal_yolo/model.py:406-426",
+      "behavior_and_limits": "optional caller state_dict; research/API, not shipping",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P04f",
+      "name": "joint_yolo",
+      "selector": "required caller YOLO .pt; optional weights_path",
+      "consumer": "src/saccade/perception/temporal_yolo/yolo_joint.py:355-375",
+      "behavior_and_limits": "YOLO loader at line93; exact input unknown until invocation",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P04g",
+      "name": "conditioned_yolo",
+      "selector": "required caller YOLO .pt; optional checkpoint",
+      "consumer": "src/saccade/perception/temporal_yolo/yolo_conditioned.py:816-845",
+      "behavior_and_limits": "gated YOLO ancestry, arbitrary checkpoint",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P04h",
+      "name": "gated_yolo",
+      "selector": "required caller YOLO .pt; optional checkpoint",
+      "consumer": "src/saccade/perception/temporal_yolo/yolo_gated_detector.py:154-168",
+      "behavior_and_limits": "Ultralytics on this path; no native support inference",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P05",
+      "name": "trt_reid",
+      "selector": "7 registry engines; --reid-engine-path / Cheb-GR overrides",
+      "consumer": "src/saccade/perception/feature_extractor.py:10-28",
+      "behavior_and_limits": "C++ unavailable -> Python TRT same path; optional app catches failure",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P06",
+      "name": "external_fp_json",
+      "selector": "external_fp_logistic_model default empty; caller cascade/model_path",
+      "consumer": "src/saccade/perception/eval/external_fp_model.py:1093-1157",
+      "behavior_and_limits": "direct evaluator missing file errors; cascade missing stage2 can continue with rule-only",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P07a",
+      "name": "siglip_text",
+      "selector": "google/siglip2-base-patch16-224",
+      "consumer": "src/saccade/perception/text_encoder.py:11-31",
+      "behavior_and_limits": "AutoModel and AutoProcessor unpinned revision; default HF cache absent, alternate caches not excluded",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P07b",
+      "name": "bge_cognition",
+      "selector": "BAAI/bge-small-en-v1.5",
+      "consumer": "src/saccade/cognition/orchestrator.py:47-57",
+      "behavior_and_limits": "HF embedding unpinned revision; default cache absent, alternate caches not excluded",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P07c",
+      "name": "ollama_cognition",
+      "selector": "llama3",
+      "consumer": "src/saccade/cognition/orchestrator.py:57",
+      "behavior_and_limits": "service tag; digest/quantization/files/availability not queried; RAG setup failures caught",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    }
+  ],
+  "retained_baselines": [
+    {
+      "prefix": "results/465_pr12_shipping/full_c44dd876_r2/tree",
+      "method": "observed_bytes",
+      "members": [
+        {
+          "path": "build/libsaccade_scan_torchop.so",
+          "availability": "present",
+          "bytes": 3517632,
+          "sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_head_realization.attestation.json",
+          "availability": "present",
+          "bytes": 4052,
+          "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_whole_graph.resolved.json",
+          "availability": "present",
+          "bytes": 28648,
+          "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+          "availability": "present",
+          "bytes": 7539,
+          "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+          "availability": "present",
+          "bytes": 45656246,
+          "sha256": "1663ec97022879e8078fb5b9dc3b65f4d2b76e4f8df6d5848300c2b3c999d879",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "availability": "present",
+          "bytes": 20298516,
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "matches_current": true
+        }
+      ],
+      "model_root": "share/saccade"
+    },
+    {
+      "prefix": "results/465_prc1_bundle/full_16233e92/tree",
+      "method": "observed_bytes",
+      "members": [
+        {
+          "path": "build/libsaccade_scan_torchop.so",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "configs/shipping/mamba_head_realization.attestation.json",
+          "availability": "present",
+          "bytes": 4052,
+          "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_whole_graph.resolved.json",
+          "availability": "present",
+          "bytes": 28648,
+          "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+          "availability": "present",
+          "bytes": 7539,
+          "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        }
+      ],
+      "model_root": "share/saccade"
+    },
+    {
+      "prefix": "results/465_prc2_cli/full_1ae402c2/tree",
+      "method": "observed_bytes",
+      "members": [
+        {
+          "path": "build/libsaccade_scan_torchop.so",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "configs/shipping/mamba_head_realization.attestation.json",
+          "availability": "present",
+          "bytes": 4052,
+          "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_whole_graph.resolved.json",
+          "availability": "present",
+          "bytes": 28648,
+          "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+          "availability": "present",
+          "bytes": 7539,
+          "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        }
+      ],
+      "model_root": "share/saccade"
+    },
+    {
+      "prefix": "results/465_prc3_package/full_9217ed92/tree",
+      "method": "observed_bytes",
+      "members": [
+        {
+          "path": "build/libsaccade_scan_torchop.so",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "configs/shipping/mamba_head_realization.attestation.json",
+          "availability": "present",
+          "bytes": 4052,
+          "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_whole_graph.resolved.json",
+          "availability": "present",
+          "bytes": 28648,
+          "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+          "availability": "present",
+          "bytes": 7539,
+          "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        }
+      ],
+      "model_root": "share/saccade"
+    },
+    {
+      "prefix": "results/465_prc3_package/full_9217ed92/installed/saccade",
+      "method": "observed_bytes",
+      "members": [
+        {
+          "path": "build/libsaccade_scan_torchop.so",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "configs/shipping/mamba_head_realization.attestation.json",
+          "availability": "present",
+          "bytes": 4052,
+          "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_whole_graph.resolved.json",
+          "availability": "present",
+          "bytes": 28648,
+          "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+          "availability": "present",
+          "bytes": 7539,
+          "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        }
+      ],
+      "model_root": "share/saccade"
+    },
+    {
+      "prefix": "results/465_prc4_release/full_bc75dcab/tree",
+      "method": "observed_bytes",
+      "members": [
+        {
+          "path": "build/libsaccade_scan_torchop.so",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "configs/shipping/mamba_head_realization.attestation.json",
+          "availability": "present",
+          "bytes": 4052,
+          "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_whole_graph.resolved.json",
+          "availability": "present",
+          "bytes": 28648,
+          "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+          "availability": "present",
+          "bytes": 7539,
+          "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        }
+      ],
+      "model_root": "share/saccade"
+    },
+    {
+      "prefix": "results/465_prc4_release/full_bc75dcab/installed/saccade",
+      "method": "observed_bytes",
+      "members": [
+        {
+          "path": "build/libsaccade_scan_torchop.so",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "configs/shipping/mamba_head_realization.attestation.json",
+          "availability": "present",
+          "bytes": 4052,
+          "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_whole_graph.resolved.json",
+          "availability": "present",
+          "bytes": 28648,
+          "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+          "availability": "present",
+          "bytes": 7539,
+          "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        },
+        {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "availability": "unavailable",
+          "bytes": null,
+          "sha256": null,
+          "matches_current": null
+        }
+      ],
+      "model_root": "share/saccade"
+    },
+    {
+      "prefix": "results/536_package_repin/full_b24c27f/tree",
+      "method": "observed_bytes",
+      "members": [
+        {
+          "path": "build/libsaccade_scan_torchop.so",
+          "availability": "present",
+          "bytes": 3517632,
+          "sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_head_realization.attestation.json",
+          "availability": "present",
+          "bytes": 4052,
+          "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_whole_graph.resolved.json",
+          "availability": "present",
+          "bytes": 28648,
+          "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+          "availability": "present",
+          "bytes": 7539,
+          "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+          "availability": "present",
+          "bytes": 45656246,
+          "sha256": "1663ec97022879e8078fb5b9dc3b65f4d2b76e4f8df6d5848300c2b3c999d879",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "availability": "present",
+          "bytes": 20298516,
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "matches_current": true
+        }
+      ],
+      "model_root": "share/saccade"
+    },
+    {
+      "prefix": "results/536_package_repin/full_b24c27f/installed/saccade",
+      "method": "observed_bytes",
+      "members": [
+        {
+          "path": "build/libsaccade_scan_torchop.so",
+          "availability": "present",
+          "bytes": 3517632,
+          "sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_head_realization.attestation.json",
+          "availability": "present",
+          "bytes": 4052,
+          "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+          "matches_current": true
+        },
+        {
+          "path": "configs/shipping/mamba_whole_graph.resolved.json",
+          "availability": "present",
+          "bytes": 28648,
+          "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+          "availability": "present",
+          "bytes": 7539,
+          "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+          "availability": "present",
+          "bytes": 45656246,
+          "sha256": "1663ec97022879e8078fb5b9dc3b65f4d2b76e4f8df6d5848300c2b3c999d879",
+          "matches_current": true
+        },
+        {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "availability": "present",
+          "bytes": 20298516,
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "matches_current": true
+        }
+      ],
+      "model_root": "share/saccade"
+    }
+  ],
+  "retained_package_model_members": [
+    {
+      "path": "results/465_prc3_package/full_9217ed92/dist/saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.tar.gz",
+      "availability": "present",
+      "method": "Independent read-only package audit streamed six named model members only; no whole-tarball digest/signature verification",
+      "model_member_count": 6,
+      "model_members_equal_current": true
+    },
+    {
+      "path": "results/465_prc4_release/full_bc75dcab/dist/saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.tar.gz",
+      "availability": "present",
+      "method": "Independent read-only package audit streamed six named model members only; no whole-tarball digest/signature verification",
+      "model_member_count": 6,
+      "model_members_equal_current": true
+    },
+    {
+      "path": "results/536_package_repin/full_b24c27f/dist/saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.tar.gz",
+      "availability": "present",
+      "method": "Independent read-only package audit streamed six named model members only; no whole-tarball digest/signature verification",
+      "model_member_count": 6,
+      "model_members_equal_current": true
+    }
+  ],
+  "previous_attestation_references": [
+    {
+      "reference": "44cc91a4^:configs/shipping/mamba_head_realization.attestation.json",
+      "identity_basis": "git_blob_bytes",
+      "bytes": 4047,
+      "sha256": "af9c39c100e4fd3fb0b92633047bc4e114f772d629bb89bd4dbc0c68e03003e5",
+      "op_library": {
+        "path": "build/libsaccade_scan_torchop.so",
+        "sha256": "098dd23329c3a57519e17b8f90d83ebc1036e7692c6daee2c26a831543dc5f0d",
+        "bytes": 3517488,
+        "needed": [
+          "libtorch.so",
+          "libc10.so",
+          "libnvrtc.so.13",
+          "libc10_cuda.so",
+          "libcudart.so.13",
+          "libtorch_cpu.so",
+          "libtorch_cuda.so",
+          "libstdc++.so.6",
+          "libgcc_s.so.1",
+          "libc.so.6"
+        ],
+        "compiler_comment": [
+          "GCC: (GNU) 16.2.1 20260810",
+          "GCC: (GNU) 15.3.0"
+        ],
+        "sources_git_blob": {
+          "src/tracking/mamba_scan_torchop.cpp": "6b19e9a359fd04f344b92e7d2c596fea4fcbb505",
+          "src/tracking/mamba_scan.cu": "47673abaed43d5ca4611f5dd5197280a0aa38135",
+          "include/tracking/mamba_scan.cuh": "8f51a9a9fe55b08bf1590cbe279541354c3eece3"
+        },
+        "sources_equal_to_lineage_tool_commit": true
+      },
+      "frozen_lineage": {
+        "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+        "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+        "tool_commit": "37d4d21d0fb5a702e69f2b8c8f7b6aa4683f3864",
+        "torchscript_sha256": "1663ec97022879e8078fb5b9dc3b65f4d2b76e4f8df6d5848300c2b3c999d879",
+        "torchscript_content_sha256": "f6a540edfecd6e421c533c5c2280fc26351b887006c1384bb61a567ce2f39487",
+        "op_library_sha256": "cfea782f320f641a5ca7752dfc54467909afcca96b6d6d9f884a40cbbe81aa43"
+      },
+      "runtime_files_availability": "historical operator documented unretained; no replacement"
+    },
+    {
+      "reference": "configs/shipping/mamba_head_realization.attestation.json",
+      "identity_basis": "observed_bytes",
+      "op_library": {
+        "path": "build/libsaccade_scan_torchop.so",
+        "sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+        "bytes": 3517632,
+        "needed": [
+          "libtorch.so",
+          "libc10.so",
+          "libnvrtc.so.13",
+          "libc10_cuda.so",
+          "libcudart.so.13",
+          "libtorch_cpu.so",
+          "libtorch_cuda.so",
+          "libstdc++.so.6",
+          "libgcc_s.so.1",
+          "libc.so.6"
+        ],
+        "compiler_comment": [
+          "GCC: (GNU) 16.2.1 20260810",
+          "GCC: (GNU) 15.3.0"
+        ],
+        "sources_git_blob": {
+          "src/tracking/mamba_scan_torchop.cpp": "6b19e9a359fd04f344b92e7d2c596fea4fcbb505",
+          "src/tracking/mamba_scan.cu": "47673abaed43d5ca4611f5dd5197280a0aa38135",
+          "include/tracking/mamba_scan.cuh": "8f51a9a9fe55b08bf1590cbe279541354c3eece3"
+        },
+        "sources_equal_to_lineage_tool_commit": true
+      }
+    }
+  ],
+  "distribution": {
+    "status": "local-only",
+    "owner_confirmation": null,
+    "source": "shipping/license_audit.json",
+    "rights_decision_owner": "#547 release owner"
+  },
+  "validation": {
+    "evidence_class": "local-only evidence",
+    "clean_checkout_model_replay": false,
+    "reading": "Original S0 local snapshot reports remain hash-bound and gitignored. This documentation PR carries no model or raw-report bytes; revised documentation checks and remote CI are recorded on the PR, not promoted to model replay or source authentication.",
+    "native_installed_static": {
+      "path": "results/549_s0_inventory/20261010/static_installed.json",
+      "sha256": "fa6fc4613afbf43ffed19a3e38f72e5a3de45a0c2f38d086fae02cef0d86efaf",
+      "bytes": 28603,
+      "checks": 13,
+      "pass": true,
+      "scope": "Fresh local read-only static/manifest check only; no runtime or GPU replay"
+    },
+    "artifact_identity_replay": {
+      "path": "results/549_s0_inventory/20261010/artifact_replay.json",
+      "bytes": 374,
+      "sha256": "7382864d0a28e62f06db648d1105e09f240ed3d4a746448de8024da99cff332f",
+      "present_artifacts_checked": 61,
+      "native_table_rows_checked": 6,
+      "source_refs_checked": 101,
+      "pass": true,
+      "source_refs_reading": "101 counts reference occurrences across artifacts, duplicates included (71 unique). The checker was not committed; superseded by the committed replay in the Markdown §7."
+    },
+    "docs_checks": {
+      "doc_links": {
+        "path": "results/549_s0_inventory/20261010/doc_links.log",
+        "bytes": 4665,
+        "sha256": "aaf34c9596422d245a6f74b8a4794d94c17e4b64ced2d4118700a30185d34272",
+        "exit_code": 0,
+        "relative_links_checked": 3038
+      },
+      "doc_structure": {
+        "path": "results/549_s0_inventory/20261010/doc_structure.log",
+        "bytes": 379,
+        "sha256": "c5181d5c65a639e49972174a25027bc13311158e4e3b1698d309769319d3707a",
+        "exit_code": 0,
+        "preexisting_warnings": [
+          "docs/research/pipeline/production_db_critical_path_20260917.md missing research index row",
+          "docs/research/pipeline/production_db_critical_path_contract.md missing research index row"
+        ]
+      },
+      "runtime_identity": {
+        "path": "results/549_s0_inventory/20261010/runtime_identity.log",
+        "bytes": 554,
+        "sha256": "122942186718cbf3760ebc25ea265ecccbe557f8f8d9de4594d55d5e658058c8",
+        "exit_code": 0,
+        "mode": "attested",
+        "not_recomputed": [
+          "host-specific environment",
+          "legacy runtime-input content",
+          "identity probe"
+        ],
+        "reading": "Checker exit0 with original unresolved scopes; not a fresh controlled-host/GPU/model identity attestation."
+      }
+    },
+    "excluded_attempt": {
+      "path": "results/549_s0_inventory/20261010/artifact_replay_parser_attempt.json",
+      "bytes": 403,
+      "sha256": "9bc7a2e4e199ea1ea31468d2bc01963bfed711ca8964ee9819a5d2edfd4f8fa2",
+      "status": "excluded_parser_error",
+      "reason": "Parser selected second provenance table as if it were the byte table; actual artifact bytes already matched. Final artifact_replay.json fixes table coverage."
+    }
+  },
+  "stop_point": "S0 inventory prepared for owner review. Unknowns remain explicit. S1 owner review/approval and bounded S2 authorization separate; #549 open."
+}
