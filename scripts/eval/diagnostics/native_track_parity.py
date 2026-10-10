@@ -67,9 +67,11 @@ elsewhere with the same arguments (the clean container:
 counts only when its completion record does. The report is
 ``saccade.native_track_report/v3`` (v2 plus ``run_id`` and ``identity``, which
 must stay ``{"level": null}``: nothing is verified beyond the supplied
-checksums yet); the run id ``saccade_track`` printed (one ``run_id`` line in
-``saccade_track.log``) must be the report's and the journal's
-(``DIR/native/saccade_track.journal.json``), the journal must be ``complete``,
+checksums yet); the run id ``saccade_track`` printed (the first line of
+``saccade_track.log``, and its only ``run_id`` line) must be the report's and
+the journal's (``DIR/native/saccade_track.journal.json``), the journal must be
+a readable JSON object whose ``sequences`` is a list of objects and be
+``complete``,
 and every sequence must be committed by the caller rule
 (``committed_sequences``: ``written`` with the txt's sha256; ``pending`` never
 counts), with the trace and report hashes it records. Otherwise the run is
@@ -438,14 +440,15 @@ def report_problems(
 
 
 def invocation_run_id(log_text: str, entrypoint_name: str) -> str | None:
-    """The run id ``entrypoint_name`` printed (its first stderr line); None
-    unless the log has exactly one."""
-    ids = [
-        m.group(2)
-        for m in _RUN_ID_LINE.finditer(log_text)
-        if m.group(1) == entrypoint_name
-    ]
-    return ids[0] if len(ids) == 1 else None
+    """The run id ``entrypoint_name`` printed (its first stderr line, so the
+    log's first line); None unless that line is it and no other line of the
+    log is a run id line."""
+    first = _RUN_ID_LINE.match(log_text.split("\n", 1)[0])
+    if first is None or first.group(1) != entrypoint_name:
+        return None
+    if len(_RUN_ID_LINE.findall(log_text)) != 1:
+        return None
+    return first.group(2)
 
 
 def committed_sequences(
@@ -457,9 +460,12 @@ def committed_sequences(
     kill between its rename and the journal update)."""
     if journal.get("format") != JOURNAL_FORMAT or journal.get("run_id") != run_id:
         return []
+    entries = journal.get("sequences")
+    if not isinstance(entries, list):
+        return []
     out = []
-    for s in journal.get("sequences") or []:
-        if s.get("state") != "written":
+    for s in entries:
+        if not isinstance(s, dict) or s.get("state") != "written":
             continue
         txt = out_dir / f"{s.get('name')}.txt"
         if txt.is_file() and _sha256_bytes(txt.read_bytes()) == s.get("txt_sha256"):
@@ -482,7 +488,15 @@ def journal_problems(
     path = out_dir / JOURNAL_NAME
     if not path.is_file():
         return [f"{path}: no run journal"]
-    j = json.loads(path.read_text())
+    try:
+        j = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        return [f"{path}: unreadable journal ({type(exc).__name__}: {exc})"]
+    if not isinstance(j, dict):
+        return [f"{path}: journal is a {type(j).__name__}, not an object"]
+    entries = j.get("sequences")
+    if not isinstance(entries, list) or not all(isinstance(s, dict) for s in entries):
+        return [f"{path}: journal sequences {entries!r} is not a list of objects"]
     problems = []
     if j.get("format") != JOURNAL_FORMAT:
         problems.append(f"journal format {j.get('format')!r}")
@@ -496,7 +510,6 @@ def journal_problems(
         )
     if j.get("identity") != UNVERIFIED_IDENTITY:
         problems.append(f"journal identity {j.get('identity')!r}")
-    entries = j.get("sequences") or []
     if [s.get("name") for s in entries] != sequences:
         problems.append("journal sequences differ from the request")
     committed = committed_sequences(j, out_dir, run_id)
@@ -510,7 +523,7 @@ def journal_problems(
             ):
                 problems.append(f"{t}: not the trace the journal recorded")
     if report_path is not None:
-        rec = j.get("report") or {}
+        rec = j.get("report") if isinstance(j.get("report"), dict) else {}
         if not report_path.is_file() or _sha256_bytes(
             report_path.read_bytes()
         ) != rec.get("sha256"):

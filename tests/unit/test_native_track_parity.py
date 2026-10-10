@@ -24,8 +24,10 @@ developer option, and ``--against`` also compares the native graph counts.
 #536 CC-536-01-01 (run completion): the report is v3 and must carry a run id
 and an identity that claims no level; the journal reader fails closed on a
 run id that is not the invocation's, a state other than ``complete``, a
-``pending`` sequence whose txt is present, and a txt / trace / report whose
-bytes are not the ones recorded. The same reader is run over the files the
+``pending`` sequence whose txt is present, a txt / trace / report whose
+bytes are not the ones recorded, and a journal that is not JSON, not an
+object, or whose ``sequences`` is not a list of objects (problems, not an
+exception); the run id is read only from the log's first line. The same reader is run over the files the
 real writer leaves in each case of ``tests/native/test_shipping_run_completion.cpp``
 (``--keep``; skipped when that test is not built).
 """
@@ -565,6 +567,46 @@ def test_journal_problems_fail_closed(tmp_path: Path, edit: Any) -> None:
     assert _problems(out, trace, report, j) != []
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "{",
+        '{"format": "saccade.native_track_journal/v1", ',
+        "\x00\xff",
+        "[]",
+        "null",
+        '"complete"',
+        "42",
+    ],
+)
+def test_corrupt_journal_is_a_problem(tmp_path: Path, text: str) -> None:
+    out, trace, report, _ = _completed_run(tmp_path)
+    (out / T.JOURNAL_NAME).write_bytes(text.encode("latin-1"))
+    problems = T.journal_problems(out, RUN_ID, SEQS, report, trace)
+    assert len(problems) == 1 and "journal" in problems[0]
+
+
+@pytest.mark.parametrize(
+    "sequences", [None, "S1", {"name": "S1"}, ["S1", "S2"], [None, None], 7]
+)
+def test_journal_sequences_not_a_list_of_objects(
+    tmp_path: Path, sequences: Any
+) -> None:
+    out, trace, report, j = _completed_run(tmp_path)
+    j["sequences"] = sequences
+    problems = _problems(out, trace, report, j)
+    assert len(problems) == 1 and "sequences" in problems[0]
+    assert T.committed_sequences(j, out, RUN_ID) == []
+
+
+@pytest.mark.parametrize("rec", ["r.json", ["sha256"], 7])
+def test_journal_report_not_an_object(tmp_path: Path, rec: Any) -> None:
+    out, trace, report, j = _completed_run(tmp_path)
+    j["report"] = rec
+    assert any("report" in p for p in _problems(out, trace, report, j))
+
+
 def test_pending_with_its_file_present_is_not_committed(tmp_path: Path) -> None:
     # A kill between the rename and the journal update: the txt is there and
     # may be this run's whole output; the journal never confirmed it.
@@ -604,6 +646,14 @@ def test_invocation_run_id() -> None:
     )
     assert T.invocation_run_id("saccade_track: run_id xyz\n", "saccade_track") is None
     assert T.invocation_run_id("", "saccade_track") is None
+    assert T.invocation_run_id(f"saccade_track: run_id {a}", "saccade_track") == a
+    # Only the first line: anything printed before it is not this contract.
+    assert T.invocation_run_id(f"warning\n{log}", "saccade_track") is None
+    assert T.invocation_run_id(f"\n{log}", "saccade_track") is None
+    assert T.invocation_run_id(f" saccade_track: run_id {a}\n", "saccade_track") is None
+    # A second run id line anywhere, of either entrypoint, is two runs' log.
+    two = log + f"saccade_track_measurement: run_id {b}\n"
+    assert T.invocation_run_id(two, "saccade_track") is None
 
 
 @pytest.mark.skipif(not COMPLETION_TEST.exists(), reason="completion test not built")
