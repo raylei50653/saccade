@@ -1,13 +1,13 @@
 <!-- doc-status: active -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-10-09 -->
+<!-- doc-date: 2026-10-10 -->
 <!-- doc-module: cross -->
 
 # S-SHIP／S-EXPORT 架構圖與接口契約（#536 第一批）
 
 本稿是 [#536](https://github.com/raylei50653/saccade/issues/536) B0／B1 的第一批設計，只處理三列已批准的需求：[REQ-535-01-01](capability_requirements_535.md#req-535-01-01)、[REQ-535-01-02](capability_requirements_535.md#req-535-01-02)、[REQ-535-08-02](capability_requirements_535.md#req-535-08-02)。適用範圍是 ledger 的 [S-SHIP](capability_requirements_535.md#scope-535-shipping) 與 [S-EXPORT](capability_requirements_535.md#scope-535-export)，決策邊界依 [第一切片決策](capability_requirements_535.md#decision-535-first-slice)；本稿不重述也不擴大。
 
-**狀態用語**：`observed as-is` 是在 source baseline `c45a24da953ffd16d3b98478cae79954a45204f4` 讀原始碼得到的現況，沒有跑 runtime、GPU 或 package；`accepted target` 是依[設計決策](#decision-536-first-slice)批准的目標設計。`implemented` 只有 [CC-536-08-02](#cc-536-08-02)（見該卡的實作狀態），其驗證範圍逐項列在該處；其餘兩張卡仍只是 `accepted target`。需求批准不等於設計批准，設計批准也不等於實作已驗證。
+**狀態用語**：`observed as-is` 是在 source baseline `c45a24da953ffd16d3b98478cae79954a45204f4` 讀原始碼得到的現況，沒有跑 runtime、GPU 或 package；`accepted target` 是依[設計決策](#decision-536-first-slice)批准的目標設計。`implemented` 只有 [CC-536-08-02](#cc-536-08-02) 與 [CC-536-01-01](#cc-536-01-01)（見各卡的實作狀態），驗證範圍逐項列在該處；CC-536-01-02 仍只是 `accepted target`。需求批准不等於設計批准，設計批准也不等於實作已驗證。
 
 <a id="decision-536-first-slice"></a>**第一批設計決策（2026-10-09，Asia/Taipei）**：`owner=raylei50653; decision=accepted; scope=#536 B0/B1 S-SHIP × S-EXPORT 第一批`。Decision source：[#558 owner design decision](https://github.com/raylei50653/saccade/pull/558#issuecomment-6080588466)（權威來源；comment 可編輯，因此具體內容以本段的版本控制紀錄保存）。審查的 PR head 是 `9709c3e127ab57bc377d9daf3b815cd6b8d13ae9`。
 
@@ -25,7 +25,7 @@
 | 標記 | 意思 |
 |:--|:--|
 | 方框 `N-…`、實線 `L-01…L-16` | observed as-is（source-inspected） |
-| 六角框 `N-T…`、虛線 `L-T…`、標籤以「目標」開頭 | accepted target（[設計決策](#decision-536-first-slice)）；N-T4 已實作（[CC-536-08-02 實作狀態](#cc-536-08-02-status)），其餘未實作、未驗證 |
+| 六角框 `N-T…`、虛線 `L-T…`、標籤以「目標」開頭 | accepted target（[設計決策](#decision-536-first-slice)）；N-T4 已實作（[CC-536-08-02 實作狀態](#cc-536-08-02-status)），N-T1 已實作（[CC-536-01-01 實作狀態](#cc-536-01-01-status)），其餘未實作、未驗證 |
 | 標籤中的 `⚠G1`／`⚠G2`／`⚠G3` | 第 3 節的現況差距落在這裡 |
 
 ```mermaid
@@ -118,7 +118,7 @@ flowchart TB
    - 接著 `Stream` 成員呼叫 `cudaStreamCreateWithFlags`，`JpegDecoder` 建立 nvJPEG handle（**GPU 初始化**）；
    - 再來是 [`DetectorHost`](../../shipping/src/detector_host.cpp)：先算三個檔案的 sha256，再 `dlopen`，設定 runtime requirements 並讀回，`torch::jit::load`，檢查 graph，最後建 TRT engine 並檢查 I/O。
    這些檢查都在第一個 sequence 之前完成，但檔案 hash 是在 GPU 初始化**之後**才做。
-6. **Sequence loop**：[track_driver.hpp](../../shipping/tools/track_driver.hpp) `run_sequences` 先 `create_directories(out)`，再逐個 sequence 執行 `read_sequence_input`（seqinfo.ini／img1 的檢查在**這時**才做）→ 推論 → `write_text(<out>/<seq>.txt)`。`write_text` 用 `ofstream` 直接截斷正式路徑再寫入，不經 temp 檔。全部 sequence 完成後才寫 `--report`（`saccade.native_track_report/v2`，內容有 plan bindings、load report、每個 sequence 的 stats 與 `txt_sha256`），寫完回傳 0。
+6. **Sequence loop**（本點是 baseline 的現況；`<out>`、txt 與 report 的寫法已由 #562 改變，見 [CC-536-01-01 實作狀態](#cc-536-01-01-status)）：[track_driver.hpp](../../shipping/tools/track_driver.hpp) `run_sequences` 先 `create_directories(out)`，再逐個 sequence 執行 `read_sequence_input`（seqinfo.ini／img1 的檢查在**這時**才做）→ 推論 → `write_text(<out>/<seq>.txt)`。`write_text` 用 `ofstream` 直接截斷正式路徑再寫入，不經 temp 檔。全部 sequence 完成後才寫 `--report`（`saccade.native_track_report/v2`，內容有 plan bindings、load report、每個 sequence 的 stats 與 `txt_sha256`），寫完回傳 0。
 7. **期望值從哪裡來**：DetectorHost 比對的期望 sha256 全部來自 caller 指定的 `--lineage`／`--attestation`；`--attestation` 在 CLI 上是可選的。執行期不讀 MANIFEST，也不比對 committed attestation 或簽章。report 只記錄 `lineage`／`attestation` 的路徑字串，沒有記錄這兩個檔案本身的 sha256。
 
 ## 3. 差距與發現
@@ -127,7 +127,7 @@ flowchart TB
 
 | ID | 差距 | 落點 | 對應卡 |
 |:--|:--|:--|:--|
-| G1 | 沒有 completion 關聯：run 沒有 identity；MOT txt 原地覆寫；report 只在成功時寫。nonzero 結束後，已完成、寫到一半、上一輪留下的 txt 和舊 report 無法區分。舊 report 和舊 txt 的 `txt_sha256` 彼此吻合，看起來就像一次完整的成功 | N-R7、N-R8、L-16 | [CC-536-01-01](#cc-536-01-01) |
+| G1 | 沒有 completion 關聯：run 沒有 identity；MOT txt 原地覆寫；report 只在成功時寫。nonzero 結束後，已完成、寫到一半、上一輪留下的 txt 和舊 report 無法區分。舊 report 和舊 txt 的 `txt_sha256` 彼此吻合，看起來就像一次完整的成功 | N-R7、N-R8、L-16 | [CC-536-01-01](#cc-536-01-01)；[#562](https://github.com/raylei50653/saccade/pull/562) 已實作 |
 | G2 | artifact hash 在 CUDA stream 與 nvJPEG 建立之後才做；sequence 輸入與 `--out` 在 GPU 初始化之後、甚至前面的 sequence 已寫出之後才檢查 | N-R5、N-R6、N-R7 | [CC-536-01-02](#cc-536-01-02)、[CC-536-01-01](#cc-536-01-01) |
 | G3 | 輸出沒有區分「與 supplied checksum 相符」和「已對認可的 expected 來源驗證」；目前執行期最多只能證明前者 | N-R6、L-11、L-15 | [CC-536-01-02](#cc-536-01-02) |
 
@@ -143,7 +143,7 @@ flowchart TB
 
 ## 4. 接口契約卡（accepted target）
 
-以下三張卡依[設計決策](#decision-536-first-slice)批准為目標設計。CC-536-08-02 已實作（狀態見卡內），CC-536-01-01 與 CC-536-01-02 還沒有實作。欄位依 #536 B1。
+以下三張卡依[設計決策](#decision-536-first-slice)批准為目標設計。CC-536-08-02 與 CC-536-01-01 已實作（狀態見各卡內），CC-536-01-02 還沒有實作。欄位依 #536 B1。
 
 ### <a id="cc-536-01-01"></a>CC-536-01-01：completion／diagnostic
 
@@ -166,8 +166,16 @@ flowchart TB
 - **State writer**：只有 `run_sequences` 與 `main` 的錯誤處理會寫 journal，其他元件不得寫。
 - **允許的依賴**：只用 C++ std filesystem、POSIX `flock`／`rename`，以及既有的 `strict_json`／`sha256`，不新增第三方依賴。
 - **副作用**：`<out>` 會多一個 journal 檔與一個 lock 檔；開頭會刪除本輪會覆寫的舊產物（範圍見順序第 4 步）。
-- **Evidence（現有 check pointers）**：[saccade_track schedule CLI](../../tests/unit/test_saccade_track_schedule_cli.py)（在載入模型前拒絕）、[serial](../../tests/native/test_shipping_serial_runtime.cpp)、[double-buffer](../../tests/native/test_shipping_double_buffer_runtime.cpp)。目前沒有任何檢查涵蓋 completion。新的正控制與負控制（例如在第 k 個 sequence 注入失敗、mid-write kill、rename 與 journal 更新之間 kill、舊 report 存在時的失敗 run、同一 `--out` 的第二個 process）交給 #541 對應。實作時也要確認 `saccade_track_measurement` 的介面沒有因為共用 `run_sequences` 而改變（F5）。
+- **Evidence（現有 check pointers）**：[saccade_track schedule CLI](../../tests/unit/test_saccade_track_schedule_cli.py)（在載入模型前拒絕）、[serial](../../tests/native/test_shipping_serial_runtime.cpp)、[double-buffer](../../tests/native/test_shipping_double_buffer_runtime.cpp)。completion 的正控制與負控制（在第 k 個 sequence 注入失敗、mid-write kill、rename 與 journal 更新之間 kill、舊 report 存在時的失敗 run、同一 `--out` 的第二個 process）由 [completion 協定測試](../../tests/native/test_shipping_run_completion.cpp)、[reader 測試](../../tests/unit/test_native_track_parity.py)、[completion CLI](../../tests/unit/test_saccade_track_completion_cli.py) 涵蓋，`saccade_track_measurement` 的介面由 [measurement surface](../../tests/unit/test_shipping_measurement_surface.py) 檢查（F5）；哪些在 CI、哪些只在本機，見下方實作狀態。requirement↔check 對應交 #541。
 - **Known limits**：rename 只在同一個檔案系統內是原子的；`flock` 是 advisory lock，只約束同樣會取 lock 的 `saccade_track`，在網路檔案系統或 WSL 掛載的 Windows 磁碟上的行為沒有驗證；放在 `<out>` 以外的 `--report`／`--trace` 不受這個 lock 保護，實作 PR 要決定是否也鎖它們，或把這點寫成限制；拿不到 lock 或 `<out>` 無法寫入時，只能 exit 2，此時目錄內若有舊 journal，它的 `run_id` 不會等於本輪；F3 的 127 可能發生在任何時點，這時 journal 會停在 `running`；不提供 whole-run rollback／resume（ledger 非目標）。
+- <a id="cc-536-01-01-status"></a>**實作狀態（2026-10-10）**：`implemented`（source-level），[#562](https://github.com/raylei50653/saccade/pull/562) merge `781472dc8d904c196914d3c3035b76bcadc97543`（head `789eace0`，含 runtime coordinate republication [#563](https://github.com/raylei50653/saccade/pull/563)，依 runbook §3.2 stacked 進同一個 head）。實作在 [run_completion.hpp](../../shipping/include/saccade_shipping/run_completion.hpp)／[run_completion.cpp](../../shipping/src/run_completion.cpp) 與 [track_driver.hpp](../../shipping/tools/track_driver.hpp)，reader 在 [native_track_parity](../../scripts/eval/diagnostics/native_track_parity.py)。**packaged Completion 沒有驗證**（見下方未驗證）。
+  - **實作內容**：目標接口 1–6 全部。`run_id` 是 `getrandom` 的 128 bit（32 hex），參數被拒時不產生、也不建立任何檔案。lock 檔是 `<out>/saccade_track.lock`（`flock(LOCK_EX|LOCK_NB)`，不刪除）；journal 是 `<out>/saccade_track.journal.json`，format `saccade.native_track_journal/v1`，另外記每個 sequence 的 trace sha256 與 `report {path, sha256}`。txt、trace、report、journal 都寫 temp（`.<name>.<run_id>.tmp`）→ fsync → rename → fsync 目錄。report 是 `saccade.native_track_report/v3`。作廢範圍是 `--report`、本輪的 `<out>/<seq>.txt` 與 `<trace>/<seq>/detector.bin`；輸出路徑（含經 `..` 的別名）撞到 journal、lock 或其他輸出時，在建立 `<out>` 之前就被拒。`saccade_track_measurement` 共用同一個 completion（F5），介面與 surface 不變。作廢的行為變更寫在 CLI 說明（[saccade_track.cpp](../../shipping/tools/saccade_track.cpp)），package README 沒有改（見 known limits）。
+  - **驗證（CPU，CI）**：merge 前整合 head `789eace0` 的 [PR CI](https://github.com/raylei50653/saccade/actions/runs/38017197737)（C++ build 在[另一個 run](https://github.com/raylei50653/saccade/actions/runs/38017197753)）8/8 SUCCESS，pytest 5231 passed、0 failed；merge 後 `781472dc` 的 [main CI](https://github.com/raylei50653/saccade/actions/runs/38018459089)（C++ build 在[另一個 run](https://github.com/raylei50653/saccade/actions/runs/38018459018)）8/8 SUCCESS，pytest 5231 passed、0 failed。CI 實際跑到的 completion 檢查：(1) [completion 協定測試](../../tests/native/test_shipping_run_completion.cpp)（`shipping-config-loader` ctest，181 checks），每個 case 在 fork 出的子 process 跑真正的 `RunCompletion::run`，中斷是真的 `SIGKILL`，第二個 run 是真的第二個 process；涵蓋失敗重跑、舊 report 殘留、同一 `<out>` 雙 process、sequence 中途 throw／SIGKILL、rename 後 journal 更新前 SIGKILL（txt 已是本輪完整輸出但仍 `pending`，不算提交）、`<out>` 不存在、作廢不刪新 journal、輸出路徑碰撞；kill point 只在測試 target 編入；(2) [reader 測試](../../tests/unit/test_native_track_parity.py) 的合成 journal 負控制（錯誤 run_id、`running`／`failed`、`pending` 但檔案存在、sha 不符、trace／report 被替換、identity 升級、損壞或型別錯誤的 journal、run id 不在 log 第一行）。這些都不需要 GPU。
+  - **只在本機跑（CI 會 skip，沒有 build）**：真 binary 的 [completion CLI](../../tests/unit/test_saccade_track_completion_cli.py) 與修改後的 [schedule CLI](../../tests/unit/test_saccade_track_schedule_cli.py)、以 `--keep` 讓 reader 判讀 writer 真正留下的檔案。2026-10-10 以 `789eace0` 重新 build 的 binary 跑：這幾個檔案加 [measurement surface](../../tests/unit/test_shipping_measurement_surface.py) 143 passed、沒有 skip，協定測試 181 checks、0 failures。
+  - **負控制的 mutation 檢查（本機，非 CI）**：在 `006007d3` 做 12 個 mutant（journal 在 rename 之前寫、直接寫正式路徑、不取 lock、不作廢、保留舊 report、`complete` 寫在 report 之前、作廢在 journal 之前、作廢時刪掉新 journal、拿掉碰撞檢查、`fail` 不記 sequence、lock 衝突時仍寫 journal、建構子失敗不記錄），每個都至少讓一項檢查失敗。「作廢時刪掉新 journal」一開始沒被抓到，因此加了 `killed_in_first_sequence`。reader 的修正（#562 審查 P2／P3，`7d79256d`）新增的負控制中，有 18 項在修正前的 reader 上失敗。raw 輸出在 repo 外的 gitignored `results/536_completion/mutation_006007d3/`。
+  - **驗證（GPU，本機，非 CI）**：在 `006007d3` 以乾淨工作樹、gpu0 lease 依序執行（gitignored `results/536_completion/runtime_006007d3/`），binary 是 `build-release/shipping/`。shipping double buffer 7 序列含 trace 的 parity 為 EXACT，`--against` PR-C2 正式 run 時 txt、trace hash 與 graph 計數完全相同（MOT txt 位元組不變）；measurement `none` 與 `--schedule serial` 也是 EXACT；7 個 parity 負控制 7/7 CAUGHT；shipping binary 的 surface 檢查通過。真 binary 的 completion 情境：complete、同一 `<out>` 失敗重跑（`failure.sequence` 正確，先前的 txt 與 report 已作廢，不在本輪的 txt 未動）、持有者執行中啟動第二個 process（exit 2，它的 run_id 不出現在任何檔案）、第一個 sequence `written` 後 SIGKILL（`running`，只有一個 committed）。`006007d3` 之後 `shipping/**` 沒有再改（`7d79256d` 只改 reader 與測試，`8240ea27` 只重新發布座標），所以沒有重新 capture。
+  - **未驗證**：packaged Completion。`shipping/entrypoint_pin.json` 仍是 PR-C2 的 bytes，所以用 `SACCADE_SHIPPING_ENTRYPOINT` 打包的 tree 還是沒有 completion 的舊行為，對它跑 `native_track_parity --native-from` 會是 `UNRESOLVED`（v2 report，沒有 journal）；re-pin（含 package README、安裝後 binary 的 Completion 正負控制與正式 GPU parity）需另外授權。另外：斷電 durability、網路檔案系統或 WSL 掛載的 Windows 磁碟上的 flock／rename（證據都在 WSL2 ext4）、F3 的 127 落在哪個時點。runtime coordinate 的 probe equality 不是行為等價的證明（equivalence 仍是 `unproven`）。完整 #535 A3 與 as-built 驗收屬 #541。
+  - **Known limits（實作層）**：`<out>` 以外的 `--report`／`--trace` 不受 lock 保護：用不同 `<out>`、共用 report 或 trace 的兩個並行 run 不會被排除，後 rename 者勝出，另一個只能由 journal 的 hash 不符偵測到；kill 留下的 `.<name>.<run_id>.tmp` 不會自動清理；torn config、缺 lineage（以及 measurement build 不合法的 mutation 名稱）現在會在 `<out>` 留下 lock 與 `failed` journal；F3 的 127 會讓 journal 停在 `running`；reader 讀 `track_report.json` 仍是直接 `json.loads`，損壞的 report 會讓 reader 拋例外，而不是回報 problem 並判 `UNRESOLVED`（不會誤判為 `EXACT`；#562 owner 判為非阻擋的 P3 診斷缺口，以小型修正處理，驗證義務交 #541）。
 
 ### <a id="cc-536-01-02"></a>CC-536-01-02：identity 與 fail-closed 點
 
@@ -246,8 +254,8 @@ Owner 欄寫的是 ledger 的 CAP accountable owner，以及語義的去向。ev
 | N-R5 | GPU 初始化 | 01-02 | CC-536-01-02 | runtime ctor | G2 | CAP-01 |
 | N-R6、L-12 | load 與 hash | 01-02 | CC-536-01-02 Gate B | `DetectorHost` | G2、G3、F2、F4 | CAP-01；#549 S1 |
 | N-R7、L-13、L-16 | sequence loop | 01-01 | CC-536-01-01 | `run_sequences` | serial／DB tests；G1、F5 | CAP-01；#537 |
-| N-R8 | report | 01-01 | CC-536-01-01 | `run_sequences` 結尾 | report v2；G1 | CAP-01；#537 |
-| N-T1、L-T0、L-T4…L-T6 | 目標：lock＋journal | 01-01 | CC-536-01-01 | 未實作 | 未驗證 | CAP-01；狀態語義 #537；check #541 |
+| N-R8 | report | 01-01 | CC-536-01-01 | `run_sequences` 結尾 | report v2（#562 起 v3）；G1 | CAP-01；#537 |
+| N-T1、L-T0、L-T4…L-T6 | 目標：lock＋journal（已實作） | 01-01 | CC-536-01-01 | `RunCompletion`（#562） | [實作狀態](#cc-536-01-01-status) | CAP-01；狀態語義 #537；check #541 |
 | N-T2、L-T1、L-T2 | 目標：preflight | 01-02、01-01 | CC-536-01-02 Gate A | 未實作 | 未驗證 | CAP-01；check #541 |
 | N-T3、L-T3 | 目標：identity level | 01-02 | CC-536-01-02 | 未實作 | expected source 待 #549 S1 | CAP-01；#549 S1 |
 | N-T4、L-T7、L-T8 | 目標：export publication gate（已實作） | 08-02 | CC-536-08-02 | `run_export`／`publish`（#559） | [實作狀態](#cc-536-08-02-status) | CAP-08；check #541 |
@@ -255,9 +263,9 @@ Owner 欄寫的是 ledger 的 CAP accountable owner，以及語義的去向。ev
 ## 6. 本稿之後
 
 - 三項決策與邊界見[設計決策](#decision-536-first-slice)，這裡不重述。
-- **實作切法**（一次一個 PR；第 1 項已完成，其餘仍是候選，各需自己的授權）：
+- **實作切法**（一次一個 PR；第 1、2 項已完成，其餘仍是候選，各需自己的授權）：
   1. Export safety：F1、frozen stem 保護、staging 與 publication commit、失敗注入測試（[#559](https://github.com/raylei50653/saccade/pull/559) merged，見 [CC-536-08-02 實作狀態](#cc-536-08-02-status)）；
-  2. Completion：`run_id`、lock、journal、逐檔 temp→rename 的 txt、report 新 format，MOT 位元組不變，並檢查 `saccade_track_measurement`；狀態轉換的細節由 #537 擁有；
+  2. Completion：`run_id`、lock、journal、逐檔 temp→rename 的 txt、report 新 format，MOT 位元組不變，並檢查 `saccade_track_measurement`；狀態轉換的細節由 #537 擁有（[#562](https://github.com/raylei50653/saccade/pull/562) merged，見 [CC-536-01-01 實作狀態](#cc-536-01-01-status)；package re-pin 是另外的切片，尚未授權）；
   3. Preflight：sha256 與輸入檢查移到 GPU 初始化之前，並用負控制證明不碰 CUDA；
   4. Identity integration：等 #549 S1 決定可信來源後，才加上 `expected_source_verified` 與強制 policy。
 - 除了第 4 項，這一批不需要等其餘 19 項 REQ，也不需要先完成 #549 S1。
