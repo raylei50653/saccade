@@ -103,6 +103,43 @@ library path and a loader audit that refuses copies of the bundled libraries
 found outside this tree. It exits 127 if that check cannot be loaded.
 
 
+Completion and failed reruns
+---------------------------
+
+After accepting the arguments, saccade_track prints a new run_id on its first
+stderr line. It holds an exclusive lock on OUT/saccade_track.lock until it
+exits. A concurrent second run using the same OUT exits 2 without changing the first
+run's files. The lock file remains after the process exits.
+
+OUT/saccade_track.journal.json records that run_id, a state (running, failed
+or complete), and each sequence's pending or written state. Written entries
+carry the MOT file's sha256. If --report is requested, its format is
+saccade.native_track_report/v3; it carries the same run_id and its hash is
+recorded in the journal. Exit 0 and a complete journal for this invocation
+are required for a complete run. Check the run_id and recorded hashes before
+using its outputs; files from an earlier invocation do not prove success.
+
+Once the lock is acquired and a new journal installed, the run removes the
+previous --report, the requested sequences' MOT files, and their requested
+trace files. Other sequences and unrelated files are left alone. A failed
+rerun can therefore remove previously successful outputs. Use a new OUT,
+report path and trace directory when you want to preserve an earlier run.
+
+Before initializing CUDA, preflight Gate A checks config, lineage,
+attestation when supplied, model file hashes, sequence metadata and frame
+listings, and output directories. A refusal exits 2 and attempts to leave a
+failed journal. Gate A does not decode frames: a corrupt JPEG can fail later,
+after earlier sequences have been written. Complete is written only after
+all sequences and the requested report have been published.
+
+A caught runtime error exits 2 and attempts to mark the journal failed.
+SIGKILL or an abrupt loader-audit exit can leave it running; treat that run
+as incomplete. A pending entry does not establish that its MOT file was
+committed. The package does not resume or roll back a whole run. The identity
+level in journal and report is currently null; supplied checksums do not
+establish a trusted model source or publisher authentication.
+
+
 Named limits
 ------------
 
@@ -117,6 +154,11 @@ Named limits
   RENAME_NOREPLACE. Only ext4 has been verified.
 - A SIGKILL during installation leaves the staging directory, which you must
   remove yourself. TARGET is never created.
+- The OUT lock does not protect a report or trace shared with a run using a
+  different OUT. Give concurrent runs distinct output paths.
+- Run-time flock and rename have been checked on WSL2 ext4 only. Network and
+  Windows-mounted file systems, power-loss durability and cleanup of temp
+  files left by a killed run have not been verified.
 
 
 Licenses

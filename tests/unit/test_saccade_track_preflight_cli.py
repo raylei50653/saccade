@@ -28,7 +28,16 @@ constructor dlopens it before ``main`` in every run.
   journal whose message starts ``preflight:``, no sequence output and no
   ``cuInit``. They need no GPU.
 
-Skips when ``build/shipping/saccade_track`` has not been built.
+By default, skips when ``build/shipping/saccade_track`` has not been built.
+Set ``SACCADE_SHIPPING_TEST_PREFIX`` to an installed tree to run its actual
+``bin/saccade_track`` launcher with its installed config, lineage and
+attestation. An explicit prefix must be usable; it never skips or falls back
+to a build binary. Installed mode collects only shipping cases. Its positive
+control uses the installed model files and invalid JPEG inputs: Gate A and
+CUDA initialization pass, then the first sequence fails in the decoder. It
+does not copy the operator library outside the path the auditor accepts.
+This proves the observer reaches CUDA; successful inference and completion
+need separate installed-binary GPU parity evidence.
 """
 
 # scope: system
@@ -48,15 +57,28 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 BUILD = REPO / "build" / "shipping"
-CONFIG = REPO / "configs" / "shipping" / "mamba_whole_graph.resolved.json"
-LINEAGE = REPO / "tests" / "native" / "fixtures" / "shipping_head_lineage.json"
+_PREFIX = os.environ.get("SACCADE_SHIPPING_TEST_PREFIX")
+PREFIX = Path(_PREFIX).expanduser().resolve() if _PREFIX else None
+INSTALLED = _PREFIX is not None
+MODEL_ROOT = PREFIX / "share" / "saccade" if PREFIX else REPO
+CONFIG = MODEL_ROOT / "configs" / "shipping" / "mamba_whole_graph.resolved.json"
 FROZEN_LINEAGE = (
-    REPO
+    MODEL_ROOT
     / "models"
     / "yolo"
     / "mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json"
 )
-ATTESTATION = REPO / "configs" / "shipping" / "mamba_head_realization.attestation.json"
+LINEAGE = (
+    FROZEN_LINEAGE
+    if INSTALLED
+    else REPO / "tests" / "native" / "fixtures" / "shipping_head_lineage.json"
+)
+ATTESTATION = (
+    MODEL_ROOT / "configs" / "shipping" / "mamba_head_realization.attestation.json"
+)
+BINARIES = (
+    ["saccade_track"] if INSTALLED else ["saccade_track", "saccade_track_measurement"]
+)
 JOURNAL = "saccade_track.journal.json"
 PROBE = "cuda_init_probe.so"
 SEQS = ("SEQ-A", "SEQ-B")
@@ -67,9 +89,22 @@ STANDINS = {
 }
 
 pytestmark = pytest.mark.skipif(
-    not (BUILD / "saccade_track").exists(),
+    not INSTALLED and not (BUILD / "saccade_track").exists(),
     reason="build/shipping/saccade_track not built",
 )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _require_installed_tree() -> None:
+    if INSTALLED:
+        assert PREFIX is not None, (
+            "SACCADE_SHIPPING_TEST_PREFIX must name an installed tree"
+        )
+        launcher = PREFIX / "bin" / "saccade_track"
+        assert launcher.is_file() and os.access(launcher, os.X_OK), launcher
+        assert (PREFIX / "libexec" / "saccade_track").is_file(), PREFIX
+        for path in (CONFIG, FROZEN_LINEAGE, ATTESTATION):
+            assert path.is_file(), path
 
 
 def _has_cuda_driver() -> bool:
@@ -115,8 +150,10 @@ def _run(
     sequences: list[Path] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], bool]:
     """Run the entrypoint; returns its result and whether cuInit ran."""
-    exe = BUILD / binary
+    exe = PREFIX / "bin" / binary if PREFIX else BUILD / binary
     if not exe.exists():
+        if INSTALLED:
+            pytest.fail(f"installed entrypoint {exe} is missing")
         pytest.skip(f"{exe.relative_to(REPO)} not built")
     if sequences is None:
         sequences = [tmp_path / "seqs" / s for s in SEQS]
@@ -180,18 +217,35 @@ def _assert_refused_in_gate_a(
 
 @pytest.mark.skipif(not _has_cuda_driver(), reason="no CUDA driver on this host")
 def test_positive_control_passes_gate_a_then_initializes_cuda(tmp_path: Path) -> None:
-    root, lineage = _standin_bundle(tmp_path)
-    r, cuda_init = _run(tmp_path, lineage=lineage, model_root=root)
+    if INSTALLED:
+        r, cuda_init = _run(
+            tmp_path,
+            lineage=FROZEN_LINEAGE,
+            model_root=MODEL_ROOT,
+            attestation=ATTESTATION,
+        )
+    else:
+        root, lineage = _standin_bundle(tmp_path)
+        r, cuda_init = _run(tmp_path, lineage=lineage, model_root=root)
     assert r.returncode == 2, r.stderr
     assert "saccade_track: preflight passed" in r.stderr, r.stderr
     assert cuda_init, "the observer did not see cuInit after Gate A passed"
     j = json.loads((tmp_path / "out" / JOURNAL).read_text())
     assert j["state"] == "failed"
     message = j["failure"]["message"]
-    assert not message.startswith("preflight:") and "dlopen" in message, message
+    assert not message.startswith("preflight:"), message
+    if INSTALLED:
+        assert j["run_id"] == _run_id(r, "saccade_track")
+        assert j["identity"] == {"level": None}
+        assert j["failure"]["sequence"] == SEQS[0], message
+        assert "nvjpeg" in message.lower(), message
+        assert all(s["state"] == "pending" for s in j["sequences"])
+        assert not list((tmp_path / "out").glob("*.txt"))
+    else:
+        assert "dlopen" in message, message
 
 
-@pytest.mark.parametrize("binary", ["saccade_track", "saccade_track_measurement"])
+@pytest.mark.parametrize("binary", BINARIES)
 def test_replaced_head_is_refused_without_cuda(tmp_path: Path, binary: str) -> None:
     root, lineage = _standin_bundle(tmp_path)
     head = root / json.loads(lineage.read_text())["torchscript"]["path"]
@@ -214,9 +268,11 @@ def test_missing_attestation_is_refused_without_cuda(tmp_path: Path) -> None:
     lineage = (
         json.loads(FROZEN_LINEAGE.read_text()) if FROZEN_LINEAGE.exists() else None
     )
-    if lineage is None or not (REPO / lineage["op_library"]["path"]).exists():
+    if lineage is None or not (MODEL_ROOT / lineage["op_library"]["path"]).exists():
+        if INSTALLED:
+            pytest.fail("the installed frozen lineage or operator library is missing")
         pytest.skip("the frozen lineage or the operator library is not here")
-    r, cuda_init = _run(tmp_path, lineage=FROZEN_LINEAGE, model_root=REPO)
+    r, cuda_init = _run(tmp_path, lineage=FROZEN_LINEAGE, model_root=MODEL_ROOT)
     _assert_refused_in_gate_a(tmp_path, r, cuda_init, "operator library")
 
 
