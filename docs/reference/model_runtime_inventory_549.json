@@ -44,12 +44,14 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "project_operator_binary",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "pyproject.toml:13",
+          "shipping/license_audit.json:1036-1157"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project operator source under the repository software licence expression; the binary links third-party runtime libraries whose terms are #547 L-1..L-4 (lib/vendor objects). The operator binary itself is not an audit object. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -91,12 +93,14 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "project_operator_binary",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "pyproject.toml:13",
+          "shipping/license_audit.json:1036-1157"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project operator source under the repository software licence expression; the binary links third-party runtime libraries whose terms are #547 L-1..L-4 (lib/vendor objects). The operator binary itself is not an audit object. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -110,7 +114,8 @@
     {
       "path": "configs/presets/mamba_whole_graph.yaml",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "configs/shipping/mamba_whole_graph.resolved.json:4",
+        "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json:11"
       ],
       "scope": "reference_only",
       "id": "A003",
@@ -157,12 +162,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -172,7 +176,8 @@
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
       },
-      "historical_inventory_identity_matches": true
+      "historical_inventory_identity_matches": true,
+      "reference_basis": "Preset named by N04 and N05 as the export source; its hash is a recorded claim."
     },
     {
       "path": "configs/shipping/mamba_head_realization.attestation.json",
@@ -200,12 +205,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -243,12 +247,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -263,7 +266,8 @@
     {
       "path": "docs/reference/runtime_identity.generated.json",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "results/536_package_repin/full_b24c27f/installed/saccade/MANIFEST.json:117-127",
+        "docs/reference/runbooks/runtime_identity_republication.md:95"
       ],
       "scope": "reference_only",
       "id": "A006",
@@ -285,12 +289,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -299,12 +302,13 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "reference_basis": "Current coordinate publication; byte-equal to the #536 package MANIFEST runtime_identity sha256."
     },
     {
       "path": "docs/reference/runtime_identity/archive/runtime_identity.2026-10-08.1927e740d4267aec.json",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "results/465_prc3_package/full_9217ed92/installed/saccade/MANIFEST.json:117-127"
       ],
       "scope": "reference_only",
       "id": "A007",
@@ -326,12 +330,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -340,12 +343,13 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "reference_basis": "Byte-equal to the C3 package MANIFEST runtime_identity sha256."
     },
     {
       "path": "docs/reference/runtime_identity/archive/runtime_identity.2026-10-08.221cc25330c5422d.json",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "results/465_prc4_release/full_bc75dcab/installed/saccade/MANIFEST.json:117-127"
       ],
       "scope": "reference_only",
       "id": "A008",
@@ -367,12 +371,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -381,13 +384,12 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "reference_basis": "Byte-equal to the C4 package MANIFEST runtime_identity sha256."
     },
     {
       "path": "docs/reference/runtime_identity/archive/runtime_identity.2026-10-10.9ef960e0fd1683ee.json",
-      "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
-      ],
+      "source_refs": [],
       "scope": "reference_only",
       "id": "A009",
       "availability": "present",
@@ -408,12 +410,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -422,7 +423,12 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "git_refs": [
+        "ea619545",
+        "b24c27f8"
+      ],
+      "reference_basis": "Coordinate published by ea619545 for #536 Gate A and archived by b24c27f8 (implementation axis 9ef960e0 -> 9a0fe01a); no checked-in file names this archive."
     },
     {
       "path": "models/embedding/facebook_dinov2-base.engine",
@@ -451,12 +457,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -499,12 +504,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -548,12 +552,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -596,12 +599,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -654,12 +656,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -707,12 +708,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -755,12 +755,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -803,12 +802,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -850,12 +848,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_learned_policy_json",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-fitted policy coefficients; training-data terms unresolved and no #547 audit item covers them. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -892,12 +889,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_learned_policy_json",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-fitted policy coefficients; training-data terms unresolved and no #547 audit item covers them. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -934,12 +930,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_learned_policy_json",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-fitted policy coefficients; training-data terms unresolved and no #547 audit item covers them. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -976,12 +971,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_learned_policy_json",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-fitted policy coefficients; training-data terms unresolved and no #547 audit item covers them. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1018,12 +1012,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_learned_policy_json",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-fitted policy coefficients; training-data terms unresolved and no #547 audit item covers them. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1061,12 +1054,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "not_native_required",
@@ -1104,12 +1096,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "not_native_required",
@@ -1213,12 +1204,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1264,12 +1256,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1307,12 +1300,14 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "m1_model_root",
+        "audit_item": "M-1",
         "evidence": [
           "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Shipped model-root member named in M-1 scope; M-1 is OPEN. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1363,12 +1358,14 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "m1_model_root",
+        "audit_item": "M-1",
         "evidence": [
           "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Shipped model-root member named in M-1 scope; M-1 is OPEN. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1444,12 +1441,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1486,12 +1484,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1528,12 +1527,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1570,12 +1570,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1618,12 +1619,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1665,12 +1667,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1706,12 +1709,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "not_native_required",
@@ -1766,12 +1770,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1809,12 +1814,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1851,12 +1857,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1865,6 +1872,53 @@
       "compatibility": {
         "status": "source_contract_only",
         "description": "Consumer-specific input/batch/shape/dtype; exact SM/TRT ABI and engine attribution unresolved outside native pinned baseline."
+      }
+    },
+    {
+      "path": "models/yolo/yolo26n_native.engine",
+      "source_refs": [
+        "src/main.cpp:20-22",
+        "CMakeLists.txt:586-588"
+      ],
+      "scope": "legacy_cpp_hardcoded_default",
+      "id": "A066",
+      "availability": "unavailable",
+      "bytes": null,
+      "sha256": null,
+      "identity_basis": "no_substitution",
+      "producer": {
+        "status": "unresolved",
+        "tool": null,
+        "description": "No exporter, build record or lineage names this engine; producer unresolved."
+      },
+      "ancestry": {
+        "status": "unresolved",
+        "description": "Filename suggests YOLO26n; no recorded checkpoint, ONNX or #421 node."
+      },
+      "finetuning_data": {
+        "status": "unresolved",
+        "description": "Exact dataset snapshot/terms not bound to any bytes."
+      },
+      "licence": {
+        "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
+        "evidence": [
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
+        ],
+        "decision_owner": "#547 release owner",
+        "reading": "YOLO/Ultralytics lineage inferred from filename only (no bytes or lineage record); ADR 023 states the lineage rule; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
+      },
+      "runtime_consumer": {
+        "status": "source_inspected",
+        "description": "saccade_node (legacy C++ perception demo, built only with SACCADE_WITH_OPENCV=ON) passes this hardcoded relative path to TRTEngine; no CLI override, no fallback; exceptions caught and exit -1. Not shipping."
+      },
+      "compatibility": {
+        "status": "source_contract_only",
+        "description": "Source allocates input [1,3,640,640] float32 and output [1,300,6] float32; engine metadata unverified, default unavailable.",
+        "evidence": [
+          "src/main.cpp:21-33"
+        ]
       }
     },
     {
@@ -1901,12 +1955,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1945,12 +2000,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -1987,12 +2043,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2052,12 +2109,14 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "m1_model_root",
+        "audit_item": "M-1",
         "evidence": [
           "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Shipped model-root member named in M-1 scope; M-1 is OPEN. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2121,12 +2180,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "not_native_required",
@@ -2163,12 +2223,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2205,12 +2266,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2247,12 +2309,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2266,7 +2329,8 @@
     {
       "path": "report_data/training_lineage_inventory.json",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json:17",
+        "scripts/provenance/training_lineage.py:78"
       ],
       "scope": "reference_only",
       "id": "A047",
@@ -2288,12 +2352,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -2302,12 +2365,13 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "reference_basis": "#421 inventory bound by N05; producer default output."
     },
     {
       "path": "results/465_prc3_package/full_9217ed92/installed/saccade/MANIFEST.json",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "docs/reference/native_runtime_resolved_config.md:1802"
       ],
       "scope": "reference_only",
       "id": "A048",
@@ -2329,12 +2393,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -2343,12 +2406,13 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "reference_basis": "C3 formal result directory."
     },
     {
       "path": "results/465_prc4_release/full_bc75dcab/installed/saccade/MANIFEST.json",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "docs/reference/native_runtime_resolved_config.md:2121"
       ],
       "scope": "reference_only",
       "id": "A049",
@@ -2370,12 +2434,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -2384,12 +2447,14 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "reference_basis": "C4 r2 formal result directory."
     },
     {
       "path": "results/536_package_repin/full_b24c27f/installed/saccade/MANIFEST.json",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "docs/reference/native_runtime_package_repin_536.md:67",
+        "docs/reference/native_runtime_package_repin_536.md:97"
       ],
       "scope": "reference_only",
       "id": "A050",
@@ -2411,12 +2476,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -2425,7 +2489,8 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "reference_basis": "#536 re-pin result directory and installed prefix."
     },
     {
       "path": "runs/gated_det_v1/best.ckpt",
@@ -2467,12 +2532,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2487,7 +2553,11 @@
     {
       "path": "runs/gated_det_v14replica/epoch_0012.ckpt",
       "source_refs": [
-        "report_data/training_lineage_inventory.json"
+        "report_data/training_lineage_inventory.json:745",
+        "scripts/eval/run_native_s_speed.sh:10",
+        "scripts/eval/run_nopost_eval.sh:15",
+        "scripts/eval/run_teacher_head_matched_baseline.sh:15",
+        "scripts/train/temporal_yolo/run_v14replica_t3t1.sh:12"
       ],
       "scope": "provenance_or_export_only",
       "id": "A052",
@@ -2524,16 +2594,17 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "not_native_required",
-        "description": "Mamba/teacher checkpoint loader for selected Python preset; native keeps path claim only."
+        "description": "No configs/ preset selects it. Teacher input for excluded eval/training scripts (source_refs); native keeps no path claim to it."
       },
       "compatibility": {
         "status": "source_contract_only",
@@ -2582,12 +2653,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2625,12 +2697,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2705,12 +2778,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2748,12 +2822,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2790,12 +2865,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2875,12 +2951,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2918,12 +2995,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -2995,12 +3073,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -3038,12 +3117,13 @@
       },
       "licence": {
         "status": "unresolved",
+        "category": "ultralytics_lineage_outside_m1",
+        "audit_item": null,
         "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
+          "docs/decisions/023-ultralytics-runtime-decouple.md:27"
         ],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "YOLO/Ultralytics weight or training lineage per ADR 023; outside M-1 scope (share/saccade/models only), and no #547 audit item tracks it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "source_inspected",
@@ -3085,16 +3165,15 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "third_party_non_yolo_model",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Non-YOLO upstream model family (embedding/ReID backbone); no #547 audit item covers it, and M-1/ADR 023 (YOLO26/Ultralytics) are not evidence for it. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "not_native_required",
-        "description": "scripts/model/export_mobilenetv4_reid.py:43-66 producer input; not native runtime loaded."
+        "description": "scripts/model/export_mobilenetv4_reid.py:43-71 producer input (default at :70, loaded by _load_model :43-66); not native runtime loaded."
       },
       "compatibility": {
         "status": "source_contract_only",
@@ -3104,7 +3183,8 @@
     {
       "path": "scripts/provenance/training_lineage_roles.json",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json:24",
+        "scripts/provenance/training_lineage.py:77"
       ],
       "scope": "reference_only",
       "id": "A063",
@@ -3126,12 +3206,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -3140,12 +3219,14 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "reference_basis": "Roles file bound by N05 lineage; producer default input."
     },
     {
       "path": "shipping/entrypoint_pin.json",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "docs/reference/native_runtime_package_repin_536.md:8",
+        "results/536_package_repin/full_b24c27f/installed/saccade/MANIFEST.json:70-74"
       ],
       "scope": "reference_only",
       "id": "A064",
@@ -3167,12 +3248,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -3181,12 +3261,15 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "reference_basis": "Current entrypoint pin; recorded in the #536 package MANIFEST pins."
     },
     {
       "path": "shipping/license_audit.json",
       "source_refs": [
-        "docs/reference/native_runtime_package_repin_536.md"
+        "results/465_prc4_release/full_bc75dcab/installed/saccade/MANIFEST.json:128-129",
+        "results/536_package_repin/full_b24c27f/installed/saccade/MANIFEST.json:128-129",
+        "shipping/cmake/install_third_party.cmake:71"
       ],
       "scope": "reference_only",
       "id": "A065",
@@ -3208,12 +3291,11 @@
       },
       "licence": {
         "status": "unresolved",
-        "evidence": [
-          "shipping/license_audit.json:1158-1174",
-          "docs/decisions/023-ultralytics-runtime-decouple.md"
-        ],
+        "category": "project_metadata",
+        "audit_item": null,
+        "evidence": [],
         "decision_owner": "#547 release owner",
-        "reading": "No distribution permission inferred from existence, extension, digest or repository software licence."
+        "reading": "Project-generated configuration/provenance metadata, no model weights; no #547 audit item and outside M-1 scope even when installed. Referenced models keep their own records. No distribution permission inferred from existence, extension, digest or repository software licence."
       },
       "runtime_consumer": {
         "status": "reference_only",
@@ -3222,7 +3304,8 @@
       "compatibility": {
         "status": "not_applicable",
         "description": "Metadata/reference bytes; coordinate archives are historical, not model compatibility gates."
-      }
+      },
+      "reference_basis": "Licence audit recorded by C4/#536 MANIFESTs and read by the shipping install step."
     }
   ],
   "runtime_surfaces": [
@@ -3268,6 +3351,24 @@
       "selector": "caller head/backbone; mamba_head_best.pt default",
       "consumer": "src/saccade/perception/eval/multi_stream.py:121-124",
       "behavior_and_limits": "Multistream skips C++ head for temporal operation/missing script. Import/construction failures propagate; detail/channel mismatch rejected by cpp_ptr, no general failure recovery.",
+      "availability": "unresolved",
+      "bytes": null,
+      "sha256": null,
+      "producer": "source-selected family; exact release unresolved",
+      "ancestry": "unresolved except concrete artifact records",
+      "finetuning_data": "unresolved except historical/document evidence",
+      "licence": {
+        "status": "unresolved",
+        "decision_owner": "#547 release owner"
+      },
+      "compatibility": "consumer/source contract; no new runtime qualification"
+    },
+    {
+      "id": "P03b",
+      "name": "legacy_cpp_saccade_node",
+      "selector": "hardcoded ./models/yolo/yolo26n_native.engine (A066); no override",
+      "consumer": "src/main.cpp:20-22",
+      "behavior_and_limits": "Built only with SACCADE_WITH_OPENCV=ON (CMakeLists.txt:586-588); cwd-relative path; TRTEngine construction failure caught and exits -1; default unavailable locally.",
       "availability": "unresolved",
       "bytes": null,
       "sha256": null,
@@ -4081,7 +4182,8 @@
       "present_artifacts_checked": 61,
       "native_table_rows_checked": 6,
       "source_refs_checked": 101,
-      "pass": true
+      "pass": true,
+      "source_refs_reading": "101 counts reference occurrences across artifacts, duplicates included (71 unique). The checker was not committed; superseded by the committed replay in the Markdown §7."
     },
     "docs_checks": {
       "doc_links": {

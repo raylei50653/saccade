@@ -91,6 +91,7 @@ producer、ancestry／data evidence 與 availability 都在 JSON 的 `artifacts`
 | P01 Python detector | YOLO raw s/m/l engines、pose/batched engines；`--engine`／`--pose-engine` | `TRTYoloDetector`／batching／concurrent routes；missing/deserialize behavior 以 consumer 為準 | 非 native model-root；raw CLI default 是 m/960，不能混成 s/640 |
 | P02 Mamba eager／whole-graph | `mamba_ckpt`、YOLO pretrained、teacher config／weights、`fpn_backbone_engine`、optional `mamba_head_engine` | TRT backbone path 已可跳過 YOLO construction；無 TRT path 用 PyTorch teacher backbone。`mot17.py` 的 preset／explicit head engine 直接選用；只有 `--mamba-trt` auto branch 檢查 default 檔案後選用或回 PyTorch | s Python head仍讀 `.ckpt`；native N02 才是 frozen TorchScript。m preset 是另一模型組合 |
 | P03 legacy C++／multistream | `models/yolo/mamba_head_best.pt`＋backbone、可覆寫 head/engine | C++ batched Mamba、multistream server／eval；server 在 temporal 或缺 head script 時略過 C++ head；import／construction errors 會傳出，`cpp_ptr` 的 detail／channel mismatch 會拒絕 | 這份 legacy head 不是 N02，#421 未記錄其 source checkpoint |
+| P03b legacy `saccade_node` | [src/main.cpp](../../src/main.cpp) 寫死 cwd-relative `./models/yolo/yolo26n_native.engine`（A066），無 CLI 覆寫 | 只在 `SACCADE_WITH_OPENCV=ON` 建置；`TRTEngine` construction 失敗被 catch 後 exit −1，無 fallback | 非 shipping；預設檔本機 unavailable，無 producer／lineage 記錄 |
 | P04 Python teacher／temporal／gated／JDE | `--teacher-head-ckpt`／backbone、temporal/conditioned ckpt、`fpn_reid_ckpt`／`jde_proj_ckpt` | 依 config 選路；teacher、Mamba head、trained FPN projection 是獨立 runtime inputs | 選配／研究 eval，不 install 到 shipping |
 | P05 embedding／ReID | SigLIP2、SigLIP2-ReID、DINOv2、TransReID、OSNet、FastReID、MobileNetV4 的 7 個 `_DEFAULT_ENGINE` | [TRTFeatureExtractor](../../src/saccade/perception/feature_extractor.py)，C++ unavailable 時同檔 TRT Python backend；`--reid-engine-path`／Cheb-GR 可覆寫 | native ReID off；FastReID default 本機 unavailable。MobileNet GPU-decode 是另一路 artifact |
 | P06 learned JSON policy | external-FP logistic／cascade JSON，可 caller 指定 | [external FP](../../src/saccade/perception/eval/external_fp_model.py)、evaluator policy loader | model weights 也可能在 JSON；不因 extension 排除。未啟用則不讀 |
@@ -143,6 +144,11 @@ N06 frozen lineage 原 op hash `cfea782f…`、現行 realized hash `aa84cccd…
 [license audit M-1／L-4](../../shipping/license_audit.json) 與
 [ADR 023](../decisions/023-ultralytics-runtime-decouple.md)。本次沒有重新檢索官方條款或提出法律結論。
 
+M-1 的 scope 只有 shipped model root（N01、N02、N05）。JSON 每筆 `licence` 以 `category`／`audit_item`
+標出實際追蹤狀態：只有這三筆的 `audit_item` 是 `M-1`；model root 外的 YOLO／Ultralytics 血統只引
+ADR 023 的血統記錄，embedding／ReID backbone、learned policy JSON、operator binary 與 metadata 的
+`audit_item` 是 `null`，表示 #547 目前**沒有**稽核項目追蹤它們。是否為這些 channel 開立稽核項目由 #547 owner 決定。
+
 | 項目 | 現有記錄 | Remaining unknown／decision owner |
 |:--|:--|:--|
 | YOLO26／Ultralytics derivatives | ADR／M-1 記錄 AGPL lineage 與 commercial/legal/alternative owner options | exact pretrained/model licence與各 binary義務、商業授權或法律判斷、公開／私有channel grant；#547 release owner |
@@ -154,45 +160,87 @@ N06 frozen lineage 原 op hash `cfea782f…`、現行 realized hash `aa84cccd…
 ## 7. 本次檢查、重播與 stop point
 
 盤點初次保存的本機檢查：61/61 present artifact的bytes／SHA相符，六列native表與JSON相符，
-101個source references存在；installed static／manifest為13/13 PASS。
+source references檢查計數為101；installed static／manifest為13/13 PASS。
 3038個relative doc links、strict doc structure、`--mode attested` checker與whitespace檢查通過。
 Doc structure仍有兩個既有index warnings；identity checker未重新計算host environment、legacy
 runtime inputs或probe。Snapshot的raw report path／SHA保存在JSON的`validation`；分類為
-**local-only evidence**。模型與raw reports仍在gitignored的`models/`、`runs/`、`build/`、`results/`，
+**local-only evidence**。101是逐artifact累計的reference次數（含重複，不重複者71）；產生該數字的
+checker當時沒有commit，因此以下replay取代它作為可重跑的檢查，原snapshot raw report不改寫。
+模型與raw reports仍在gitignored的`models/`、`runs/`、`build/`、`results/`，
 本PR不攜帶這些bytes；這些檢查不能升格為clean-checkout reproducible evidence或CI模型重播。
 PR修訂後的文件／CI檢查另記在PR，不改寫原snapshot的raw report紀錄。
 重播需保留本交付的inventory JSON與列出的gitignored artifacts；`source_commit` 是所檢視程式的
 座標，該舊commit尚不含本盤點文件。若另checkout它，須從交付分支另保留JSON。
-unavailable／remote surfaces保持unresolved，不下載或換同名模型。只讀bytes replay如下：
+unavailable／remote surfaces保持unresolved，不下載或換同名模型。
+
+下列只讀replay檢查present artifact的bytes／SHA、每個不重複source reference的檔案與行號範圍、
+`git_refs` commit存在，以及§2 native表六列與JSON一致；raw output寫入`results/549_s0_inventory/`下
+新的時戳目錄，各步驟印出exit code：
 
 ```bash
-python3 - <<'PY'
-import hashlib, json
+OUT=results/549_s0_inventory/$(date +%Y%m%dT%H%M%S)
+mkdir -p "$OUT"
+.venv/bin/python - "$OUT/artifact_replay.json" <<'PY'
+import hashlib, json, re, subprocess, sys
 from pathlib import Path
-d = json.loads(Path('docs/reference/model_runtime_inventory_549.json').read_text())
-checked = 0
+doc = Path('docs/reference/model_runtime_inventory_549')
+d = json.loads(doc.with_suffix('.json').read_text())
+fail, refs, git_refs, present = [], [], set(), 0
 for a in d['artifacts']:
+    refs += a.get('source_refs', [])
+    git_refs.update(a.get('git_refs', []))
     if a['availability'] != 'present':
         continue
     p = Path(a['path'])
-    assert p.is_file(), a['path']
+    if not p.is_file():
+        fail.append(f"missing {a['id']}")
+        continue
     h = hashlib.sha256()
     with p.open('rb') as f:
         for block in iter(lambda: f.read(1024 * 1024), b''):
             h.update(block)
-    assert p.stat().st_size == a['bytes'], a['path']
-    assert h.hexdigest() == a['sha256'], a['path']
-    checked += 1
-print(f'{checked} present artifact identities match; unresolved surfaces unchanged')
+    if (p.stat().st_size, h.hexdigest()) != (a['bytes'], a['sha256']):
+        fail.append(f"identity {a['id']}")
+    present += 1
+for ref in sorted(set(refs)):
+    m = re.fullmatch(r'(.+?)(?::(\d+)(?:-(\d+))?)?', ref)
+    p = Path(m[1])
+    if not p.is_file():
+        fail.append(f"ref missing {ref}")
+    elif m[2]:
+        n = sum(1 for _ in p.open('rb'))
+        lo, hi = int(m[2]), int(m[3] or m[2])
+        if not 1 <= lo <= hi <= n:
+            fail.append(f"ref range {ref} (file has {n} lines)")
+for c in sorted(git_refs):
+    if subprocess.run(['git', 'cat-file', '-e', f'{c}^{{commit}}']).returncode:
+        fail.append(f"git ref {c}")
+by_id = {a['id']: a for a in d['artifacts']}
+rows = re.findall(r'^\| (N0\d) [^|]*\| `([^`]+)` \| (\d+) \| `([0-9a-f]{64})` \|$',
+                  doc.with_suffix('.md').read_text(), re.M)
+for i, path, size, sha in rows:
+    a = by_id[i]
+    if (a['path'], a['bytes'], a['sha256']) != (path, int(size), sha):
+        fail.append(f"table {i}")
+if [r[0] for r in rows] != [f'N0{k}' for k in range(1, 7)]:
+    fail.append(f"table rows {[r[0] for r in rows]}")
+report = {'artifacts': len(d['artifacts']), 'present_artifacts_checked': present,
+          'source_ref_occurrences': len(refs), 'unique_source_refs_checked': len(set(refs)),
+          'git_refs_checked': len(git_refs), 'native_table_rows_checked': len(rows),
+          'failures': fail, 'pass': not fail}
+Path(sys.argv[1]).write_text(json.dumps(report, indent=2) + '\n')
+print(json.dumps(report))
+sys.exit(1 if fail else 0)
 PY
+echo "artifact_replay exit $?"
 
 .venv/bin/python scripts/native/check_shipping_bundle.py static \
   --tree results/536_package_repin/full_b24c27f/installed/saccade \
-  --manifest --report /tmp/549-static-replay.json
-.venv/bin/python scripts/tools/check_doc_links.py
-.venv/bin/python scripts/tools/check_doc_structure.py --strict
-.venv/bin/python scripts/tools/check_runtime_identity_staleness.py --mode attested
-git diff --check
+  --manifest --report "$OUT/static_replay.json" > "$OUT/static_replay.log" 2>&1; echo "static exit $?"
+.venv/bin/python scripts/tools/check_doc_links.py > "$OUT/doc_links.log" 2>&1; echo "doc_links exit $?"
+.venv/bin/python scripts/tools/check_doc_structure.py --strict > "$OUT/doc_structure.log" 2>&1; echo "doc_structure exit $?"
+.venv/bin/python scripts/tools/check_runtime_identity_staleness.py --mode attested > "$OUT/runtime_identity.log" 2>&1; echo "runtime_identity exit $?"
+git diff --check > "$OUT/whitespace.log" 2>&1; echo "whitespace exit $?"
 ```
 
 S0 stop point：文件／byte inventory完成後交審；未知來源或權利保持OPEN，不需要改模型才能完成盤點。
