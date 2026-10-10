@@ -175,11 +175,15 @@ unavailable／remote surfaces保持unresolved，不下載或換同名模型。
 
 下列只讀replay檢查present artifact的bytes／SHA、每個不重複source reference的檔案與行號範圍、
 `git_refs` commit存在，以及§2 native表六列與JSON一致；raw output寫入`results/549_s0_inventory/`下
-新的時戳目錄，各步驟印出exit code：
+新的時戳目錄。六步都會執行並印出exit code；任一步失敗則印出`overall exit 1`，
+整段（subshell）以非零結束：
 
 ```bash
+(
 OUT=results/549_s0_inventory/$(date +%Y%m%dT%H%M%S)
 mkdir -p "$OUT"
+rc=0
+step() { local s=$?; echo "$1 exit $s"; [ "$s" -eq 0 ] || rc=1; }
 .venv/bin/python - "$OUT/artifact_replay.json" <<'PY'
 import hashlib, json, re, subprocess, sys
 from pathlib import Path
@@ -232,15 +236,18 @@ Path(sys.argv[1]).write_text(json.dumps(report, indent=2) + '\n')
 print(json.dumps(report))
 sys.exit(1 if fail else 0)
 PY
-echo "artifact_replay exit $?"
+step artifact_replay
 
 .venv/bin/python scripts/native/check_shipping_bundle.py static \
   --tree results/536_package_repin/full_b24c27f/installed/saccade \
-  --manifest --report "$OUT/static_replay.json" > "$OUT/static_replay.log" 2>&1; echo "static exit $?"
-.venv/bin/python scripts/tools/check_doc_links.py > "$OUT/doc_links.log" 2>&1; echo "doc_links exit $?"
-.venv/bin/python scripts/tools/check_doc_structure.py --strict > "$OUT/doc_structure.log" 2>&1; echo "doc_structure exit $?"
-.venv/bin/python scripts/tools/check_runtime_identity_staleness.py --mode attested > "$OUT/runtime_identity.log" 2>&1; echo "runtime_identity exit $?"
-git diff --check > "$OUT/whitespace.log" 2>&1; echo "whitespace exit $?"
+  --manifest --report "$OUT/static_replay.json" > "$OUT/static_replay.log" 2>&1; step static
+.venv/bin/python scripts/tools/check_doc_links.py > "$OUT/doc_links.log" 2>&1; step doc_links
+.venv/bin/python scripts/tools/check_doc_structure.py --strict > "$OUT/doc_structure.log" 2>&1; step doc_structure
+.venv/bin/python scripts/tools/check_runtime_identity_staleness.py --mode attested > "$OUT/runtime_identity.log" 2>&1; step runtime_identity
+git diff --check > "$OUT/whitespace.log" 2>&1; step whitespace
+echo "overall exit $rc"
+exit "$rc"
+)
 ```
 
 S0 stop point：文件／byte inventory完成後交審；未知來源或權利保持OPEN，不需要改模型才能完成盤點。
