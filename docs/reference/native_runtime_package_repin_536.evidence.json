@@ -1,0 +1,159 @@
+{
+  "baseline_sha256": "a1a57586cbb04a45fc883a846b4fb6b3285cdb26d0625ab881c430a8d75cf4d2",
+  "completion_controls": {
+    "cases": [
+      "r1_complete",
+      "r2_failed_rerun",
+      "r3_second_invocation",
+      "r4_sigkill"
+    ],
+    "sha256": "f9587cee5ba75caf40bdd4daa65c29fa11913884ad45b3f19406537ff9162b2f",
+    "verdict": "PASS"
+  },
+  "coordinate_capture": {
+    "equivalence": "unproven",
+    "fresh": true,
+    "implementation": "9a0fe01a4645616a01034c90ffc8c89389d42eb5072c469f24fee688021f62f5",
+    "only_changed_member": "shipping/entrypoint_pin.json",
+    "path": "results/536_package_repin/runtime_identity.candidate.json",
+    "review": "independent local candidate review before canonical update"
+  },
+  "distribution": "local-only",
+  "formal_head": "b24c27f8e37bcc6fe85706007ed813b3c7d07448",
+  "install_trace.json": {
+    "checks": 5,
+    "pass": true,
+    "sha256": "761ca2c68c2d27de7dcfc178f3a7641cacba4418d72b06289969ff4c410ee48a"
+  },
+  "installed_cli": {
+    "passed": 10,
+    "skipped": 0
+  },
+  "local_cpu": {
+    "coordinate_pytest_passed": 55,
+    "native_protocol_tests_passed": 2,
+    "targeted_pytest_passed": 304
+  },
+  "manifest_sha256": "83b70e1168f9973ddbc64115dd2a72b0f3674d3e951c7c169de6a7230c2f98ff",
+  "package.json": {
+    "checks": 7,
+    "pass": true,
+    "sha256": "d97aa13f7e8fdb33245aff2edc0b7cb8b71db3824760a1163c113f61d7b71325"
+  },
+  "package_files": {
+    "saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.install.sh": {
+      "bytes": 8701,
+      "sha256": "afa5d06a1c4d4280ccb393e81470689ad60ee0636e9a8f3de84ca130e6871579"
+    },
+    "saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.sha256": {
+      "bytes": 268,
+      "sha256": "0621eb95829b3b20d53280e2a07fdea0277f0555269fb944dc1c3af793909fab"
+    },
+    "saccade-0.1.0-linux-x86_64-cu13.0-trt10.16-sm120-glibc2.39.tar.gz": {
+      "bytes": 2384879487,
+      "sha256": "7f108d36ddfe266d193fa277329391fae01cea40cead0680c8f2077d221efc1d"
+    }
+  },
+  "parity_bundle/report.json": {
+    "against": {
+      "differing": [],
+      "identical": true,
+      "prior": "/home/ray/developer/ai/saccade/results/465_prc4_release/full_bc75dcab/parity_bundle/report.json",
+      "same_sequences": true
+    },
+    "sections": {
+      "detector": {
+        "equal_frames": 5316,
+        "frames": 5316,
+        "sequences": 7,
+        "sequences_differ": [],
+        "sequences_exact": 7,
+        "verdict": "EXACT"
+      },
+      "graph_captures": {
+        "sequences": 7,
+        "sequences_differ": [],
+        "sequences_exact": 7,
+        "verdict": "EXACT"
+      },
+      "mot_txt": {
+        "sequences": 7,
+        "sequences_differ": [],
+        "sequences_exact": 7,
+        "verdict": "EXACT"
+      }
+    },
+    "sha256": "4f378c89b1ce1b026317fd0fcff071c097d7729eb1ff89a15aff169ede6650d5",
+    "verdict": "EXACT"
+  },
+  "parity_strace/report.json": {
+    "against": {
+      "differing": [],
+      "identical": true,
+      "prior": "/home/ray/developer/ai/saccade/results/536_package_repin/full_b24c27f/parity_bundle/report.json",
+      "same_sequences": true
+    },
+    "sections": {
+      "detector": {
+        "equal_frames": 5316,
+        "frames": 5316,
+        "sequences": 7,
+        "sequences_differ": [],
+        "sequences_exact": 7,
+        "verdict": "EXACT"
+      },
+      "graph_captures": {
+        "sequences": 7,
+        "sequences_differ": [],
+        "sequences_exact": 7,
+        "verdict": "EXACT"
+      },
+      "mot_txt": {
+        "sequences": 7,
+        "sequences_differ": [],
+        "sequences_exact": 7,
+        "verdict": "EXACT"
+      }
+    },
+    "sha256": "28b72ce168e8599195655e93fde5ebdcada28b22ef3b12975758d11ac16431aa",
+    "verdict": "EXACT"
+  },
+  "pin": "fbab8b79710f52a6f6c668b956c42e1650fe59e3f0d1eeeb525e914e47a07dde",
+  "pin_bytes": 8862856,
+  "raw_evidence": {
+    "file_count": 1275,
+    "manifest": "results/536_package_repin/full_b24c27f/SHA256SUMS",
+    "path": "results/536_package_repin/full_b24c27f",
+    "sha256": "5605664e2272039845b5efccd2ae0155f0a269800021f005eed8cf141e7b3d72"
+  },
+  "retained_harness": {
+    "files": {
+      "completion_controls.py": "296a8c870038706353cfeded1b3da40b9f0a8fe2d5ce1d907a80c13034f6a5ab",
+      "evaluate.py": "f77311161d8471f40ed2cb67543c5b252289b015ac2757f384f58fd5c2198f15",
+      "run.sh": "14e9221bb3d580e014ed471a4860253ac86b8551df6767d37101843f0db9ad43"
+    },
+    "in_ci": false,
+    "in_git": false,
+    "manifest_sha256": "335bc03a5587572a655e2cd4a3f6b406c46255202308abac3c97d77a5d4ef5b2",
+    "note": "Exact hashed local harness copies; original run and Completion hashes match the pre-run capture. Replay needs retained binary, local datasets/models and controlled host.",
+    "path": "results/536_package_repin/harness_b24c27f"
+  },
+  "runtime.json": {
+    "checks": 3,
+    "pass": true,
+    "sha256": "653a1f73ae8b6a5183e919d8a74db2bbbf2f488bcc2f55f18ac470e771470e7e"
+  },
+  "schema": "saccade.package_repin_evidence/v1",
+  "signed": false,
+  "static.json": {
+    "checks": 12,
+    "pass": true,
+    "sha256": "e8e4da8b54117d7017bef6f95bfdfc92b8984e8b78df836b181f9452a517d270"
+  },
+  "static_installed.json": {
+    "checks": 13,
+    "pass": true,
+    "sha256": "fa6fc4613afbf43ffed19a3e38f72e5a3de45a0c2f38d086fae02cef0d86efaf"
+  },
+  "verdict": "PASS"
+}
