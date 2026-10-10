@@ -1085,6 +1085,8 @@ def _invalid_report_bytes(path: tuple[str, ...], value: Any) -> bytes:
         (b"true", "track report is a bool, not an object"),
         (b'{"run_id":"first","run_id":"second"}', "duplicate JSON key"),
         (b'{"loop_seconds":NaN}', "nonfinite JSON value"),
+        (b'{"loop_seconds":1e999}', "nonfinite JSON value"),
+        (b'{"loop_seconds":-1e999}', "nonfinite JSON value"),
         (
             _invalid_report_bytes(("detector",), None),
             "report detector is not an object",

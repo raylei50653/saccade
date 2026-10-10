@@ -107,6 +107,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import re
 import struct
@@ -582,8 +583,17 @@ def _record_json(text: str) -> Any:
     def invalid_constant(value: str) -> Any:
         raise ValueError(f"nonfinite JSON value {value!r}")
 
+    def finite_float(value: str) -> float:
+        parsed = float(value)
+        if not math.isfinite(parsed):
+            invalid_constant(value)
+        return parsed
+
     return json.loads(
-        text, object_pairs_hook=unique_object, parse_constant=invalid_constant
+        text,
+        object_pairs_hook=unique_object,
+        parse_constant=invalid_constant,
+        parse_float=finite_float,
     )
 
 
