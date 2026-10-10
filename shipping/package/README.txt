@@ -108,7 +108,7 @@ Completion and failed reruns
 
 After accepting the arguments, saccade_track prints a new run_id on its first
 stderr line. It holds an exclusive lock on OUT/saccade_track.lock until it
-exits. A second run using the same OUT exits 2 without changing the first
+exits. A concurrent second run using the same OUT exits 2 without changing the first
 run's files. The lock file remains after the process exits.
 
 OUT/saccade_track.journal.json records that run_id, a state (running, failed
