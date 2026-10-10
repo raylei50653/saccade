@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/raylei50653/saccade/blob/main/docs/architecture/model_bundle_549/saccade.model_bundle.v1.schema.json",
+  "title": "saccade.model_bundle/v1 (PROPOSED draft, #549 S1)",
+  "description": "Model bundle manifest proposed by ADR 028. Design status: proposed; no runtime reads this schema. A manifest is a producer CLAIM until its exact file sha256 is listed as an approved entry of a saccade.trusted_model_bundles/v1 allowlist carried by the runtime package. Cross-field rules that JSON Schema cannot express (unique ids/paths, pairing roles, carried_by placement, schema of JSON members) are listed as R-01..R-08 in docs/architecture/model_bundle_contract_549.md section 3.2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "bundle",
+    "runtime_contract",
+    "members",
+    "pairing",
+    "io",
+    "preprocessing",
+    "postprocessing",
+    "compatibility",
+    "provenance",
+    "rights",
+    "migration"
+  ],
+  "properties": {
+    "schema": {"const": "saccade.model_bundle/v1"},
+    "bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "producer"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
+        },
+        "producer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tool", "tool_commit"],
+          "properties": {
+            "tool": {"$ref": "#/$defs/repo_path"},
+            "tool_commit": {"$ref": "#/$defs/git_commit"}
+          }
+        }
+      }
+    },
+    "runtime_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["detector_contract", "requires_operator"],
+      "properties": {
+        "detector_contract": {"enum": ["saccade.native_detector_contract/v1"]},
+        "requires_operator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["interface", "member"],
+          "properties": {
+            "interface": {"const": "saccade_native::selective_scan_fwd"},
+            "member": {"$ref": "#/$defs/member_id"}
+          }
+        }
+      }
+    },
+    "members": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 16,
+      "items": {"$ref": "#/$defs/member"}
+    },
+    "pairing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backbone_engine", "head", "operator", "config", "lineage", "attestation"],
+      "properties": {
+        "backbone_engine": {"$ref": "#/$defs/member_id"},
+        "head": {"$ref": "#/$defs/member_id"},
+        "operator": {"$ref": "#/$defs/member_id"},
+        "config": {"$ref": "#/$defs/member_id"},
+        "lineage": {"$ref": "#/$defs/member_id"},
+        "attestation": {"$ref": "#/$defs/member_id"}
+      }
+    },
+    "io": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backbone_engine", "head"],
+      "properties": {
+        "backbone_engine": {"$ref": "#/$defs/io_spec"},
+        "head": {"$ref": "#/$defs/io_spec"}
+      }
+    },
+    "preprocessing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decode", "color_order", "value_scale", "resize", "layout", "normalization"],
+      "properties": {
+        "decode": {"enum": ["nvjpeg_rgb8"]},
+        "color_order": {"enum": ["RGB"]},
+        "value_scale": {"enum": ["uint8_div_255"]},
+        "resize": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "width", "height", "interpolation", "align_corners"],
+          "properties": {
+            "mode": {"enum": ["stretch"]},
+            "width": {"type": "integer", "minimum": 32, "multipleOf": 32},
+            "height": {"type": "integer", "minimum": 32, "multipleOf": 32},
+            "interpolation": {"enum": ["bilinear"]},
+            "align_corners": {"const": false}
+          }
+        },
+        "layout": {"enum": ["NCHW"]},
+        "normalization": {"type": "null"}
+      }
+    },
+    "postprocessing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score_activation", "class_reduce", "box_encoding", "box_format", "num_classes"],
+      "properties": {
+        "score_activation": {"enum": ["sigmoid"]},
+        "class_reduce": {"enum": ["max"]},
+        "box_encoding": {"enum": ["ltrb_anchor_decode"]},
+        "box_format": {"enum": ["xyxy"]},
+        "num_classes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targets"],
+      "properties": {
+        "targets": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/target"}}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reading", "inventory_ref", "training_lineage_ref", "sources"],
+      "properties": {
+        "reading": {
+          "const": "Producer-recorded provenance. Not authenticated by the runtime; trusted only through the release-side allowlist entry for this manifest's sha256."
+        },
+        "inventory_ref": {"$ref": "#/$defs/repo_path"},
+        "training_lineage_ref": {"$ref": "#/$defs/repo_path"},
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "value", "status"],
+            "properties": {
+              "kind": {"enum": ["git_commit", "checkpoint_sha256", "upstream_model", "dataset"]},
+              "value": {"type": "string", "minLength": 1},
+              "status": {"enum": ["recorded", "unresolved"]}
+            }
+          }
+        }
+      }
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reading", "decision_owner", "review_status", "channels"],
+      "properties": {
+        "reading": {
+          "const": "Release-review input owned by #547. The runtime never reads this block; nothing here asserts legal compliance or permission to redistribute."
+        },
+        "decision_owner": {"const": "#547 release owner"},
+        "review_status": {"enum": ["unreviewed", "open", "owner_decided"]},
+        "channels": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["private", "public"],
+          "properties": {
+            "private": {"$ref": "#/$defs/channel_decision"},
+            "public": {"$ref": "#/$defs/channel_decision"}
+          }
+        }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supersedes", "rollback_targets"],
+      "properties": {
+        "supersedes": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]},
+        "rollback_targets": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/sha256"}}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "git_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "member_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$"},
+    "repo_path": {
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
+    },
+    "confined_path": {
+      "description": "Relative POSIX path confined beneath its root: no leading '/', no '.' or '..' segment, no empty segment, no backslash. Symlink and hardlink rules are runtime rules (contract section 4), not expressible here.",
+      "$ref": "#/$defs/repo_path"
+    },
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "carried_by", "path", "bytes", "sha256", "inventory_id", "rights_audit_item"],
+      "properties": {
+        "id": {"$ref": "#/$defs/member_id"},
+        "role": {
+          "enum": [
+            "backbone_engine",
+            "head_torchscript",
+            "scan_operator",
+            "resolved_config",
+            "head_lineage",
+            "realization_attestation"
+          ]
+        },
+        "carried_by": {"enum": ["model_bundle", "runtime_package"]},
+        "path": {"$ref": "#/$defs/confined_path"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "json_schema": {
+          "enum": [
+            "saccade.resolved_shipping_config/v1",
+            "saccade.head_artifact_lineage_torchscript/v1",
+            "saccade.head_realization_attestation/v1"
+          ]
+        },
+        "inventory_id": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^N0[1-9]$"}]},
+        "rights_audit_item": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[LM]-[0-9]+$"}]}
+      }
+    },
+    "tensor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "name", "shape", "dtype", "device"],
+      "properties": {
+        "ordinal": {"type": "integer", "minimum": 0},
+        "name": {"type": "string", "minLength": 1},
+        "shape": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1}},
+        "dtype": {"enum": ["float32", "float16", "bfloat16", "int8", "int32", "int64", "uint8", "bool"]},
+        "device": {"enum": ["cuda"]}
+      }
+    },
+    "io_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs", "outputs"],
+      "properties": {
+        "inputs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/tensor"}},
+        "outputs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/tensor"}}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "gpu_sm",
+        "cuda_runtime",
+        "tensorrt",
+        "libtorch",
+        "cudnn",
+        "glibc",
+        "engine_precision",
+        "qualification",
+        "evidence"
+      ],
+      "properties": {
+        "platform": {"enum": ["linux-x86_64"]},
+        "gpu_sm": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^sm_[0-9]{2,3}$"}},
+        "cuda_runtime": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+        "tensorrt": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "libtorch": {"type": "string", "minLength": 1},
+        "cudnn": {"type": "string", "pattern": "^[0-9]+$"},
+        "glibc": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+        "engine_precision": {"enum": ["fp32", "fp16", "int8", "mixed", "unresolved"]},
+        "qualification": {"enum": ["parity_recorded", "loadable_unqualified"]},
+        "evidence": {"type": "array", "items": {"$ref": "#/$defs/repo_path"}}
+      },
+      "if": {"properties": {"qualification": {"const": "parity_recorded"}}},
+      "then": {"properties": {"evidence": {"minItems": 1}}}
+    },
+    "channel_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "decision_ref"],
+      "properties": {
+        "state": {"enum": ["not_decided", "approved", "denied"]},
+        "decision_ref": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^https://github\\.com/raylei50653/saccade/(issues|pull)/[0-9]+#issuecomment-[0-9]+$"}]}
+      },
+      "if": {"properties": {"state": {"enum": ["approved", "denied"]}}},
+      "then": {"properties": {"decision_ref": {"type": "string"}}},
+      "else": {"properties": {"decision_ref": {"type": "null"}}}
+    }
+  }
+}

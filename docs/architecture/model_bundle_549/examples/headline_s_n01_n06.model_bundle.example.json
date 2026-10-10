@@ -1,0 +1,349 @@
+{
+  "schema": "saccade.model_bundle/v1",
+  "bundle": {
+    "name": "saccade-headline-s-mamba",
+    "version": "0.1.0-example",
+    "producer": {
+      "tool": "scripts/model/export_headline_mamba_head_torchscript.py",
+      "tool_commit": "37d4d21d0fb5a702e69f2b8c8f7b6aa4683f3864"
+    }
+  },
+  "runtime_contract": {
+    "detector_contract": "saccade.native_detector_contract/v1",
+    "requires_operator": {
+      "interface": "saccade_native::selective_scan_fwd",
+      "member": "scan_op"
+    }
+  },
+  "members": [
+    {
+      "id": "backbone",
+      "role": "backbone_engine",
+      "carried_by": "model_bundle",
+      "path": "models/yolo/yolo26s_backbone_640_best.engine",
+      "bytes": 20298516,
+      "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+      "inventory_id": "N01",
+      "rights_audit_item": "M-1"
+    },
+    {
+      "id": "head",
+      "role": "head_torchscript",
+      "carried_by": "model_bundle",
+      "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+      "bytes": 45656246,
+      "sha256": "1663ec97022879e8078fb5b9dc3b65f4d2b76e4f8df6d5848300c2b3c999d879",
+      "inventory_id": "N02",
+      "rights_audit_item": "M-1"
+    },
+    {
+      "id": "scan_op",
+      "role": "scan_operator",
+      "carried_by": "runtime_package",
+      "path": "build/libsaccade_scan_torchop.so",
+      "bytes": 3517632,
+      "sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+      "inventory_id": "N03",
+      "rights_audit_item": null
+    },
+    {
+      "id": "config",
+      "role": "resolved_config",
+      "carried_by": "model_bundle",
+      "path": "configs/shipping/mamba_whole_graph.resolved.json",
+      "bytes": 28648,
+      "sha256": "6576956f37c1a3f85134febf8ab7be86507beddbe90ac525a5947c91bd55ddf9",
+      "json_schema": "saccade.resolved_shipping_config/v1",
+      "inventory_id": "N04",
+      "rights_audit_item": null
+    },
+    {
+      "id": "lineage",
+      "role": "head_lineage",
+      "carried_by": "model_bundle",
+      "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+      "bytes": 7539,
+      "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+      "json_schema": "saccade.head_artifact_lineage_torchscript/v1",
+      "inventory_id": "N05",
+      "rights_audit_item": "M-1"
+    },
+    {
+      "id": "attestation",
+      "role": "realization_attestation",
+      "carried_by": "model_bundle",
+      "path": "configs/shipping/mamba_head_realization.attestation.json",
+      "bytes": 4052,
+      "sha256": "33289884c3586cc062a1c6ddbf84d7a45993070514664734329d809c7bae351c",
+      "json_schema": "saccade.head_realization_attestation/v1",
+      "inventory_id": "N06",
+      "rights_audit_item": null
+    }
+  ],
+  "pairing": {
+    "backbone_engine": "backbone",
+    "head": "head",
+    "operator": "scan_op",
+    "config": "config",
+    "lineage": "lineage",
+    "attestation": "attestation"
+  },
+  "io": {
+    "backbone_engine": {
+      "inputs": [
+        {
+          "ordinal": 0,
+          "name": "images",
+          "shape": [
+            1,
+            3,
+            640,
+            640
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        }
+      ],
+      "outputs": [
+        {
+          "ordinal": 0,
+          "name": "p3_feat",
+          "shape": [
+            1,
+            128,
+            80,
+            80
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        },
+        {
+          "ordinal": 1,
+          "name": "p4_feat",
+          "shape": [
+            1,
+            256,
+            40,
+            40
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        },
+        {
+          "ordinal": 2,
+          "name": "p5_feat",
+          "shape": [
+            1,
+            512,
+            20,
+            20
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        }
+      ]
+    },
+    "head": {
+      "inputs": [
+        {
+          "ordinal": 0,
+          "name": "p3",
+          "shape": [
+            1,
+            128,
+            80,
+            80
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        },
+        {
+          "ordinal": 1,
+          "name": "p4",
+          "shape": [
+            1,
+            256,
+            40,
+            40
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        },
+        {
+          "ordinal": 2,
+          "name": "p5",
+          "shape": [
+            1,
+            512,
+            20,
+            20
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        }
+      ],
+      "outputs": [
+        {
+          "ordinal": 0,
+          "name": "cls_p3",
+          "shape": [
+            1,
+            80,
+            80,
+            80
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        },
+        {
+          "ordinal": 1,
+          "name": "cls_p4",
+          "shape": [
+            1,
+            80,
+            40,
+            40
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        },
+        {
+          "ordinal": 2,
+          "name": "cls_p5",
+          "shape": [
+            1,
+            80,
+            20,
+            20
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        },
+        {
+          "ordinal": 3,
+          "name": "reg_p3",
+          "shape": [
+            1,
+            4,
+            80,
+            80
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        },
+        {
+          "ordinal": 4,
+          "name": "reg_p4",
+          "shape": [
+            1,
+            4,
+            40,
+            40
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        },
+        {
+          "ordinal": 5,
+          "name": "reg_p5",
+          "shape": [
+            1,
+            4,
+            20,
+            20
+          ],
+          "dtype": "float32",
+          "device": "cuda"
+        }
+      ]
+    }
+  },
+  "preprocessing": {
+    "decode": "nvjpeg_rgb8",
+    "color_order": "RGB",
+    "value_scale": "uint8_div_255",
+    "resize": {
+      "mode": "stretch",
+      "width": 640,
+      "height": 640,
+      "interpolation": "bilinear",
+      "align_corners": false
+    },
+    "layout": "NCHW",
+    "normalization": null
+  },
+  "postprocessing": {
+    "score_activation": "sigmoid",
+    "class_reduce": "max",
+    "box_encoding": "ltrb_anchor_decode",
+    "box_format": "xyxy",
+    "num_classes": 80
+  },
+  "compatibility": {
+    "targets": [
+      {
+        "platform": "linux-x86_64",
+        "gpu_sm": [
+          "sm_120"
+        ],
+        "cuda_runtime": "13.0",
+        "tensorrt": "10.16.1.11",
+        "libtorch": "2.11.0+cu130",
+        "cudnn": "91900",
+        "glibc": "2.39",
+        "engine_precision": "unresolved",
+        "qualification": "parity_recorded",
+        "evidence": [
+          "docs/reference/native_runtime_closeout.md",
+          "docs/reference/native_runtime_package_repin_536.md"
+        ]
+      }
+    ]
+  },
+  "provenance": {
+    "reading": "Producer-recorded provenance. Not authenticated by the runtime; trusted only through the release-side allowlist entry for this manifest's sha256.",
+    "inventory_ref": "docs/reference/model_runtime_inventory_549.json",
+    "training_lineage_ref": "docs/research/training/training_lineage_inventory.md",
+    "sources": [
+      {
+        "kind": "git_commit",
+        "value": "37d4d21d0fb5a702e69f2b8c8f7b6aa4683f3864",
+        "status": "recorded"
+      },
+      {
+        "kind": "checkpoint_sha256",
+        "value": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+        "status": "recorded"
+      },
+      {
+        "kind": "upstream_model",
+        "value": "YOLO26s (Ultralytics) backbone lineage; engine bytes unattributed (#421)",
+        "status": "unresolved"
+      },
+      {
+        "kind": "dataset",
+        "value": "MOT17 (training protocol records); exact snapshot and terms",
+        "status": "unresolved"
+      }
+    ]
+  },
+  "rights": {
+    "reading": "Release-review input owned by #547. The runtime never reads this block; nothing here asserts legal compliance or permission to redistribute.",
+    "decision_owner": "#547 release owner",
+    "review_status": "open",
+    "channels": {
+      "private": {
+        "state": "not_decided",
+        "decision_ref": null
+      },
+      "public": {
+        "state": "not_decided",
+        "decision_ref": null
+      }
+    }
+  },
+  "migration": {
+    "supersedes": null,
+    "rollback_targets": []
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schema": "saccade.trusted_model_bundles/v1",
+  "reading": "Approved model-bundle manifests for this runtime build, by exact manifest file sha256. Engineering identity only: not publisher authentication of the bundle, not a rights grant, not a benchmark claim.",
+  "detector_contract": "saccade.native_detector_contract/v1",
+  "entries": [
+    {
+      "manifest_sha256": "64496cb18cda9400efccbe59ddafbf6d0ec45b50dfae4af135af05c88eb561bc",
+      "bundle_name": "saccade-headline-s-mamba",
+      "bundle_version": "0.1.0-example",
+      "state": "example",
+      "approval": null,
+      "revocation": null
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/raylei50653/saccade/blob/main/docs/architecture/model_bundle_549/saccade.trusted_model_bundles.v1.schema.json",
+  "title": "saccade.trusted_model_bundles/v1 (PROPOSED draft, #549 S1)",
+  "description": "Release-side expected identity proposed by ADR 028 (trust root TR-1b): the runtime package carries this file and the entrypoint is built with its sha256, so a caller who can replace a model bundle cannot also replace its expected identity without replacing the pinned entrypoint. Design status: proposed; no runtime reads it. An entry approves engineering identity only; it is not a rights grant (#547).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "reading", "detector_contract", "entries"],
+  "properties": {
+    "schema": {"const": "saccade.trusted_model_bundles/v1"},
+    "reading": {
+      "const": "Approved model-bundle manifests for this runtime build, by exact manifest file sha256. Engineering identity only: not publisher authentication of the bundle, not a rights grant, not a benchmark claim."
+    },
+    "detector_contract": {"enum": ["saccade.native_detector_contract/v1"]},
+    "entries": {"type": "array", "items": {"$ref": "#/$defs/entry"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "decision_ref": {
+      "type": "string",
+      "pattern": "^https://github\\.com/raylei50653/saccade/(issues|pull)/[0-9]+#issuecomment-[0-9]+$"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_sha256", "bundle_name", "bundle_version", "state", "approval", "revocation"],
+      "properties": {
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "bundle_name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+        "bundle_version": {"type": "string", "minLength": 1},
+        "state": {
+          "description": "Only 'approved' can yield expected_source_verified. 'example' exists for documentation and must be rejected by any runtime or packaging check.",
+          "enum": ["approved", "revoked", "example"]
+        },
+        "approval": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["decision_ref", "date"],
+              "properties": {
+                "decision_ref": {"$ref": "#/$defs/decision_ref"},
+                "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+              }
+            }
+          ]
+        },
+        "revocation": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["decision_ref", "date", "reason"],
+              "properties": {
+                "decision_ref": {"$ref": "#/$defs/decision_ref"},
+                "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                "reason": {"type": "string", "minLength": 1}
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"const": "approved"}}},
+          "then": {"properties": {"approval": {"type": "object"}, "revocation": {"type": "null"}}}
+        },
+        {
+          "if": {"properties": {"state": {"const": "revoked"}}},
+          "then": {"properties": {"approval": {"type": "object"}, "revocation": {"type": "object"}}}
+        },
+        {
+          "if": {"properties": {"state": {"const": "example"}}},
+          "then": {"properties": {"approval": {"type": "null"}, "revocation": {"type": "null"}}}
+        }
+      ]
+    }
+  }
+}

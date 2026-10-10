@@ -1,0 +1,874 @@
+{
+  "schema": "saccade.model_bundle_verification_matrix/v1",
+  "status": "proposed",
+  "reading": "Positive/negative control matrix for #549 S1 (ADR 028). Rows with layer schema/semantic run now against the example files (tests/contract/test_model_bundle_contract_549.py). Every other row is a design obligation: 'enforced'/'partial'/'missing' describe the source at the S1 baseline, not a verification of the S1 design.",
+  "source_baseline": "46ab79c1785b85f8afbef1d43909f1a7cb2eff23",
+  "examples": {
+    "manifest": "docs/architecture/model_bundle_549/examples/headline_s_n01_n06.model_bundle.example.json",
+    "allowlist": "docs/architecture/model_bundle_549/examples/trusted_model_bundles.example.json"
+  },
+  "rows": [
+    {
+      "id": "MB-01",
+      "gaps": [
+        "G02",
+        "G04",
+        "G06"
+      ],
+      "polarity": "positive",
+      "case": "Example N01-N06 manifest is schema-valid and passes R-01..R-08",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": null,
+      "expected": "valid",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-02",
+      "gaps": [
+        "G01"
+      ],
+      "polarity": "positive",
+      "case": "Example allowlist is schema-valid; its only entry is state=example and binds the example manifest's exact sha256",
+      "layer": "semantic",
+      "target": "allowlist",
+      "mutation": null,
+      "expected": "valid; resolves to checksum_matched, never expected_source_verified",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-10",
+      "gaps": [
+        "G03"
+      ],
+      "polarity": "negative",
+      "case": "Member path climbs out of its root",
+      "layer": "schema",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/members/0/path",
+          "value": "../models/yolo/x.engine"
+        }
+      ],
+      "expected": "reject",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-11",
+      "gaps": [
+        "G03"
+      ],
+      "polarity": "negative",
+      "case": "Member path is absolute",
+      "layer": "schema",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/members/0/path",
+          "value": "/etc/x.engine"
+        }
+      ],
+      "expected": "reject",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-12",
+      "gaps": [
+        "G03"
+      ],
+      "polarity": "negative",
+      "case": "Member path has a '.' or empty segment",
+      "layer": "schema",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/members/1/path",
+          "value": "models/./yolo//x.pt"
+        }
+      ],
+      "expected": "reject",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-13",
+      "gaps": [
+        "G02"
+      ],
+      "polarity": "negative",
+      "case": "Member sha256 is not 64 lowercase hex",
+      "layer": "schema",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/members/0/sha256",
+          "value": "2EF3D4D4"
+        }
+      ],
+      "expected": "reject",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-14",
+      "gaps": [
+        "G02",
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "Unknown bundle schema version given to a v1 reader",
+      "layer": "schema",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/schema",
+          "value": "saccade.model_bundle/v2"
+        }
+      ],
+      "expected": "reject (no forward-compat guess)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-15",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "Unknown detector contract",
+      "layer": "schema",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/runtime_contract/detector_contract",
+          "value": "saccade.native_detector_contract/v2"
+        }
+      ],
+      "expected": "reject",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-16",
+      "gaps": [
+        "G06"
+      ],
+      "polarity": "negative",
+      "case": "Public channel marked approved without an owner decision reference",
+      "layer": "schema",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/rights/channels/public/state",
+          "value": "approved"
+        }
+      ],
+      "expected": "reject",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#547"
+    },
+    {
+      "id": "MB-17",
+      "gaps": [
+        "G06"
+      ],
+      "polarity": "negative",
+      "case": "Rights block rewritten into a compliance assertion",
+      "layer": "schema",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/rights/reading",
+          "value": "Licence compliant; redistribution permitted."
+        }
+      ],
+      "expected": "reject",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#547"
+    },
+    {
+      "id": "MB-18",
+      "gaps": [
+        "G04",
+        "G07"
+      ],
+      "polarity": "negative",
+      "case": "Target claims parity_recorded without evidence",
+      "layer": "schema",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/compatibility/targets/0/evidence",
+          "value": []
+        }
+      ],
+      "expected": "reject",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-19",
+      "gaps": [
+        "G01"
+      ],
+      "polarity": "negative",
+      "case": "Allowlist entry approved without an approval record",
+      "layer": "schema",
+      "target": "allowlist",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/entries/0/state",
+          "value": "approved"
+        }
+      ],
+      "expected": "reject",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-20",
+      "gaps": [
+        "G02"
+      ],
+      "polarity": "negative",
+      "case": "Manifest without a realization attestation pairing",
+      "layer": "schema",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "remove",
+          "path": "/pairing/attestation"
+        }
+      ],
+      "expected": "reject (manifest mode makes N06 mandatory)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-21",
+      "gaps": [
+        "G02",
+        "G03"
+      ],
+      "polarity": "negative",
+      "case": "Two members whose paths collide after case folding",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/members/1/path",
+          "value": "MODELS/yolo/yolo26s_backbone_640_best.engine"
+        }
+      ],
+      "expected": "reject (R-02)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-22",
+      "gaps": [
+        "G02"
+      ],
+      "polarity": "negative",
+      "case": "pairing.head names the backbone member",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/pairing/head",
+          "value": "backbone"
+        }
+      ],
+      "expected": "reject (R-03)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-23",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "Head input shape differs from the backbone output it pairs with",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/io/head/inputs/0/shape",
+          "value": [
+            1,
+            64,
+            80,
+            80
+          ]
+        }
+      ],
+      "expected": "reject (R-08)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-24",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "Preprocessing resize differs from the backbone input H/W",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/preprocessing/resize/width",
+          "value": 960
+        }
+      ],
+      "expected": "reject (R-08)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-25",
+      "gaps": [
+        "G02"
+      ],
+      "polarity": "negative",
+      "case": "JSON member without its json_schema",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "remove",
+          "path": "/members/3/json_schema"
+        }
+      ],
+      "expected": "reject (R-06)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-26",
+      "gaps": [
+        "G05"
+      ],
+      "polarity": "negative",
+      "case": "Model weights placed in the runtime package",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/members/0/carried_by",
+          "value": "runtime_package"
+        }
+      ],
+      "expected": "reject (R-07, depends on D3)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-27",
+      "gaps": [
+        "G01"
+      ],
+      "polarity": "negative",
+      "case": "Allowlist lists the same manifest twice",
+      "layer": "semantic",
+      "target": "allowlist",
+      "mutation": [
+        {
+          "op": "copy",
+          "from": "/entries/0",
+          "path": "/entries/-"
+        }
+      ],
+      "expected": "reject (R-09)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-30",
+      "gaps": [
+        "G01"
+      ],
+      "polarity": "positive",
+      "case": "Original bundle whose manifest sha256 is an approved allowlist entry",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "identity.level=expected_source_verified, expected_source=runtime_allowlist",
+      "current": "missing",
+      "existing_enforcement": [
+        "shipping/src/preflight.cpp:32-41"
+      ],
+      "slice": "S2-1",
+      "owner": "#549 S2; card #536 CC-536-01-02"
+    },
+    {
+      "id": "MB-31",
+      "gaps": [
+        "G01"
+      ],
+      "polarity": "negative",
+      "case": "Self-consistent substitution: new engine + edited lineage + re-bound attestation + new manifest",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "level=checksum_matched at most; under require=expected_source_verified exit 2 before CUDA",
+      "current": "missing",
+      "existing_enforcement": [
+        "tests/native/test_shipping_preflight.cpp",
+        "shipping/src/detector_plan.cpp:281-310"
+      ],
+      "slice": "S2-1",
+      "owner": "#549 S2; card #536 CC-536-01-02"
+    },
+    {
+      "id": "MB-32",
+      "gaps": [
+        "G01"
+      ],
+      "polarity": "negative",
+      "case": "Allowlist file edited so its sha256 differs from the value built into the entrypoint",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2 before CUDA",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S2-1",
+      "owner": "#549 S2"
+    },
+    {
+      "id": "MB-33",
+      "gaps": [
+        "G01"
+      ],
+      "polarity": "negative",
+      "case": "Manifest sha256 present but its allowlist entry is revoked or example",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "not expected_source_verified; exit 2 under the shipping policy",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S2-1",
+      "owner": "#549 S2"
+    },
+    {
+      "id": "MB-34",
+      "gaps": [
+        "G02"
+      ],
+      "polarity": "negative",
+      "case": "Engine/head/operator bytes replaced (sha mismatch)",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2 before CUDA, journal failed, identity.level null",
+      "current": "enforced",
+      "existing_enforcement": [
+        "shipping/src/preflight.cpp:32-41",
+        "shipping/src/preflight.cpp:70-73",
+        "tests/native/test_shipping_preflight.cpp"
+      ],
+      "slice": "none",
+      "owner": "#536 (Gate A)"
+    },
+    {
+      "id": "MB-35",
+      "gaps": [
+        "G02"
+      ],
+      "polarity": "negative",
+      "case": "Resolved config bytes edited while staying field-consistent with the lineage",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2 (config sha bound by the manifest)",
+      "current": "missing",
+      "existing_enforcement": [
+        "shipping/src/detector_plan.cpp:96-160"
+      ],
+      "slice": "S2-1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-36",
+      "gaps": [
+        "G02"
+      ],
+      "polarity": "negative",
+      "case": "Member present but size differs from the manifest",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2 before hashing",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S2-1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-37",
+      "gaps": [
+        "G02"
+      ],
+      "polarity": "negative",
+      "case": "Required member missing",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2 before CUDA; no fallback, no download",
+      "current": "partial",
+      "existing_enforcement": [
+        "shipping/src/preflight.cpp:32-41"
+      ],
+      "slice": "S2-1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-38",
+      "gaps": [
+        "G03"
+      ],
+      "polarity": "negative",
+      "case": "Member is a symlink (target inside or outside the root)",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2 (openat2 RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS)",
+      "current": "missing",
+      "existing_enforcement": [
+        "shipping/src/preflight.cpp:35"
+      ],
+      "slice": "S2-1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-39",
+      "gaps": [
+        "G03"
+      ],
+      "polarity": "negative",
+      "case": "A directory component under the bundle root is a symlink that escapes it",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2",
+      "current": "missing",
+      "existing_enforcement": [
+        "shipping/src/detector_plan.cpp:314-317"
+      ],
+      "slice": "S2-1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-40",
+      "gaps": [
+        "G03"
+      ],
+      "polarity": "positive",
+      "case": "Whole bundle directory copied to another location (relocation)",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "same level as before relocation",
+      "current": "partial",
+      "existing_enforcement": [
+        "shipping/src/detector_plan.cpp:314-317"
+      ],
+      "slice": "S2-1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-41",
+      "gaps": [
+        "G03"
+      ],
+      "polarity": "negative",
+      "case": "Member file replaced between hash and load (TOCTOU)",
+      "layer": "gate_b",
+      "target": null,
+      "mutation": null,
+      "expected": "the loaded bytes are the hashed buffer, or exit 2",
+      "current": "missing",
+      "existing_enforcement": [
+        "shipping/src/detector_host.cpp:189-201",
+        "shipping/src/detector_host.cpp:248"
+      ],
+      "slice": "S2-2",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-42",
+      "gaps": [
+        "G03",
+        "G05"
+      ],
+      "polarity": "negative",
+      "case": "Bundle archive carries a hardlink, symlink, '..' or out-of-tree member",
+      "layer": "installer",
+      "target": null,
+      "mutation": null,
+      "expected": "package check and installer reject",
+      "current": "partial",
+      "existing_enforcement": [
+        "scripts/native/check_shipping_package.py:376-430",
+        "shipping/package/install.sh:92"
+      ],
+      "slice": "S2-3",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-43",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "Runtime build TensorRT/LibTorch/CUDA versions not in any manifest target",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2 before CUDA",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S2-2",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-44",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "Device SM not in the target's gpu_sm",
+      "layer": "gate_b",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2 before engine deserialization",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S2-2",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-45",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "Engine I/O dtype differs from the manifest (e.g. float16 output)",
+      "layer": "gate_b",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2",
+      "current": "missing",
+      "existing_enforcement": [
+        "shipping/src/detector_host.cpp:248-273"
+      ],
+      "slice": "S2-2",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-46",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "Engine I/O count, order or shape differs",
+      "layer": "gate_b",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2",
+      "current": "enforced",
+      "existing_enforcement": [
+        "shipping/src/detector_host.cpp:248-273"
+      ],
+      "slice": "none",
+      "owner": "#465 (existing)"
+    },
+    {
+      "id": "MB-47",
+      "gaps": [
+        "G02"
+      ],
+      "polarity": "negative",
+      "case": "Stale lineage: attestation bound to a different lineage file",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expected": "exit 2 before CUDA",
+      "current": "enforced",
+      "existing_enforcement": [
+        "shipping/src/detector_plan.cpp:281-288",
+        "tests/native/test_shipping_preflight.cpp"
+      ],
+      "slice": "none",
+      "owner": "#536 (Gate A)"
+    },
+    {
+      "id": "MB-48",
+      "gaps": [
+        "G05"
+      ],
+      "polarity": "negative",
+      "case": "A bundle member (path or sha256) appears in the model-free runtime tarball",
+      "layer": "package_check",
+      "target": null,
+      "mutation": null,
+      "expected": "reject",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S2-3",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-49",
+      "gaps": [
+        "G05"
+      ],
+      "polarity": "positive",
+      "case": "Model-free runtime + private bundle installed side by side; rollback by selecting the previous bundle directory",
+      "layer": "installer",
+      "target": null,
+      "mutation": null,
+      "expected": "both installs atomic; previous bundle untouched",
+      "current": "missing",
+      "existing_enforcement": [
+        "shipping/package/install.sh"
+      ],
+      "slice": "S2-3",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-50",
+      "gaps": [
+        "G01",
+        "G05"
+      ],
+      "polarity": "negative",
+      "case": "Bundle release files signed with a wrong key or tampered after signing",
+      "layer": "installer",
+      "target": null,
+      "mutation": null,
+      "expected": "minisign -V fails",
+      "current": "partial",
+      "existing_enforcement": [
+        "tests/unit/test_package_signature.py"
+      ],
+      "slice": "S2-3",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-51",
+      "gaps": [
+        "G06"
+      ],
+      "polarity": "negative",
+      "case": "Bundle package built for a public channel while #547 items are OPEN or distribution is local-only",
+      "layer": "release_gate",
+      "target": null,
+      "mutation": null,
+      "expected": "reject",
+      "current": "partial",
+      "existing_enforcement": [
+        "scripts/native/license_audit.py:748"
+      ],
+      "slice": "S2-3",
+      "owner": "#547"
+    },
+    {
+      "id": "MB-52",
+      "gaps": [
+        "G07"
+      ],
+      "polarity": "positive",
+      "case": "Original bundle through the new loader reproduces the A_L outputs on the frozen host",
+      "layer": "offline_evidence",
+      "target": null,
+      "mutation": null,
+      "expected": "7 sequences EXACT vs A_L; otherwise record the mismatch and requalify",
+      "current": "missing",
+      "existing_enforcement": [
+        "docs/reference/native_runtime_package_repin_536.md"
+      ],
+      "slice": "S3",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-53",
+      "gaps": [
+        "G07"
+      ],
+      "polarity": "negative",
+      "case": "Results from a non-approved or substituted bundle cite A_L or published IDF1/HOTA/MOTA/FPS",
+      "layer": "offline_evidence",
+      "target": null,
+      "mutation": null,
+      "expected": "claim check rejects; fresh evaluation required",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S3",
+      "owner": "#549 S3; check mapping #541"
+    }
+  ]
+}
