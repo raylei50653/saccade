@@ -81,7 +81,7 @@ journal writer。Gate A 是 identity 的唯一更新者；初始化 `level=null`
 | 層 | 本候選的實際結果 | 必須保留的證據 |
 |:--|:--|:--|
 | CPU protocol／reader | PASS：standalone CTest 8/8；真實 frozen model Gate A 3515 checks／0 failures；completion 267 checks／0 failures；13 個 actual writer／reader cases；reader 174 passed／0 skipped | `cpu_controls/{ctest,frozen_model,completion}.log`、`reader_crosscheck.json`、`reader_tests.log`；包含實際拒絕原因與三份 metadata buffer replacement 控制 |
-| 本機 pre_push | PENDING | source head、完整 log、exit code；development coordinate check 不等於 publication current |
+| 本機 pre_push | PASS（exit 0），source／document snapshot `5b5e3b8d789c0d18845738f7660d155b5907f176`；pytest 5575 passed、52 skipped、105 deselected、5 xfailed | `pre_push.log`；`UV_NO_SYNC=1` 保留既有 DALI extra，各原有 checks 均執行；shipping 手動 build／CTest 另列；development coordinate check 不等於 publication current |
 | PR CI | 以 [#572](https://github.com/raylei50653/saccade/pull/572) 描述的指定 final head、checks 與 workflow run links 為準 | CPU CI 不驗 GPU；coordinate review PR #573 無 checks 不能解讀為遠端 CI 通過 |
 | 本機新 binary | PASS：兩入口 CLI 23 passed／0 skipped；既有 native GPU CTest 6/6 | `build_final.log`、`build_release_final.log`、`cli_controls.log`、`native_gpu.log`；正控制觀察到 CUDA initialization，Gate A 拒絕控制未觀察到；Gate B 載入失敗保留 checksum identity |
 | GPU／七序列 parity | 新 binary 的 4 個正向模式與 7 個負控制均實際重播七序列／5316 frames；qualified parity 全部 **UNRESOLVED**（V5 driver `617.42 != 616.92`），負控制標準 `caught=false`；不宣稱正式 EXACT／CAUGHT | fresh anchor／oracle rows；正向 raw detector／MOT／graph 比較相等（無 trace 為 NOT_RUN、serial graph 為 NOT_RUN）；7 個 raw 負控制在預期 section 為 DIFFERS；native 正向皆 complete 且 journal／report checksum identity 相同；shipping surface／link 通過、measurement surface 如期拒絕 |
@@ -113,8 +113,8 @@ Raw 證據保留於 gitignored、本機限定的 `results/549_s2_1a/`。此頁�
 | PR head／獨立審查 head | #572 描述與 exact-head checks／review 記錄；不以本頁自我參照產生 head |
 | 重播 `build-release/shipping/saccade_track` | 8,881,392 bytes；`f3593c00d55723d10b6f3ac2ed1afe57260cd7c67cc7986ef96440ac1756ef6d` |
 | 重播 `build-release/shipping/saccade_track_measurement` | 8,896,504 bytes；`16a7f9d85a46b7ae75dad82a7f11abb955175f653662da794554e148854270d9` |
-| GPU source manifest SHA256 | `bd3641844e26ce3822bbd40cece2d61745c4673d924fc52741e457a120e7fc91`；before／after 相同 |
-| 本機 raw GPU evidence／SHA256SUMS | `results/549_s2_1a/gpu_df475bb0b633/`，入口 `results/549_s2_1a/gpu_prepared/continue.py`；SHA256SUMS 的 SHA256 是 `2b0ddce3fefcc53a3591d4485d74c0f80831c1ef8f7c1e373826e03514c92dfa`；local-only |
+| GPU `source_manifest.json` SHA256 | `adc1d36a65ab0d7bdf78eb785a232c6041ec139bdb7c72aea8c0df1839a8c9de`；before／after 相同 |
+| 本機 raw GPU evidence／SHA256SUMS | `results/549_s2_1a/gpu_df475bb0b633/`，入口 `results/549_s2_1a/gpu_prepared/{replay,continue}.py`；SHA256SUMS 的 SHA256 是 `2b0ddce3fefcc53a3591d4485d74c0f80831c1ef8f7c1e373826e03514c92dfa`；local-only |
 | 起始 frozen-input snapshot | `results/549_s2_1a/start_baseline.json`；reading 是起始 bytes 觀察，不是來源認證或 runtime 驗證 |
 
 起始 snapshot 記錄以下 unchanged-model inputs；正式 run 必須比對前後 bytes，
