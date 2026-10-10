@@ -8,13 +8,24 @@
 // Interface options both binaries accept (shipping interface):
 //   --config JSON --lineage JSON [--attestation JSON] [--model-root DIR]
 //   --out DIR SEQUENCE_DIR...
-//   --report JSON   what ran: plan bindings, load report, per-sequence counts
-//                   (format saccade.native_track_report/v2)
+//   --report JSON   what ran: run id, identity, plan bindings, load report,
+//                   per-sequence counts (format saccade.native_track_report/v3)
 //   --trace DIR     per sequence, DIR/<sequence>/detector.bin: each frame's
 //                   detector rows in the PR-5 detector.bin record format
 //                   (int32 frame, n, is_tiled; float32 boxes [n, 4]; float32
 //                   scores [n]; int32 classes [n])
 // Both write outputs only; neither changes what is computed.
+//
+// Completion (#536 CC-536-01-01, saccade_shipping/run_completion.hpp): after
+// the arguments are parsed, the run id is stderr's first line; the run then
+// takes <out> (exclusive lock; held by another run: exit 2, nothing changed),
+// writes <out>/saccade_track.journal.json and removes this run's earlier
+// report, <out>/<sequence>.txt and trace files before it reads the config.
+// Each txt / trace is written to a temp file and renamed; the journal's
+// state=complete, written after the report, is the only commit point. A rerun
+// that fails therefore leaves no earlier output of its sequences: keep those
+// with another --out. --report / --trace outside <out> are not under the lock:
+// a report or trace counts only when the journal records its sha256.
 #pragma once
 
 #include <cstdint>
@@ -23,18 +34,21 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "saccade_shipping/run_completion.hpp"
 #include "saccade_shipping/serial_runtime.hpp"
 #include "saccade_shipping/sha256.hpp"
 #include "saccade_shipping/strict_json.hpp"
 
 namespace saccade::shipping::track {
 
-inline constexpr const char* kReportFormat = "saccade.native_track_report/v2";
+// v3 (#536): v2 plus run_id and identity; v2 reports keep their meaning.
+inline constexpr const char* kReportFormat = "saccade.native_track_report/v3";
 
 [[noreturn]] inline void fail(const std::string& what) { throw std::runtime_error(what); }
 
@@ -77,10 +91,16 @@ inline void require_distinct_sequences(const Options& o) {
     }
 }
 
-inline void write_text(const std::filesystem::path& path, const std::string& text) {
-    std::ofstream f(path, std::ios::binary);
-    f << text;
-    if (!f) fail("cannot write " + path.string());
+// Right after the arguments are parsed: the run id (stderr's first line),
+// then the argv checks, then <out> is taken (RunCompletion). `completion`
+// stays empty when this throws, so the caller's error path writes no journal.
+inline void begin_run(const Options& o, const char* entrypoint, std::optional<RunCompletion>& completion) {
+    const std::string run_id = new_run_id();
+    std::cerr << entrypoint << ": run_id " << run_id << std::endl;
+    require_distinct_sequences(o);
+    RunOutputs outputs{o.out, o.report, o.trace, {}};
+    for (const std::string& s : o.sequences) outputs.sequences.push_back(sequence_name(s));
+    completion.emplace(run_id, entrypoint, std::move(outputs));
 }
 
 class DetectorTrace : public FrameObserver {
@@ -200,27 +220,22 @@ inline JsonValue stats_json(const SequenceRunStats& s, const std::string& txt_sh
 }
 
 // Every sequence in order -> <out>/<sequence>.txt (and the trace); then the
-// report. `entrypoint` names the binary in the report; `measurement` (the
-// developer build only) is added to it as is.
+// report; each committed through `completion` (begin_run). `entrypoint`
+// names the binary in the report; `measurement` (the developer build only) is
+// added to it as is.
 template <class Runtime>
-int run_sequences(Runtime& rt, const Options& opt, const char* entrypoint, const char* schedule,
-                  int max_frames, const JsonValue* measurement) {
-    std::filesystem::create_directories(opt.out);
-
+int run_sequences(Runtime& rt, const Options& opt, RunCompletion& completion, const char* entrypoint,
+                  const char* schedule, int max_frames, const JsonValue* measurement) {
     JsonValue seqs = JsonValue::make_object();
     std::vector<std::string> order;
-    for (const std::string& dir : opt.sequences) {
+    auto sequence = [&](std::size_t i, const std::filesystem::path& trace_tmp) {
+        const std::string& dir = opt.sequences[i];
         const std::string name = sequence_name(dir);
         std::unique_ptr<DetectorTrace> trace;
-        if (!opt.trace.empty()) {
-            const std::filesystem::path tdir = std::filesystem::path(opt.trace) / name;
-            std::filesystem::create_directories(tdir);
-            trace = std::make_unique<DetectorTrace>(tdir / "detector.bin");
-        }
+        if (!trace_tmp.empty()) trace = std::make_unique<DetectorTrace>(trace_tmp);
         const SequenceRunResult res = rt.run_sequence(dir, max_frames, trace.get());
-        const std::string text = join_mot_lines(res.lines);
+        std::string text = join_mot_lines(res.lines);
         const std::filesystem::path txt = std::filesystem::path(opt.out) / (name + ".txt");
-        write_text(txt, text);
         std::int64_t records = -1;
         if (trace) {
             trace->close();
@@ -230,11 +245,13 @@ int run_sequences(Runtime& rt, const Options& opt, const char* entrypoint, const
         order.push_back(name);
         std::cerr << "[" << entrypoint << "] " << name << ": " << res.stats.frames << " frames, "
                   << res.stats.lines << " lines, " << res.stats.track_ids << " ids\n";
-    }
-
-    if (!opt.report.empty()) {
+        return text;
+    };
+    auto report = [&]() {
         JsonValue rep = JsonValue::make_object();
         rep.set("format", JsonValue::make_string(kReportFormat));
+        rep.set("run_id", JsonValue::make_string(completion.run_id()));
+        rep.set("identity", unverified_identity());
         rep.set("entrypoint", JsonValue::make_string(entrypoint));
         rep.set("config", JsonValue::make_string(opt.config));
         rep.set("lineage", JsonValue::make_string(opt.lineage));
@@ -252,8 +269,9 @@ int run_sequences(Runtime& rt, const Options& opt, const char* entrypoint, const
         rep.set("python_libraries_mapped", strings(mapped_python_libraries()));
         rep.set("sequence_order", strings(order));
         rep.set("sequences", std::move(seqs));
-        write_text(opt.report, dump_python_json(rep) + "\n");
-    }
+        return dump_python_json(rep) + "\n";
+    };
+    completion.run(sequence, report);
     return 0;
 }
 

@@ -63,6 +63,20 @@ bind) and ``--track-library-path`` gives that process alone an
 elsewhere with the same arguments (the clean container:
 ``scripts/native/run_shipping_container.sh``), from ``DIR/native``,
 ``DIR/trace`` and ``DIR/track_report.json``.
+#536 CC-536-01-01 (docs/architecture/ship_export_contracts_536.md): the run
+counts only when its completion record does. The report is
+``saccade.native_track_report/v3`` (v2 plus ``run_id`` and ``identity``, which
+must stay ``{"level": null}``: nothing is verified beyond the supplied
+checksums yet); the run id ``saccade_track`` printed (the first line of
+``saccade_track.log``, and its only ``run_id`` line) must be the report's and
+the journal's (``DIR/native/saccade_track.journal.json``), the journal must be
+a readable JSON object whose ``sequences`` is a list of objects and be
+``complete``,
+and every sequence must be committed by the caller rule
+(``committed_sequences``: ``written`` with the txt's sha256; ``pending`` never
+counts), with the trace and report hashes it records. Otherwise the run is
+``UNRESOLVED``. A run of an entrypoint without completion (the PR-C2 pin's
+v2 report, no journal) is therefore ``UNRESOLVED`` here.
 
 Usage (GPU, gpu0 lease; R=results/465_pr10_track/<label>)::
 
@@ -101,7 +115,16 @@ from typing import Any
 project_root = Path(__file__).resolve().parents[3]
 
 SCHEMA = "saccade.native_track_parity/v1"
-TRACK_REPORT_FORMAT = "saccade.native_track_report/v2"
+TRACK_REPORT_FORMAT = "saccade.native_track_report/v3"
+# saccade_track's run completion (#536 CC-536-01-01, run_completion.hpp).
+JOURNAL_FORMAT = "saccade.native_track_journal/v1"
+JOURNAL_NAME = "saccade_track.journal.json"
+_RUN_ID = re.compile(r"[0-9a-f]{32}")
+_RUN_ID_LINE = re.compile(
+    r"^(saccade_track(?:_measurement)?): run_id ([0-9a-f]{32})$", re.M
+)
+# The identity record until CC-536-01-02: no level claimed.
+UNVERIFIED_IDENTITY = {"level": None}
 TRACK = "build/shipping/saccade_track"
 MEASUREMENT_TRACK = "build/shipping/saccade_track_measurement"
 # --entrypoint -> the name the report must carry, and the default binary.
@@ -360,6 +383,12 @@ def report_problems(
         problems.append(
             f"report {rep.get('format')!r} schedule {rep.get('schedule')!r}"
         )
+    if not isinstance(rep.get("run_id"), str) or not _RUN_ID.fullmatch(rep["run_id"]):
+        problems.append(f"report run_id {rep.get('run_id')!r}")
+    if rep.get("identity") != UNVERIFIED_IDENTITY:
+        problems.append(
+            f"report identity {rep.get('identity')!r}: no level is verified yet"
+        )
     name = ENTRYPOINTS[entrypoint][0]
     if rep.get("entrypoint") != name:
         problems.append(f"report entrypoint {rep.get('entrypoint')!r} != {name!r}")
@@ -404,6 +433,101 @@ def report_problems(
         problems.append(
             "saccade_track head placement is not parameters cuda:0 / constants cpu"
         )
+    return problems
+
+
+# ── completion (#536 CC-536-01-01) ─────────────────────────────────────────────
+
+
+def invocation_run_id(log_text: str, entrypoint_name: str) -> str | None:
+    """The run id ``entrypoint_name`` printed (its first stderr line, so the
+    log's first line); None unless that line is it and no other line of the
+    log is a run id line."""
+    first = _RUN_ID_LINE.match(log_text.split("\n", 1)[0])
+    if first is None or first.group(1) != entrypoint_name:
+        return None
+    if len(_RUN_ID_LINE.findall(log_text)) != 1:
+        return None
+    return first.group(2)
+
+
+def committed_sequences(
+    journal: dict[str, Any], out_dir: Path, run_id: str
+) -> list[str]:
+    """The caller rule: the sequences whose ``<out_dir>/<seq>.txt`` run
+    ``run_id`` committed -- ``written`` in that run's journal with the file's
+    sha256. ``pending`` is never committed, even when the file is there (a
+    kill between its rename and the journal update)."""
+    if journal.get("format") != JOURNAL_FORMAT or journal.get("run_id") != run_id:
+        return []
+    entries = journal.get("sequences")
+    if not isinstance(entries, list):
+        return []
+    out = []
+    for s in entries:
+        if not isinstance(s, dict) or s.get("state") != "written":
+            continue
+        txt = out_dir / f"{s.get('name')}.txt"
+        if txt.is_file() and _sha256_bytes(txt.read_bytes()) == s.get("txt_sha256"):
+            out.append(s["name"])
+    return out
+
+
+def journal_problems(
+    out_dir: Path,
+    run_id: str | None,
+    sequences: list[str],
+    report_path: Path | None,
+    trace_dir: Path | None,
+) -> list[str]:
+    """Whether run ``run_id`` completed (fail closed): its journal in
+    ``out_dir`` is ``complete``, every sequence committed in order, and the
+    trace files and report it names are the bytes it recorded."""
+    if run_id is None:
+        return ["saccade_track printed no single run_id line"]
+    path = out_dir / JOURNAL_NAME
+    if not path.is_file():
+        return [f"{path}: no run journal"]
+    try:
+        j = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        return [f"{path}: unreadable journal ({type(exc).__name__}: {exc})"]
+    if not isinstance(j, dict):
+        return [f"{path}: journal is a {type(j).__name__}, not an object"]
+    entries = j.get("sequences")
+    if not isinstance(entries, list) or not all(isinstance(s, dict) for s in entries):
+        return [f"{path}: journal sequences {entries!r} is not a list of objects"]
+    problems = []
+    if j.get("format") != JOURNAL_FORMAT:
+        problems.append(f"journal format {j.get('format')!r}")
+    if j.get("run_id") != run_id:
+        problems.append(
+            f"journal run_id {j.get('run_id')!r} is not this run's {run_id}"
+        )
+    if j.get("state") != "complete":
+        problems.append(
+            f"journal state {j.get('state')!r} (failure {j.get('failure')!r})"
+        )
+    if j.get("identity") != UNVERIFIED_IDENTITY:
+        problems.append(f"journal identity {j.get('identity')!r}")
+    if [s.get("name") for s in entries] != sequences:
+        problems.append("journal sequences differ from the request")
+    committed = committed_sequences(j, out_dir, run_id)
+    if committed != sequences:
+        problems.append(f"committed sequences {committed} != {sequences}")
+    if trace_dir is not None:
+        for s in entries:
+            t = trace_dir / str(s.get("name")) / "detector.bin"
+            if not t.is_file() or _sha256_bytes(t.read_bytes()) != s.get(
+                "trace_sha256"
+            ):
+                problems.append(f"{t}: not the trace the journal recorded")
+    if report_path is not None:
+        rec = j.get("report") if isinstance(j.get("report"), dict) else {}
+        if not report_path.is_file() or _sha256_bytes(
+            report_path.read_bytes()
+        ) != rec.get("sha256"):
+            problems.append(f"{report_path}: not the report the journal recorded")
     return problems
 
 
@@ -541,6 +665,22 @@ def run_parity(args: argparse.Namespace) -> int:
     rep = (
         json.loads(track_report_path.read_text()) if track_report_path.exists() else {}
     )
+    log_path = native / "saccade_track.log"
+    run_id = invocation_run_id(
+        log_path.read_text(errors="replace") if log_path.exists() else "",
+        ENTRYPOINTS[args.entrypoint][0],
+    )
+    problems += journal_problems(
+        native / "native",
+        run_id,
+        args.sequences,
+        track_report_path,
+        None if args.no_trace else native / "trace",
+    )
+    if rep and rep.get("run_id") != run_id:
+        problems.append(
+            f"report run_id {rep.get('run_id')!r} is not this run's {run_id}"
+        )
     if rep:
         problems += report_problems(
             rep,
@@ -697,6 +837,7 @@ def run_parity(args: argparse.Namespace) -> int:
         "mutation": args.mutation,
         "ref_edit": args.ref_edit,
         "trace": not args.no_trace,
+        "track_run_id": run_id,
         "track_report": rep,
         "problems": problems,
         "sections": sections,

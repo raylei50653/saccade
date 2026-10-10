@@ -15,14 +15,16 @@
 //                   the PR-9 serial, eager runtime (serial_runtime.hpp) instead
 //                   of the config's schedule (the PR-9 reference)
 //   --max-frames N  frames 1..min(N, seqLength), the oracle's --max-frames
-// The report (format saccade.native_track_report/v2) names this entrypoint and
+// The report (format saccade.native_track_report/v3) names this entrypoint and
 // records the three under "measurement". A mutation name is checked before any
-// model is loaded.
+// model is loaded. Run id, <out> lock and journal: as saccade_track
+// (track_driver.hpp).
 //
 // Usage: saccade_track_measurement <saccade_track's arguments>
 //            [--measurement-mutation M] [--schedule serial] [--max-frames N]
 #include <cstdio>
 #include <exception>
+#include <optional>
 #include <string>
 
 #include "saccade_shipping/double_buffer_runtime.hpp"
@@ -78,8 +80,7 @@ JsonValue measurement_json(const Options& o, const char* mutation) {
     return m;
 }
 
-int run(const Options& opt) {
-    track::require_distinct_sequences(opt.track);
+int run(const Options& opt, sh::RunCompletion& completion) {
     const sh::ResolvedShippingConfig cfg = sh::load_resolved_shipping_config_file(opt.track.config);
     const sh::DetectorInputs inputs{opt.track.lineage, opt.track.attestation};
     // Validates the config's schedule plan before the override is looked at:
@@ -89,22 +90,27 @@ int run(const Options& opt) {
         const JsonValue meas = measurement_json(opt, sh::runtime_mutation_name(m));
         sh::SerialRuntime rt(cfg, inputs, opt.track.model_root);
         rt.set_mutation_for_measurement(m);
-        return track::run_sequences(rt, opt.track, kEntrypoint, "serial", opt.max_frames, &meas);
+        return track::run_sequences(rt, opt.track, completion, kEntrypoint, "serial", opt.max_frames, &meas);
     }
     const sh::DoubleBufferMutation m = sh::parse_double_buffer_mutation(opt.mutation);
     const JsonValue meas = measurement_json(opt, sh::double_buffer_mutation_name(m));
     sh::DoubleBufferRuntime rt(cfg, inputs, opt.track.model_root);
     rt.set_mutation_for_measurement(m);
-    return track::run_sequences(rt, opt.track, kEntrypoint, "double_buffer", opt.max_frames, &meas);
+    return track::run_sequences(rt, opt.track, completion, kEntrypoint, "double_buffer", opt.max_frames,
+                                &meas);
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
+    std::optional<sh::RunCompletion> completion;  // holds <out>'s lock until exit
     try {
-        return run(parse_args(argc, argv));
+        const Options opt = parse_args(argc, argv);
+        track::begin_run(opt.track, kEntrypoint, completion);
+        return run(opt, *completion);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "saccade_track_measurement: %s\n", e.what());
+        if (completion) completion->fail(e.what());
         return 2;
     }
 }

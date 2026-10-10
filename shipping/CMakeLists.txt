@@ -59,6 +59,13 @@ target_link_libraries(saccade_shipping_native_config PUBLIC
 target_compile_options(saccade_shipping_native_config PRIVATE -Wall -Wextra -Wpedantic)
 set_target_properties(saccade_shipping_native_config PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# Run completion of saccade_track (#536 CC-536-01-01): run id, <out> lock,
+# journal, temp -> rename, the complete commit point. CUDA-free.
+add_library(saccade_shipping_completion STATIC src/run_completion.cpp)
+target_link_libraries(saccade_shipping_completion PUBLIC saccade_shipping_native_config)
+target_compile_options(saccade_shipping_completion PRIVATE -Wall -Wextra -Wpedantic)
+set_target_properties(saccade_shipping_completion PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 enable_testing()
 add_executable(saccade_resolved_config_test ${SACCADE_REPO_ROOT}/tests/native/test_resolved_config.cpp)
 target_link_libraries(saccade_resolved_config_test PRIVATE saccade_shipping_config)
@@ -111,6 +118,17 @@ add_test(NAME saccade_shipping_detector_plan_test
     COMMAND saccade_shipping_detector_plan_test ${SACCADE_RESOLVED_CONFIG}
             ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_head_lineage.json
             ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json)
+
+# Run completion: failed runs, stale outputs, a second process on the same
+# <out>, kills inside a sequence and between a rename and the journal update
+# (#536). The test compiles run_completion.cpp itself with its kill points
+# (SACCADE_RUN_COMPLETION_TEST_FAULTS); saccade_shipping_completion has none.
+add_executable(saccade_shipping_run_completion_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_run_completion.cpp src/run_completion.cpp)
+target_compile_definitions(saccade_shipping_run_completion_test PRIVATE SACCADE_RUN_COMPLETION_TEST_FAULTS=1)
+target_link_libraries(saccade_shipping_run_completion_test PRIVATE saccade_shipping_native_config)
+target_compile_options(saccade_shipping_run_completion_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_run_completion_test COMMAND saccade_shipping_run_completion_test)
 
 if(TARGET saccade_tracking)
     # Measurement boundary (#465 Phase C PR-C2). Each runtime library below is
@@ -221,10 +239,12 @@ if(TARGET saccade_tracking)
     # measurement variant (tools/saccade_track_measurement.cpp). Not installed.
     add_executable(saccade_track_measurement tools/saccade_track_measurement.cpp)
     target_link_libraries(saccade_track_measurement PRIVATE saccade_shipping_runtime_measurement)
+    target_link_libraries(saccade_track_measurement PRIVATE saccade_shipping_completion)
     target_link_options(saccade_track_measurement PRIVATE LINKER:--as-needed)
 
     add_executable(saccade_track tools/saccade_track.cpp)
     target_link_libraries(saccade_track PRIVATE saccade_shipping_runtime)
+    target_link_libraries(saccade_track PRIVATE saccade_shipping_completion)
     # NEEDED = what the entrypoint uses. The toolchain default is
     # --no-as-needed, so otherwise any library that lands before torch's own
     # --as-needed switch on the link line (e.g. libnvinfer_plugin, which nothing
