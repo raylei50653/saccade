@@ -34,7 +34,7 @@
 2. 這組 bindings 經由既有的 Gate A → Gate B handoff 傳下去（#565 已讓 Gate B 收 Gate A 建出的同一個 `DetectorPlan`，見 [CC-536-01-02 實作狀態](ship_export_contracts_536.md#cc-536-01-02-status)）。Gate B **只能**從 resolved bindings 取路徑，不得再從 `model_root`、manifest 或 caller 參數重新解析；manifest 模式下不存在 `model_root`。
 3. Gate B 載入前照舊重新 hash（同一個 expected sha256），不符就 exit 2。
 
-因此在 S2-2 之前，`identity` 能說的是「Gate A 與 Gate B 在載入前 hash 過的 bytes 等於 approved manifest 的值」，**不能**說「已載入的 bytes」：Gate B 的 hash 與 `dlopen`／`jit::load`／TRT 開檔之間仍是兩次開檔（TOCTOU）。載入涵蓋到哪些 bytes，由 Gate B 另外寫在 `load_verification`（4.1），不寫進 `identity`。
+因此 `identity` 只說「Gate A 核對過的 bytes 等於 manifest 的值」（VL2 時另加「這份 manifest 在 allowlist 中為 approved」），**不能**說「已載入的 bytes」。Gate B 在載入前的重新 hash 由 `load_verification.byte_scope=hashed_before_load` 表達；S2-2 之前，Gate B 的 hash 與 `dlopen`／`jit::load`／TRT 開檔之間仍是兩次開檔（TOCTOU）。載入涵蓋到哪些 bytes，由 Gate B 另外寫在 `load_verification`（4.1），不寫進 `identity`。
 
 ## 3. Manifest v1
 
@@ -103,7 +103,7 @@ level 和 binding 的格式沿用 CC-536-01-02：`null` → `checksum_matched` �
 - **`checksum_matched`**：manifest 通過 schema 和 R-01..R-09，路徑都在 root 內，每個 member 的 size 和 sha256 都相符。
 - **`expected_source_verified`**：在 `checksum_matched` 之上，manifest sha256 是 allowlist 中某筆 `state: approved` 的 entry，而 allowlist 檔的 sha256 等於 entrypoint 建置時記錄的值。此時寫 `identity.expected_source = "runtime_allowlist"`，並記錄 `allowlist_sha256` 和 `bundle_manifest_sha256`。`example`、`revoked` 或沒列在 allowlist 的 manifest，最高只到 `checksum_matched`。
 - **`identity` 只描述 Gate A 檢查過的 bytes**：它是 Gate A 的不可變證據，不描述載入。Gate A 寫完之後，任何 gate 都不再改它，也不在其中預先寫入任何載入保證。
-- <a id="load-verification"></a>**`load_verification`（Gate B 寫入，與 `identity` 分開）**：journal 建立時是 `null`。Gate B **全部**載入（operator、head、engine）與載入檢查都成功之後，才寫入一次 `{status: "verified", byte_scope}`；可捕捉的失敗寫 `{status: "failed", byte_scope: null}`。無法捕捉的結束（loader auditor 的 `_exit(127)`、SIGKILL、abort）可能讓 `load_verification` 維持 `null`、journal 維持 `running`，本契約不承諾這些情況會寫入 `failed`；F3 known limit 保留。`byte_scope` 的值：S2-1 是 `hashed_before_load`（Gate B 在載入前以 [resolved bindings](#resolved-bindings) 重新 hash 過，但 hash 與開檔是兩次）；S2-2 讓**每一個**載入檔都從 hash 過的 bytes 載入並驗證成功之後，才可能是 `loaded_buffer`。只要有一個檔案還是以路徑重新開檔，就不得寫 `loaded_buffer`。legacy 模式一律 `hashed_before_load`。這是對 [CC-536-01-02](ship_export_contracts_536.md#cc-536-01-02) journal／report 的新增欄位提案，不改變它「identity 只由 Gate A 寫入」的規則；欄位格式、report 版本與負控制由實作切片定案，state 轉換語義仍歸 #537。
+- <a id="load-verification"></a>**`load_verification`（Gate B 寫入，與 `identity` 分開）**：journal 建立時是 `null`。Gate B **全部**載入（operator、head、engine）與載入檢查都成功之後，才寫入一次 `{status: "verified", byte_scope}`；可捕捉的失敗寫 `{status: "failed", byte_scope: null}`。無法捕捉的結束（loader auditor 的 `_exit(127)`、SIGKILL、abort）可能讓 `load_verification` 維持 `null`、journal 維持 `running`，本契約不承諾這些情況會寫入 `failed`；F3 known limit 保留。`byte_scope` 的值：S2-1 是 `hashed_before_load`（Gate B 在載入前以 [resolved bindings](#resolved-bindings) 重新 hash 過，但 hash 與開檔是兩次）；S2-2 讓**每一個**載入檔都從 hash 過的 bytes 載入並驗證成功之後，才可能是 `loaded_buffer`。只要有一個檔案還是以路徑重新開檔，就不得寫 `loaded_buffer`。legacy 模式一律 `hashed_before_load`。這是對 [CC-536-01-02](ship_export_contracts_536.md#cc-536-01-02) journal／report 的新增欄位（accepted target，尚未實作），不改變它「identity 只由 Gate A 寫入」的規則；欄位格式、report 版本與負控制由實作切片定案，state 轉換語義仍歸 #537。
 - **寫入者**：identity 只由 Gate A 寫入，之後不再改變（沿用 #536 的 State writer 規則）。Gate B 失敗永遠不改 identity；可捕捉的 Gate B 失敗會更新 run state（`failed`）**和** `load_verification`（`failed`），無法捕捉的結束見上一項。
 
 ### 4.2 `--lineage`／attestation 可以證明什麼
@@ -117,7 +117,7 @@ lineage 是 producer 對 checkpoint、export 工具、structural check 和 runti
 | VL0 | manifest 的 schema 和 R-01..R-09 | Gate A | 失敗就 exit 2，level 為 null |
 | VL1 | 路徑限制，以及每個 member 的 size 和 sha256 | Gate A | `checksum_matched` |
 | VL2 | allowlist（TR-1b） | Gate A | `expected_source_verified` |
-| VL3 | 載入相容性：hash 過的 bytes 就是載入的 bytes；SM、TRT、dtype、shape、graph、operator | Gate B | run state，不改變 identity |
+| VL3 | 載入相容性：hash 過的 bytes 就是載入的 bytes；SM、TRT、dtype、shape、graph、operator | Gate B | run state 與 `load_verification`（見 [4.1](#load-verification)），不改變 identity |
 | VL4 | 行為資格：A_L parity、七序列 EXACT | 離線證據（S3），不在 runtime | 證據文件；決定能不能引用 benchmark |
 | VL5 | 發行者認證：release 檔案的 digest 和 minisign | 安裝時，在 runtime 之外 | 使用者自行驗證；公開發行時必須簽章 |
 
@@ -155,11 +155,11 @@ lineage 是 producer 對 checkpoint、export 工具、structural check 和 runti
 
 控制欄引用 [verification matrix](model_bundle_549/verification_matrix.json) 的 ID。`現況` 一欄是 baseline 的 source 事實，不是對本設計的驗證。
 
-| Gap | 契約決策（提案） | 正控制 | 負控制 | 已存在的 enforcement | 缺口 | Owner |
+| Gap | 契約決策（accepted target） | 正控制 | 負控制 | 已存在的 enforcement | 缺口 | Owner |
 |:--|:--|:--|:--|:--|:--|:--|
-| G01 expected identity | TR-1b allowlist（D2）。lineage 和 attestation 只是 claim。level 依 4.1；policy 依 D4 | MB-02、MB-30 | MB-19、MB-27、MB-31、MB-32、MB-33、MB-50、MB-54、MB-57 | Gate A 依 caller 檔案比對三檔 sha256（[preflight.cpp](../../shipping/src/preflight.cpp)）；attestation 綁 lineage（[detector_plan.cpp](../../shipping/src/detector_plan.cpp)）；package 的 digest 和選用 minisign | runtime 沒有可信來源，也沒有 allowlist；`identity.level` 維持 null | 設計：#549（D2 由 owner 裁決）；實作：CC-536-01-02 N-T3，S2-1；allowlist 內容：release authority |
+| G01 expected identity | TR-1b allowlist（D2）。lineage 和 attestation 只是 claim。level 依 4.1；policy 依 D4 | MB-02、MB-30 | MB-19、MB-27、MB-31、MB-32、MB-33、MB-50、MB-54、MB-57 | Gate A 依 caller 檔案比對三檔 sha256（[preflight.cpp](../../shipping/src/preflight.cpp)）；attestation 綁 lineage（[detector_plan.cpp](../../shipping/src/detector_plan.cpp)）；package 的 digest 和選用 minisign | runtime 沒有可信來源，也沒有 allowlist；`identity.level` 維持 null | 設計：#549（D2 已裁決，見 [ADR 028](../decisions/028-model-bundle-runtime-separation.md#decision-549-s1)）；實作：CC-536-01-02 N-T3，S2-1；allowlist 內容：release authority |
 | G02 bundle／pairing | manifest v1、R-01..R-08；config 的 bytes 也納入 sha 綁定；frozen lineage 和 attestation 只包住、不改寫 | MB-01 | MB-13、MB-14、MB-20、MB-21、MB-22、MB-25、MB-28、MB-35、MB-36、MB-37、MB-55 | lineage 和 config 的欄位一致；attestation 綁 lineage（MB-47 enforced）；三檔被替換時拒絕（MB-34 enforced） | 沒有 manifest；config bytes 沒有綁定；size 不檢查；沒有遷移規則 | #549 S2-1 |
-| G03 路徑 | 只接受相對路徑；`openat2` 禁止 symlink 和越界；root 只解析一次；載入的 bytes 就是 hash 過的 bytes | MB-40 | MB-10、MB-11、MB-12、MB-21、MB-38、MB-39、MB-41、MB-42、MB-58 | package check 拒絕 link、`..` 和越界的 member；installer 要求一般檔案、不可是 symlink | `resolve_model_path` 接受絕對路徑和 `..`；`is_regular_file` 會跟隨 symlink；Gate B 以路徑重新開檔（TOCTOU） | #549 S2-1（路徑）、S2-2（TOCTOU）；D5 由 owner 裁決 |
+| G03 路徑 | 只接受相對路徑；`openat2` 禁止 symlink 和越界；root 只解析一次；載入的 bytes 就是 hash 過的 bytes | MB-40 | MB-10、MB-11、MB-12、MB-21、MB-38、MB-39、MB-41、MB-42、MB-58 | package check 拒絕 link、`..` 和越界的 member；installer 要求一般檔案、不可是 symlink | `resolve_model_path` 接受絕對路徑和 `..`；`is_regular_file` 會跟隨 symlink；Gate B 以路徑重新開檔（TOCTOU） | #549 S2-1（路徑）、S2-2（TOCTOU）；D5 只接受安全目標、技術未批准（[ADR 028](../decisions/028-model-bundle-runtime-separation.md#decision-549-s1)） |
 | G04 相容性 | `detector_contract` 和 targets；Gate A 比對版本，Gate B 比對 SM 和 dtype；不設「硬跑」的旗標 | MB-01 | MB-14、MB-15、MB-18、MB-23、MB-24、MB-29、MB-43、MB-44、MB-45、MB-60、MB-61、MB-62 | TRT 反序列化；I/O 數量、順序、shape（MB-46 enforced）；head 輸出的 shape、dtype、device | 沒有查 TRT I/O dtype；沒有 SM、版本 gate；能反序列化不等於受支持 | #549 S2-2 |
 | G05 model-free 拆分 | 依 D1 和 D3：runtime package 不帶 weights；bundle 有獨立的 MANIFEST、digest 和簽章；雙向綁定（allowlist 和 `requires_operator`） | MB-49、MB-56 | MB-26、MB-42、MB-48、MB-50 | `--model-root`；`install.sh` 的原子安裝語義；package check | CMake 和 package 都預期六檔在 model root；沒有 bundle 的 build 或 installer；沒有檢查 runtime tarball 是否混入模型 | #549 S2-3；channel 由 #547 決定 |
 | G06 provenance／權利 | `provenance` 和 `rights` 是 release review 的輸入，runtime 不讀；allowlist 不代表權利批准；channel 決策需要 #547 的 decision ref | MB-01 | MB-16、MB-17、MB-51 | `license_audit.json` 的 public gate（[license_audit.py](../../scripts/native/license_audit.py)）；M-1 是 OPEN | bundle 沒有自己的 public gate；N04、N06、embedding 等沒有 #547 稽核項目 | #547 release owner；#421 提供血統證據 |
@@ -169,12 +169,12 @@ lineage 是 producer 對 checkpoint、export 工具、structural check 和 runti
 
 - **自洽但未授權的替換**（MB-31）：今天的 Gate A 會通過，[preflight 測試](../../tests/native/test_shipping_preflight.cpp)中的自洽替身 bundle 就是反證。目標設計下，這種替換最高只到 `checksum_matched`；在 `--require-identity expected_source_verified` 下（S2-3 起是 installed launcher 的預設）exit 2。
 - **路徑逃逸與 symlink**：MB-10..12 由 schema 擋下；MB-38、MB-39 要到 S2-1 才有。
-- **TOCTOU**：MB-41 要到 S2-2；operator 的處理方式依 D5。D5 只提議安全目標；memfd 是候選做法，現行 auditor 要求 operator 的 `realpath` 等於設定的路徑（[loader_audit.c](../../shipping/src/loader_audit.c) `la_objopen`），memfd 路徑會被拒絕，不得用放寬 auditor 換取通過。
+- **TOCTOU**：MB-41 要到 S2-2；operator 的處理方式依 D5。D5 只接受安全目標；memfd 是候選做法。現行 auditor 以名稱（basename／SONAME family）辨識 operator，並與由 install prefix 固定的路徑比對（[loader_audit.c](../../shipping/src/loader_audit.c) `la_objopen`）。memfd 映射（`/proc/self/fd/N`，`realpath` 失敗）不會被辨識為 operator，等於繞過這項 provenance 檢查；S2-2 必須證明不削弱此檢查，不得用放寬或繞過 auditor 換取通過。
 - **版本不相容**：MB-14、MB-15 由 schema 擋下；MB-43..45 要到 S2-2。
 
 ## 7. S2 切片建議（每一片都需要另外授權）
 
-1. **S2-1：manifest 模式 Gate A＋resolved bindings（推薦作為第一片，只需 CPU）**。加入 `--model-bundle` 和 `--require-identity`（預設 `none`）；做 VL0、VL1、VL2；用 `openat2` 限制路徑；所有 member（含 config、lineage、attestation）的 size 和 sha256；allowlist 加上建置時寫入的 sha256；N-T3 的 level 和 per-binding status。Gate B 的改變只有兩項：manifest 模式下路徑只取自 Gate A 的 resolved bindings（第 2 節），以及全部載入成功後寫入 `load_verification`（`byte_scope=hashed_before_load`）；`dlopen`／`jit::load`／TRT 的載入方式與載入前重新 hash 都不變。legacy 模式的行為不變，只多寫出 `checksum_matched`。負控制 MB-30..MB-40、MB-54、MB-55、MB-57、MB-58 放進 ctest，用 fork 出的 process 執行，不需要 GPU；resolved bindings 讓 operator 與模型來自不同 root 時，Gate B 的實際載入至少要有一次本機 GPU smoke（不是 parity 宣稱）。allowlist 一開始是空的；真正的 N01–N06 entry 要由 owner 另外批准後才加入。entrypoint re-pin 和 coordinate republication 依 runbook 以 stacked chore 一併處理。如果 owner 想要更小的一片，可以先只做 S2-1a：legacy 模式的 N-T3 `checksum_matched` 加 per-binding status，不加 manifest 模式。這部分已在 #536 第一批設計中批准，也不碰 Gate B。
+1. **S2-1：manifest 模式 Gate A＋resolved bindings（推薦作為第一片，只需 CPU）**。加入 `--model-bundle` 和 `--require-identity`（預設 `none`）；做 VL0、VL1、VL2；用 `openat2` 限制路徑；所有 member（含 config、lineage、attestation）的 size 和 sha256；allowlist 加上建置時寫入的 sha256；N-T3 的 level 和 per-binding status。Gate B 的改變只有兩項：manifest 模式下路徑只取自 Gate A 的 resolved bindings（第 2 節），以及全部載入成功後寫入 `load_verification`（`byte_scope=hashed_before_load`）；`dlopen`／`jit::load`／TRT 的載入方式與載入前重新 hash 都不變。legacy 模式的行為不變，只多寫出 `checksum_matched`。負控制 MB-30..MB-40、MB-54、MB-57 放進 ctest，用 fork 出的 process 執行，不需要 GPU。MB-55 與 MB-58 發生在 Gate B（CUDA 初始化之後），不能在 GPU-free 的 process 中觸發，和「operator 與模型來自不同 root 時 Gate B 的實際載入」一起放進本機 GPU smoke（不是 parity 宣稱）。allowlist 一開始是空的；真正的 N01–N06 entry 要由 owner 另外批准後才加入。entrypoint re-pin 和 coordinate republication 依 runbook 以 stacked chore 一併處理。如果 owner 想要更小的一片，可以先只做 S2-1a：legacy 模式的 N-T3 `checksum_matched` 加 per-binding status，不加 manifest 模式。這部分已在 #536 第一批設計中批准，也不碰 Gate B。
 2. **S2-2：Gate B 強化（需要 GPU）**。從已 hash 的 buffer 載入（D5）、SM 和版本 gate、TRT dtype。完成後重跑 A_L parity（MB-52）。
 3. **S2-3：package 拆分**。model-free runtime tarball 和 private bundle tarball 分開建置；各自的 MANIFEST、digest 和簽章；檢查 runtime tarball 不含 `carried_by: model_bundle` 的 member，而 N03 照常存在（MB-48、MB-56）；並存安裝和 rollback（MB-49）；installed launcher 的預設 policy 改成 VL2（3.4）。`distribution.status` 維持 `local-only`。
 4. **S2-4（延後）**：TR-2，runtime 驗 bundle 簽章。前提是 #547 先審過新的 crypto 依賴。
