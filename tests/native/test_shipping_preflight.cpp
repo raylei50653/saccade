@@ -20,7 +20,8 @@
 //                        the trace directories exist; no probe file is left;
 //                        the journal is still running with identity null;
 //   * pass_max_frames:   a sequence listing fewer frames than seqLength
-//                        passes with --max-frames within the listing;
+//                        passes with --max-frames within the listing, and is
+//                        refused with --max-frames beyond it;
 //   * config_*:          a missing config, a torn schedule
 //                        (steps.schedule.double_buffer flipped);
 //   * lineage_*:         a missing lineage; a lineage whose preset sha256
@@ -120,6 +121,7 @@ struct Bundle {
 };
 
 void write_sequence(const fs::path& seq, int seq_length, int listed) {
+    fs::remove_all(seq);
     write_file(seq / "seqinfo.ini", "[Sequence]\nname=" + seq.filename().string() +
                                         "\nimWidth=8\nimHeight=6\nseqLength=" + std::to_string(seq_length) + "\n");
     for (int k = 1; k <= listed; ++k) {
@@ -297,6 +299,12 @@ int main(int argc, char** argv) {
              b.max_frames = 2;
          },
          nullptr, nullptr},
+        {"max_frames_beyond_listing",
+         [](Bundle& b) {
+             write_sequence(b.root / "seqs" / kSeqs[1], 3, 2);
+             b.max_frames = 3;
+         },
+         "fewer than the 3 frames", nullptr},
         {"config_missing", [](Bundle& b) { b.config = b.dir / "no_such.resolved.json"; }, "no_such.resolved.json",
          nullptr},
         {"config_torn_schedule",
