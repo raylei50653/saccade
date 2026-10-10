@@ -1,6 +1,7 @@
 // Native detector plan (#465 Phase B PR-8). See saccade_shipping/detector_plan.hpp.
 #include "saccade_shipping/detector_plan.hpp"
 
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string_view>
@@ -308,6 +309,11 @@ DetectorPlan plan_detector(const ResolvedShippingConfig& cfg, const JsonValue& l
         plan.op_library_from_attestation = true;
     }
     return plan;
+}
+
+std::string resolve_model_path(const std::string& model_root, const std::string& path) {
+    const std::filesystem::path p(path);
+    return p.is_absolute() ? p.string() : (std::filesystem::path(model_root) / p).string();
 }
 
 DetectorPlan plan_detector_files(const ResolvedShippingConfig& cfg, const DetectorInputs& in) {

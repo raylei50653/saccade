@@ -41,11 +41,6 @@ namespace {
     throw std::runtime_error("shipping detector: " + what);
 }
 
-std::string resolve(const std::string& root, const std::string& p) {
-    const std::filesystem::path path(p);
-    return path.is_absolute() ? path.string() : (std::filesystem::path(root) / path).string();
-}
-
 void check_sha(const std::string& what, const std::string& path, const std::string& want,
                std::string& got) {
     got = sha256_file_hex(path);
@@ -191,9 +186,9 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
                            cudaStream_t stream)
     : impl_(std::make_unique<Impl>(plan, stream)) {
     Impl& m = *impl_;
-    const std::string op_path = resolve(model_root, plan.op_library.path);
-    const std::string head_path = resolve(model_root, plan.head_artifact.path);
-    const std::string engine_path = resolve(model_root, plan.backbone_engine.path);
+    const std::string op_path = resolve_model_path(model_root, plan.op_library.path);
+    const std::string head_path = resolve_model_path(model_root, plan.head_artifact.path);
+    const std::string engine_path = resolve_model_path(model_root, plan.backbone_engine.path);
 
     // 1. hashes before anything is loaded.
     check_sha("operator library", op_path, plan.op_library.sha256, m.report.op_library_sha256);

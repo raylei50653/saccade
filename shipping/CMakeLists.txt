@@ -66,6 +66,15 @@ target_link_libraries(saccade_shipping_completion PUBLIC saccade_shipping_native
 target_compile_options(saccade_shipping_completion PRIVATE -Wall -Wextra -Wpedantic)
 set_target_properties(saccade_shipping_completion PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# Gate A of saccade_track (#536 CC-536-01-02, N-T2): config, lineage,
+# attestation, sequence inputs, output directories and model file hashes,
+# before the first CUDA API call. CUDA-free: links no CUDA library, so it
+# cannot initialize a device.
+add_library(saccade_shipping_preflight STATIC src/preflight.cpp)
+target_link_libraries(saccade_shipping_preflight PUBLIC saccade_shipping_completion)
+target_compile_options(saccade_shipping_preflight PRIVATE -Wall -Wextra -Wpedantic)
+set_target_properties(saccade_shipping_preflight PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 enable_testing()
 add_executable(saccade_resolved_config_test ${SACCADE_REPO_ROOT}/tests/native/test_resolved_config.cpp)
 target_link_libraries(saccade_resolved_config_test PRIVATE saccade_shipping_config)
@@ -129,6 +138,16 @@ target_compile_definitions(saccade_shipping_run_completion_test PRIVATE SACCADE_
 target_link_libraries(saccade_shipping_run_completion_test PRIVATE saccade_shipping_native_config)
 target_compile_options(saccade_shipping_run_completion_test PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME saccade_shipping_run_completion_test COMMAND saccade_shipping_run_completion_test)
+
+# Gate A: each check passes on a self-consistent bundle and refuses its own
+# failure, with the journal failed (#536 CC-536-01-02).
+add_executable(saccade_shipping_preflight_test ${SACCADE_REPO_ROOT}/tests/native/test_shipping_preflight.cpp)
+target_link_libraries(saccade_shipping_preflight_test PRIVATE saccade_shipping_preflight)
+target_compile_options(saccade_shipping_preflight_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_preflight_test
+    COMMAND saccade_shipping_preflight_test ${SACCADE_RESOLVED_CONFIG}
+            ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_head_lineage.json
+            ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json)
 
 if(TARGET saccade_tracking)
     # Measurement boundary (#465 Phase C PR-C2). Each runtime library below is
@@ -239,12 +258,12 @@ if(TARGET saccade_tracking)
     # measurement variant (tools/saccade_track_measurement.cpp). Not installed.
     add_executable(saccade_track_measurement tools/saccade_track_measurement.cpp)
     target_link_libraries(saccade_track_measurement PRIVATE saccade_shipping_runtime_measurement)
-    target_link_libraries(saccade_track_measurement PRIVATE saccade_shipping_completion)
+    target_link_libraries(saccade_track_measurement PRIVATE saccade_shipping_preflight)
     target_link_options(saccade_track_measurement PRIVATE LINKER:--as-needed)
 
     add_executable(saccade_track tools/saccade_track.cpp)
     target_link_libraries(saccade_track PRIVATE saccade_shipping_runtime)
-    target_link_libraries(saccade_track PRIVATE saccade_shipping_completion)
+    target_link_libraries(saccade_track PRIVATE saccade_shipping_preflight)
     # NEEDED = what the entrypoint uses. The toolchain default is
     # --no-as-needed, so otherwise any library that lands before torch's own
     # --as-needed switch on the link line (e.g. libnvinfer_plugin, which nothing

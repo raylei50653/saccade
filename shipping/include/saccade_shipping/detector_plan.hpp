@@ -98,6 +98,11 @@ struct DetectorInputs {
 };
 DetectorPlan plan_detector_files(const ResolvedShippingConfig& cfg, const DetectorInputs& in);
 
+// Where a plan path is read from: relative paths against the model root,
+// absolute ones as they are. Gate A (preflight.hpp) and the detector load
+// (detector_host.hpp) both read the files here.
+std::string resolve_model_path(const std::string& model_root, const std::string& path);
+
 // set_whole_graph_img_dims: `self._whole_graph_sx.fill_(w_orig / self.img_size)`
 // -- a Python float (double) division, stored in a float32 tensor.
 inline float coordinate_scale(int orig, int img_size) {

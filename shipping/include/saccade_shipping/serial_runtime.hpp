@@ -119,6 +119,11 @@ public:
     // in the detector plan are resolved against `model_root`.
     SerialRuntime(const ResolvedShippingConfig& cfg, const DetectorInputs& detector_inputs,
                   const std::string& model_root);
+    // The same, from a detector plan already made from the lineage and the
+    // attestation (Gate A, preflight.hpp): the files Gate A hashed are the
+    // ones loaded, without reading the lineage again.
+    SerialRuntime(const ResolvedShippingConfig& cfg, DetectorPlan detector_plan,
+                  const std::string& model_root);
     ~SerialRuntime();
     SerialRuntime(const SerialRuntime&) = delete;
     SerialRuntime& operator=(const SerialRuntime&) = delete;

@@ -7,6 +7,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "saccade_shipping/native_build.hpp"
@@ -128,9 +129,13 @@ struct DoubleBufferRuntime::DetectionBuffers {
 DoubleBufferRuntime::DoubleBufferRuntime(const ResolvedShippingConfig& cfg,
                                          const DetectorInputs& detector_inputs,
                                          const std::string& model_root)
+    : DoubleBufferRuntime(cfg, plan_detector_files(cfg, detector_inputs), model_root) {}
+
+DoubleBufferRuntime::DoubleBufferRuntime(const ResolvedShippingConfig& cfg, DetectorPlan detector_plan,
+                                         const std::string& model_root)
     : cfg_(cfg),
       ingest_plan_(plan_ingest(cfg)),
-      detector_plan_(plan_detector_files(cfg, detector_inputs)),
+      detector_plan_(std::move(detector_plan)),
       output_plan_(plan_sequence_output(cfg)),
       schedule_plan_(plan_schedule(cfg)) {
     if (!output_plan_.write_output) {
