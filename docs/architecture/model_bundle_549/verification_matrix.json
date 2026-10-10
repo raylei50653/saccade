@@ -573,7 +573,7 @@
       "target": null,
       "mutation": null,
       "expect_error": null,
-      "expected": "identity.level=expected_source_verified, expected_source=runtime_allowlist, byte_scope=hashed_before_load (loaded_buffer only after S2-2)",
+      "expected": "identity.level=expected_source_verified, expected_source=runtime_allowlist; identity carries no load claim",
       "current": "missing",
       "existing_enforcement": [
         "shipping/src/preflight.cpp:32-41"
@@ -779,7 +779,7 @@
       "target": null,
       "mutation": null,
       "expect_error": null,
-      "expected": "the loaded bytes are the hashed buffer, or exit 2",
+      "expected": "the loaded bytes are the hashed bytes, or exit 2; only then may load_verification.byte_scope be loaded_buffer",
       "current": "missing",
       "existing_enforcement": [
         "shipping/src/detector_host.cpp:189-201",
@@ -1083,6 +1083,24 @@
       "existing_enforcement": [],
       "slice": "S2-1",
       "owner": "#549"
+    },
+    {
+      "id": "MB-58",
+      "gaps": [
+        "G03",
+        "G07"
+      ],
+      "polarity": "negative",
+      "case": "Gate A passes, then Gate B fails a load (or the process is killed during loading)",
+      "layer": "gate_b",
+      "target": null,
+      "mutation": null,
+      "expect_error": null,
+      "expected": "identity unchanged from Gate A; load_verification is failed (or stays null when killed), never verified; run state failed/running",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S2-1",
+      "owner": "#549 S2; card #536 CC-536-01-02; state semantics #537"
     },
     {
       "id": "MB-60",

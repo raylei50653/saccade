@@ -138,7 +138,7 @@ flowchart LR
 | D2 | 可信 expected identity 的信任根 | **TR-1b**：runtime package 帶 `saccade.trusted_model_bundles/v1` allowlist，其 sha256 編進 entrypoint | TR-1a：allowlist 直接編進 binary（效果相同，但不易審查）。TR-2：runtime 用內建公鑰驗 bundle 簽章，可以解除 bundle 和 runtime 的耦合，但要在 runtime 加 crypto 依賴（新的 #547 稽核物件），而且 CC-536-01-02 已決定執行期不驗 minisign，列為延後的 S2-4。TR-3：installed MANIFEST 或 bundle 自帶的 sidecar，因為和模型在同一棵 caller 可寫的樹而**拒絕**。TR-4：caller 的 lineage／attestation，因為自我認證而**拒絕**。TR-5：環境變數或 CLI 指定 expected sha，因為 caller 可控而**拒絕** |
 | D3 | member 由誰攜帶 | N01、N02、N05 和 binding members N04、N06 放 bundle；N03（operator，專案程式碼）放 runtime package，bundle 用 `requires_operator` 綁它的 sha256 | 把 N04／N06 放 runtime：每換一次模型，runtime 都要跟著換。把 N03 放 bundle：bundle 會帶 native code，而且 operator 的 ABI 綁的是 runtime 的 LibTorch |
 | D4 | 模式與預設 policy | legacy 模式（現行參數）和 manifest 模式（`--model-bundle`）互斥；legacy 最高只到 `checksum_matched`。policy 只有 `--require-identity {none,checksum_matched,expected_source_verified}`。S2-1 所有 entrypoint 預設 `none`（現行行為不變）；S2-3 package 拆分時 installed launcher 預設改成 `expected_source_verified`，此後 legacy 模式要明確加 `--require-identity checksum_matched`，結果不得引用已發表數字（[契約 3.4](../architecture/model_bundle_contract_549.md#modes)） | 一開始就讓 installed launcher 要求 VL2：現有 package 沒有 manifest 和 allowlist entry，等於立刻讓它無法執行。永遠只要求 `checksum_matched`：自洽替換照樣通過，G01 沒有解決 |
-| D5 | operator library 的 TOCTOU | engine 和 head 從已 hash 的記憶體 buffer 載入。operator 先複製到 sealed memfd 再 `dlopen`；要先確認這和 auditor（F3）及 N03 RUNPATH 例外相容，否則記成殘留風險 | 三個檔案都維持用路徑載入：G03 的 TOCTOU 就留著 |
+| D5 | 載入 bytes 與核對 bytes 一致（TOCTOU） | 只決定安全目標：每個載入檔的實際載入 bytes 必須就是核對過的 bytes，做到之前 `load_verification` 不得宣稱 `loaded_buffer`。engine 和 head 從已 hash 的記憶體 buffer 載入。operator 的做法**不在本決策內批准**：sealed memfd `dlopen` 只是候選，現行 auditor 的 `la_objopen` 要求 operator 的 `realpath` 等於設定的路徑，memfd 路徑會被拒絕；S2-2 必須先驗證 auditor、N03 RUNPATH 例外、依賴載入與真實 GPU 執行，且不得以放寬 auditor 取得通過，否則 operator 記成殘留風險 | 三個檔案都維持用路徑載入：G03 的 TOCTOU 就留著 |
 | D6 | manifest 模式下 attestation 是否必填 | 必填（schema 的 `pairing.attestation`） | 和直接 CLI 一樣選用：operator realization 就沒有 binding |
 | D7 | v1 是否允許 `engine_precision: unresolved` | 允許。N01 的 precision 在 S0 沒有記錄，而 runtime 不以它作為 gate | 要求必須是確定值：發行第一個 bundle 前得先量出 N01 的 precision |
 
@@ -150,7 +150,7 @@ flowchart LR
 - **模型座標**：模型的 identity 是 manifest 檔的 sha256。只要任何 member 的 sha 改變，就是新的模型座標。原 A_L 證據只在 member bytes 相同、且新 loader 的 parity 已重跑時才能沿用（S3）。
 - **既有 frozen 檔不改寫**：N05 lineage v1 和 N06 attestation v1 由 manifest 包住、以 sha 綁定，不重新寫入。#465 C3/C4 的 digest、簽章、loader audit 都不放寬。
 - **CLI**：`--model-bundle` 是新增、與舊參數互斥的模式，舊參數保留。installed launcher 的預設 policy 在 S2-3 才改變（D4），這要在 CLI 說明和 package README 中以版本化方式記錄。
-- **Gate A → Gate B 的路徑**：拆成兩種 root 後，Gate B 不能再用單一 `model_root` 解析路徑，改為只吃 Gate A 的 resolved bindings；S2-2 之前，identity 只涵蓋載入前 hash 過的 bytes（[契約第 2 節](../architecture/model_bundle_contract_549.md#resolved-bindings)）。
+- **Gate A → Gate B 的路徑**：拆成兩種 root 後，Gate B 不能再用單一 `model_root` 解析路徑，改為只吃 Gate A 的 resolved bindings；identity 只記 Gate A 核對過的 bytes；載入涵蓋範圍由 Gate B 另外寫在 `load_verification`，S2-2 之前最多是 `hashed_before_load`（[契約 4.1](../architecture/model_bundle_contract_549.md#load-verification)）。
 - **沒有改變的事**：`distribution.status=local-only`、`owner_confirmation=null`、#547 的所有 OPEN 項目、#465 `ENGINEERING_COMPLETE`、required checks。
 
 ## 8. 本 ADR 不做的事
