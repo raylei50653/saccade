@@ -277,7 +277,8 @@
     "class_reduce": "max",
     "box_encoding": "ltrb_anchor_decode",
     "box_format": "xyxy",
-    "num_classes": 80
+    "num_classes": 80,
+    "box_channels": 4
   },
   "compatibility": {
     "targets": [

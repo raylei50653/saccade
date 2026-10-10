@@ -1,7 +1,7 @@
 {
   "schema": "saccade.model_bundle_verification_matrix/v1",
   "status": "proposed",
-  "reading": "Positive/negative control matrix for #549 S1 (ADR 028). Rows with layer schema/semantic run now against the example files (tests/contract/test_model_bundle_contract_549.py). Every other row is a design obligation: 'enforced'/'partial'/'missing' describe the source at the S1 baseline, not a verification of the S1 design.",
+  "reading": "Positive/negative control matrix for #549 S1 (ADR 028). Rows with layer schema/semantic run now against the example files and must fail at their expect_error location/rule (tests/contract/test_model_bundle_contract_549.py). Every other row is a design obligation: 'enforced'/'partial'/'missing' describe the source at the S1 baseline, not a verification of the S1 design.",
   "source_baseline": "46ab79c1785b85f8afbef1d43909f1a7cb2eff23",
   "examples": {
     "manifest": "docs/architecture/model_bundle_549/examples/headline_s_n01_n06.model_bundle.example.json",
@@ -20,6 +20,7 @@
       "layer": "semantic",
       "target": "manifest",
       "mutation": null,
+      "expect_error": null,
       "expected": "valid",
       "current": "design_check",
       "existing_enforcement": [],
@@ -36,6 +37,7 @@
       "layer": "semantic",
       "target": "allowlist",
       "mutation": null,
+      "expect_error": null,
       "expected": "valid; resolves to checksum_matched, never expected_source_verified",
       "current": "design_check",
       "existing_enforcement": [],
@@ -58,6 +60,10 @@
           "value": "../models/yolo/x.engine"
         }
       ],
+      "expect_error": {
+        "instance_path": "/members/0/path",
+        "keyword": "pattern"
+      },
       "expected": "reject",
       "current": "design_check",
       "existing_enforcement": [],
@@ -80,6 +86,10 @@
           "value": "/etc/x.engine"
         }
       ],
+      "expect_error": {
+        "instance_path": "/members/0/path",
+        "keyword": "pattern"
+      },
       "expected": "reject",
       "current": "design_check",
       "existing_enforcement": [],
@@ -102,6 +112,10 @@
           "value": "models/./yolo//x.pt"
         }
       ],
+      "expect_error": {
+        "instance_path": "/members/1/path",
+        "keyword": "pattern"
+      },
       "expected": "reject",
       "current": "design_check",
       "existing_enforcement": [],
@@ -124,6 +138,10 @@
           "value": "2EF3D4D4"
         }
       ],
+      "expect_error": {
+        "instance_path": "/members/0/sha256",
+        "keyword": "pattern"
+      },
       "expected": "reject",
       "current": "design_check",
       "existing_enforcement": [],
@@ -147,6 +165,10 @@
           "value": "saccade.model_bundle/v2"
         }
       ],
+      "expect_error": {
+        "instance_path": "/schema",
+        "keyword": "const"
+      },
       "expected": "reject (no forward-compat guess)",
       "current": "design_check",
       "existing_enforcement": [],
@@ -169,6 +191,10 @@
           "value": "saccade.native_detector_contract/v2"
         }
       ],
+      "expect_error": {
+        "instance_path": "/runtime_contract/detector_contract",
+        "keyword": "enum"
+      },
       "expected": "reject",
       "current": "design_check",
       "existing_enforcement": [],
@@ -191,6 +217,10 @@
           "value": "approved"
         }
       ],
+      "expect_error": {
+        "instance_path": "/rights/channels/public/decision_ref",
+        "keyword": "type"
+      },
       "expected": "reject",
       "current": "design_check",
       "existing_enforcement": [],
@@ -213,6 +243,10 @@
           "value": "Licence compliant; redistribution permitted."
         }
       ],
+      "expect_error": {
+        "instance_path": "/rights/reading",
+        "keyword": "const"
+      },
       "expected": "reject",
       "current": "design_check",
       "existing_enforcement": [],
@@ -236,6 +270,10 @@
           "value": []
         }
       ],
+      "expect_error": {
+        "instance_path": "/compatibility/targets/0/evidence",
+        "keyword": "minItems"
+      },
       "expected": "reject",
       "current": "design_check",
       "existing_enforcement": [],
@@ -258,6 +296,10 @@
           "value": "approved"
         }
       ],
+      "expect_error": {
+        "instance_path": "/entries/0/approval",
+        "keyword": "type"
+      },
       "expected": "reject",
       "current": "design_check",
       "existing_enforcement": [],
@@ -279,6 +321,10 @@
           "path": "/pairing/attestation"
         }
       ],
+      "expect_error": {
+        "instance_path": "/pairing",
+        "keyword": "required"
+      },
       "expected": "reject (manifest mode makes N06 mandatory)",
       "current": "design_check",
       "existing_enforcement": [],
@@ -302,6 +348,9 @@
           "value": "MODELS/yolo/yolo26s_backbone_640_best.engine"
         }
       ],
+      "expect_error": {
+        "rule": "R-02"
+      },
       "expected": "reject (R-02)",
       "current": "design_check",
       "existing_enforcement": [],
@@ -324,6 +373,9 @@
           "value": "backbone"
         }
       ],
+      "expect_error": {
+        "rule": "R-03"
+      },
       "expected": "reject (R-03)",
       "current": "design_check",
       "existing_enforcement": [],
@@ -351,6 +403,9 @@
           ]
         }
       ],
+      "expect_error": {
+        "rule": "R-08"
+      },
       "expected": "reject (R-08)",
       "current": "design_check",
       "existing_enforcement": [],
@@ -373,6 +428,9 @@
           "value": 960
         }
       ],
+      "expect_error": {
+        "rule": "R-08"
+      },
       "expected": "reject (R-08)",
       "current": "design_check",
       "existing_enforcement": [],
@@ -394,6 +452,9 @@
           "path": "/members/3/json_schema"
         }
       ],
+      "expect_error": {
+        "rule": "R-06"
+      },
       "expected": "reject (R-06)",
       "current": "design_check",
       "existing_enforcement": [],
@@ -416,6 +477,9 @@
           "value": "runtime_package"
         }
       ],
+      "expect_error": {
+        "rule": "R-07"
+      },
       "expected": "reject (R-07, depends on D3)",
       "current": "design_check",
       "existing_enforcement": [],
@@ -438,7 +502,61 @@
           "path": "/entries/-"
         }
       ],
+      "expect_error": {
+        "rule": "R-09"
+      },
       "expected": "reject (R-09)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-28",
+      "gaps": [
+        "G02",
+        "G05"
+      ],
+      "polarity": "negative",
+      "case": "Frozen lineage placed in the runtime package",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/members/4/carried_by",
+          "value": "runtime_package"
+        }
+      ],
+      "expect_error": {
+        "rule": "R-07"
+      },
+      "expected": "reject (R-07, depends on D3)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-29",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "Head input dtype differs from the backbone output it pairs with",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/io/head/inputs/0/dtype",
+          "value": "float16"
+        }
+      ],
+      "expect_error": {
+        "rule": "R-08"
+      },
+      "expected": "reject (R-08)",
       "current": "design_check",
       "existing_enforcement": [],
       "slice": "S1",
@@ -454,7 +572,8 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
-      "expected": "identity.level=expected_source_verified, expected_source=runtime_allowlist",
+      "expect_error": null,
+      "expected": "identity.level=expected_source_verified, expected_source=runtime_allowlist, byte_scope=hashed_before_load (loaded_buffer only after S2-2)",
       "current": "missing",
       "existing_enforcement": [
         "shipping/src/preflight.cpp:32-41"
@@ -472,7 +591,8 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
-      "expected": "level=checksum_matched at most; under require=expected_source_verified exit 2 before CUDA",
+      "expect_error": null,
+      "expected": "level=checksum_matched at most; under --require-identity expected_source_verified exit 2 before CUDA",
       "current": "missing",
       "existing_enforcement": [
         "tests/native/test_shipping_preflight.cpp",
@@ -491,6 +611,7 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2 before CUDA",
       "current": "missing",
       "existing_enforcement": [],
@@ -507,7 +628,8 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
-      "expected": "not expected_source_verified; exit 2 under the shipping policy",
+      "expect_error": null,
+      "expected": "not expected_source_verified; exit 2 under --require-identity expected_source_verified",
       "current": "missing",
       "existing_enforcement": [],
       "slice": "S2-1",
@@ -523,6 +645,7 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2 before CUDA, journal failed, identity.level null",
       "current": "enforced",
       "existing_enforcement": [
@@ -543,6 +666,7 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2 (config sha bound by the manifest)",
       "current": "missing",
       "existing_enforcement": [
@@ -561,6 +685,7 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2 before hashing",
       "current": "missing",
       "existing_enforcement": [],
@@ -577,6 +702,7 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2 before CUDA; no fallback, no download",
       "current": "partial",
       "existing_enforcement": [
@@ -595,6 +721,7 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2 (openat2 RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS)",
       "current": "missing",
       "existing_enforcement": [
@@ -613,6 +740,7 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2",
       "current": "missing",
       "existing_enforcement": [
@@ -631,6 +759,7 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "same level as before relocation",
       "current": "partial",
       "existing_enforcement": [
@@ -649,6 +778,7 @@
       "layer": "gate_b",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "the loaded bytes are the hashed buffer, or exit 2",
       "current": "missing",
       "existing_enforcement": [
@@ -669,6 +799,7 @@
       "layer": "installer",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "package check and installer reject",
       "current": "partial",
       "existing_enforcement": [
@@ -688,6 +819,7 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2 before CUDA",
       "current": "missing",
       "existing_enforcement": [],
@@ -704,6 +836,7 @@
       "layer": "gate_b",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2 before engine deserialization",
       "current": "missing",
       "existing_enforcement": [],
@@ -720,6 +853,7 @@
       "layer": "gate_b",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2",
       "current": "missing",
       "existing_enforcement": [
@@ -738,6 +872,7 @@
       "layer": "gate_b",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2",
       "current": "enforced",
       "existing_enforcement": [
@@ -756,6 +891,7 @@
       "layer": "gate_a",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "exit 2 before CUDA",
       "current": "enforced",
       "existing_enforcement": [
@@ -771,10 +907,11 @@
         "G05"
       ],
       "polarity": "negative",
-      "case": "A bundle member (path or sha256) appears in the model-free runtime tarball",
+      "case": "A carried_by=model_bundle member (path or sha256) appears in the model-free runtime tarball",
       "layer": "package_check",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "reject",
       "current": "missing",
       "existing_enforcement": [],
@@ -791,6 +928,7 @@
       "layer": "installer",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "both installs atomic; previous bundle untouched",
       "current": "missing",
       "existing_enforcement": [
@@ -810,6 +948,7 @@
       "layer": "installer",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "minisign -V fails",
       "current": "partial",
       "existing_enforcement": [
@@ -828,6 +967,7 @@
       "layer": "release_gate",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "reject",
       "current": "partial",
       "existing_enforcement": [
@@ -846,6 +986,7 @@
       "layer": "offline_evidence",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "7 sequences EXACT vs A_L; otherwise record the mismatch and requalify",
       "current": "missing",
       "existing_enforcement": [
@@ -864,11 +1005,169 @@
       "layer": "offline_evidence",
       "target": null,
       "mutation": null,
+      "expect_error": null,
       "expected": "claim check rejects; fresh evaluation required",
       "current": "missing",
       "existing_enforcement": [],
       "slice": "S3",
       "owner": "#549 S3; check mapping #541"
+    },
+    {
+      "id": "MB-54",
+      "gaps": [
+        "G01",
+        "G03"
+      ],
+      "polarity": "negative",
+      "case": "--model-bundle given together with --config/--lineage/--attestation/--model-root",
+      "layer": "cli_parse",
+      "target": null,
+      "mutation": null,
+      "expect_error": null,
+      "expected": "exit 2 before any file is read",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S2-1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-55",
+      "gaps": [
+        "G02",
+        "G03"
+      ],
+      "polarity": "negative",
+      "case": "Member replaced after Gate A, before Gate B re-hashes the resolved binding",
+      "layer": "gate_b",
+      "target": null,
+      "mutation": null,
+      "expect_error": null,
+      "expected": "exit 2 (same resolved path, same expected sha256)",
+      "current": "partial",
+      "existing_enforcement": [
+        "shipping/src/detector_host.cpp:189-197"
+      ],
+      "slice": "S2-1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-56",
+      "gaps": [
+        "G05"
+      ],
+      "polarity": "positive",
+      "case": "Model-free runtime tarball carries N03 whose sha256 equals the bundle's requires_operator member",
+      "layer": "package_check",
+      "target": null,
+      "mutation": null,
+      "expect_error": null,
+      "expected": "accepted; only carried_by=model_bundle members are refused (MB-48)",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S2-3",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-57",
+      "gaps": [
+        "G01"
+      ],
+      "polarity": "negative",
+      "case": "Legacy mode run with --require-identity expected_source_verified",
+      "layer": "gate_a",
+      "target": null,
+      "mutation": null,
+      "expect_error": null,
+      "expected": "exit 2 before CUDA (legacy mode cannot exceed checksum_matched)",
+      "current": "missing",
+      "existing_enforcement": [],
+      "slice": "S2-1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-60",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "num_classes differs from the cls output channels",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/postprocessing/num_classes",
+          "value": 81
+        }
+      ],
+      "expect_error": {
+        "rule": "R-08"
+      },
+      "expected": "reject (R-08)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-61",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "A reg output's channel count differs from box_channels",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/io/head/outputs/3/shape",
+          "value": [
+            1,
+            5,
+            80,
+            80
+          ]
+        }
+      ],
+      "expect_error": {
+        "rule": "R-08"
+      },
+      "expected": "reject (R-08)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
+    },
+    {
+      "id": "MB-62",
+      "gaps": [
+        "G04"
+      ],
+      "polarity": "negative",
+      "case": "A cls output's H/W differs from its head input level",
+      "layer": "semantic",
+      "target": "manifest",
+      "mutation": [
+        {
+          "op": "replace",
+          "path": "/io/head/outputs/0/shape",
+          "value": [
+            1,
+            80,
+            40,
+            40
+          ]
+        }
+      ],
+      "expect_error": {
+        "rule": "R-08"
+      },
+      "expected": "reject (R-08)",
+      "current": "design_check",
+      "existing_enforcement": [],
+      "slice": "S1",
+      "owner": "#549"
     }
   ]
 }

@@ -44,11 +44,14 @@ JSON_ROLES = {
     "head_lineage": "saccade.head_artifact_lineage_torchscript/v1",
     "realization_attestation": "saccade.head_realization_attestation/v1",
 }
-# R-07 depends on owner decision D3 (ADR 028): weights travel only in the bundle,
-# the operator only in the runtime package.
+# R-07 depends on owner decision D3 (ADR 028): weights and the binding metadata
+# travel in the bundle, the operator only in the runtime package.
 CARRIER_OF_ROLE = {
     "backbone_engine": "model_bundle",
     "head_torchscript": "model_bundle",
+    "resolved_config": "model_bundle",
+    "head_lineage": "model_bundle",
+    "realization_attestation": "model_bundle",
     "scan_operator": "runtime_package",
 }
 
@@ -93,8 +96,8 @@ def manifest_rule_errors(m: dict[str, Any]) -> list[str]:
     for x in members:
         if JSON_ROLES.get(x["role"]) != x.get("json_schema"):
             errors.append(f"R-06 member {x['id']} json_schema does not match its role")
-        want = CARRIER_OF_ROLE.get(x["role"])
-        if want is not None and x["carried_by"] != want:
+        want = CARRIER_OF_ROLE[x["role"]]
+        if x["carried_by"] != want:
             errors.append(f"R-07 {x['role']} must be carried by {want}")
     bb, head = m["io"]["backbone_engine"], m["io"]["head"]
     for name, tensors in (
@@ -105,10 +108,20 @@ def manifest_rule_errors(m: dict[str, Any]) -> list[str]:
     ):
         if [t["ordinal"] for t in tensors] != list(range(len(tensors))):
             errors.append(f"R-08 {name} ordinals are not 0..n-1")
-    if [t["shape"] for t in head["inputs"]] != [t["shape"] for t in bb["outputs"]]:
-        errors.append("R-08 head inputs do not match backbone outputs")
-    if len(head["outputs"]) != 2 * len(head["inputs"]):
+    pairs = [(t["shape"], t["dtype"]) for t in head["inputs"]]
+    if pairs != [(t["shape"], t["dtype"]) for t in bb["outputs"]]:
+        errors.append("R-08 head inputs do not match backbone outputs (shape, dtype)")
+    levels = len(head["inputs"])
+    if len(head["outputs"]) != 2 * levels:
         errors.append("R-08 head must emit one cls and one reg tensor per level")
+    else:
+        post = m["postprocessing"]
+        for k, t in enumerate(head["outputs"]):
+            channels = post["num_classes"] if k < levels else post["box_channels"]
+            level = head["inputs"][k % levels]["shape"]
+            shape = [level[0], channels, *level[2:]]
+            if t["shape"] != shape:
+                errors.append(f"R-08 head output {t['name']} shape is not {shape}")
     resize = m["preprocessing"]["resize"]
     if bb["inputs"][0]["shape"][2:] != [resize["height"], resize["width"]]:
         errors.append("R-08 resize does not produce the backbone input H/W")
@@ -236,6 +249,9 @@ def test_matrix_shape() -> None:
         executable = r["layer"] in ("schema", "semantic")
         assert (r["current"] == "design_check") == executable, r["id"]
         assert (r["target"] in TARGETS) == executable, r["id"]
+        assert (r["expect_error"] is not None) == (
+            executable and r["mutation"] is not None
+        ), r["id"]
         if not executable:
             assert r["mutation"] is None and r["current"] in {
                 "enforced",
@@ -273,8 +289,16 @@ def test_matrix_negative_controls(row: dict[str, Any]) -> None:
     assert row["polarity"] == "negative"
     doc = _apply(_load(example), row["mutation"])
     schema_errors = list(_validator(schema).iter_errors(doc))
+    want = row["expect_error"]
     if row["layer"] == "schema":
-        assert schema_errors, row["id"]
+        found = {
+            ("/" + "/".join(str(k) for k in e.absolute_path), e.validator)
+            for e in schema_errors
+        }
+        assert (want["instance_path"], want["keyword"]) in found, (
+            f"{row['id']}: {found}"
+        )
     else:
         assert not schema_errors, f"{row['id']} should pass the schema and fail a rule"
-        assert RULES[row["target"]](doc), row["id"]
+        rules = {e.split()[0] for e in RULES[row["target"]](doc)}
+        assert rules == {want["rule"]}, f"{row['id']}: {rules}"

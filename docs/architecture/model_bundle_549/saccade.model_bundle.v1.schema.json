@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/raylei50653/saccade/blob/main/docs/architecture/model_bundle_549/saccade.model_bundle.v1.schema.json",
   "title": "saccade.model_bundle/v1 (PROPOSED draft, #549 S1)",
-  "description": "Model bundle manifest proposed by ADR 028. Design status: proposed; no runtime reads this schema. A manifest is a producer CLAIM until its exact file sha256 is listed as an approved entry of a saccade.trusted_model_bundles/v1 allowlist carried by the runtime package. Cross-field rules that JSON Schema cannot express (unique ids/paths, pairing roles, carried_by placement, schema of JSON members) are listed as R-01..R-08 in docs/architecture/model_bundle_contract_549.md section 3.2.",
+  "description": "Model bundle manifest proposed by ADR 028. Design status: proposed; no runtime reads this schema. A manifest is a producer CLAIM until its exact file sha256 is listed as an approved entry of a saccade.trusted_model_bundles/v1 allowlist carried by the runtime package. Cross-field rules that JSON Schema cannot express (unique ids/paths, pairing roles, carried_by placement, schema of JSON members) are listed as R-01..R-09 in docs/architecture/model_bundle_contract_549.md section 3.2.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -114,13 +114,14 @@
     "postprocessing": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["score_activation", "class_reduce", "box_encoding", "box_format", "num_classes"],
+      "required": ["score_activation", "class_reduce", "box_encoding", "box_format", "num_classes", "box_channels"],
       "properties": {
         "score_activation": {"enum": ["sigmoid"]},
         "class_reduce": {"enum": ["max"]},
         "box_encoding": {"enum": ["ltrb_anchor_decode"]},
         "box_format": {"enum": ["xyxy"]},
-        "num_classes": {"type": "integer", "minimum": 1}
+        "num_classes": {"type": "integer", "minimum": 1},
+        "box_channels": {"const": 4}
       }
     },
     "compatibility": {
