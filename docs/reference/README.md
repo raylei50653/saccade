@@ -6,6 +6,7 @@
 |------|------|
 | [model_runtime_inventory_549.md](model_runtime_inventory_549.md) | #549 S0：native unchanged-model freeze 與其他 runtime 模型入口的逐檔 bytes／SHA、producer／consumer、權利路由盤點（[JSON](model_runtime_inventory_549.json)）；非 S1 bundle schema |
 | [native_runtime_package_repin_536.md](native_runtime_package_repin_536.md) | #536 package re-pin：固定 entrypoint bytes、installed Completion／Gate A 控制與正式 package GPU parity 的契約／證據 |
+| [native_identity_observability_549.md](native_identity_observability_549.md) | #549 S2-1a：legacy checksum identity 候選實作、六項 binding／SHA source、journal v2／report v4 與分層驗證紀錄；非 installed package re-pin |
 | [ci_timing_baseline_509.md](ci_timing_baseline_509.md) | #509 前段：remote main/PR CI job/step、cache 與本機 pytest/build 的可追溯耗時基線；不承載跨 Issue 排程 |
 | [saccade_module_reference.md](saccade_module_reference.md) | 模組化前背景筆記：既有能力、封裝與依賴邊界、native delivery、failure semantics 與 public/runtime surface；非設計方案 |
 | [mot17_default_config.md](mot17_default_config.md) | MOT17 目前推薦 baseline（`mamba_whole_graph`）與 raw CLI fallback |

@@ -21,8 +21,10 @@ build ``saccade_track_measurement``, whose report must echo exactly what was
 asked. The command line the harness builds for the shipping binary holds no
 developer option, and ``--against`` also compares the native graph counts.
 
-#536 CC-536-01-01 (run completion): the report is v3 and must carry a run id
-and an identity that claims no level; the journal reader fails closed on a
+#536 CC-536-01-01 (run completion) and #549 S2-1a: current report v4 / journal
+v2 records Gate A checksum observations; historical v3 / v1 identity stays
+exactly null. Cross-version pairs or differing identities are invalid. The
+journal reader fails closed on a
 run id that is not the invocation's, a state other than ``complete``, a
 ``pending`` sequence whose txt is present, a txt / trace / report whose
 bytes are not the ones recorded, and a journal that is not JSON, not an
@@ -129,27 +131,112 @@ def test_mot_compare_one_character() -> None:
     assert not r["byte_identical_after_relabel"]
 
 
+def _good_identity(attested: bool = True) -> dict[str, Any]:
+    paths = {name: f"/frozen/{name}" for name in T.IDENTITY_BINDINGS}
+    hashes = {
+        "config": "e" * 64,
+        "lineage": "d" * 64,
+        "attestation": "f" * 64,
+        "op_library": "a" * 64,
+        "head": "b" * 64,
+        "engine": "c" * 64,
+    }
+    bindings = {}
+    for name in T.IDENTITY_BINDINGS:
+        source = None
+        expected = None
+        status = "unchecked"
+        if name == "lineage" and attested:
+            source = {
+                "path": paths["attestation"],
+                "json_pointer": "/frozen_lineage/sha256",
+            }
+        elif name == "op_library":
+            source = {
+                "path": paths["attestation" if attested else "lineage"],
+                "json_pointer": "/op_library/sha256",
+            }
+        elif name in ("head", "engine"):
+            pointer = (
+                "/torchscript/sha256"
+                if name == "head"
+                else "/companions/backbone_engine/sha256"
+            )
+            source = {"path": paths["lineage"], "json_pointer": pointer}
+        if source is not None:
+            expected, status = hashes[name], "matched"
+        bindings[name] = {
+            "path": paths[name],
+            "expected_sha256": expected,
+            "observed_sha256": hashes[name],
+            "status": status,
+            "expected_source": source,
+        }
+    if not attested:
+        bindings["attestation"] = {
+            "path": None,
+            "expected_sha256": None,
+            "observed_sha256": None,
+            "status": "unchecked",
+            "expected_source": None,
+        }
+    return {
+        "level": "checksum_matched",
+        "expected_source": None,
+        "publisher_authentication": "not_checked_by_runtime",
+        "bindings": bindings,
+    }
+
+
 def _good_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    att = {"op_library": {"sha256": "op"}}
+    identity = _good_identity()
+    bindings = identity["bindings"]
+    att = {
+        "op_library": {"sha256": bindings["op_library"]["expected_sha256"]},
+        "frozen_lineage": {"sha256": bindings["lineage"]["expected_sha256"]},
+    }
     lineage = {
-        "torchscript": {"sha256": "ts", "native_scan_calls": 3},
-        "companions": {"backbone_engine": {"sha256": "eng"}},
+        "torchscript": {
+            "sha256": bindings["head"]["expected_sha256"],
+            "native_scan_calls": 3,
+        },
+        "companions": {
+            "backbone_engine": {"sha256": bindings["engine"]["expected_sha256"]}
+        },
         "runtime_requirements": {"graph_executor_optimize": False},
     }
     rep = {
         "format": T.TRACK_REPORT_FORMAT,
         "run_id": RUN_ID,
-        "identity": {"level": None},
+        "identity": identity,
         "entrypoint": "saccade_track",
+        "model_root": "/frozen",
+        "config": bindings["config"]["path"],
+        "lineage": bindings["lineage"]["path"],
+        "attestation": bindings["attestation"]["path"],
         "schedule": "serial",
         "python_libraries_mapped": [],
         "sequence_order": ["S1", "S2"],
         "detector": {
-            "plan": {"op_library": {"from_attestation": True}},
+            "plan": {
+                "op_library": {
+                    "from_attestation": True,
+                    "path": bindings["op_library"]["path"],
+                    "sha256": bindings["op_library"]["expected_sha256"],
+                },
+                "head_artifact": {
+                    "path": bindings["head"]["path"],
+                    "sha256": bindings["head"]["expected_sha256"],
+                },
+                "backbone_engine": {
+                    "path": bindings["engine"]["path"],
+                    "sha256": bindings["engine"]["expected_sha256"],
+                },
+            },
             "load": {
-                "op_library_sha256": "op",
-                "head_artifact_sha256": "ts",
-                "backbone_engine_sha256": "eng",
+                "op_library_sha256": bindings["op_library"]["expected_sha256"],
+                "head_artifact_sha256": bindings["head"]["expected_sha256"],
+                "backbone_engine_sha256": bindings["engine"]["expected_sha256"],
                 "runtime_readback": {"graph_executor_optimize": False},
                 "native_scan_calls": 3,
                 "param_devices": ["cuda:0"],
@@ -158,6 +245,126 @@ def _good_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         },
     }
     return rep, att, lineage
+
+
+@pytest.mark.parametrize("attested", [False, True])
+def test_gate_a_identity_with_and_without_optional_attestation(attested: bool) -> None:
+    identity = _good_identity(attested)
+    assert T.identity_problems(identity) == []
+    # These synthetic paths do not exist: reading evidence never reopens the
+    # original metadata or derives a trusted source from the observations.
+    assert identity["bindings"]["config"]["expected_sha256"] is None
+    assert identity["expected_source"] is None
+
+
+@pytest.mark.parametrize(
+    "path,value,diagnostic",
+    [
+        (("level",), None, "identity level"),
+        (("level",), "expected_source_verified", "identity level"),
+        (("expected_source",), "runtime_allowlist", "expected_source"),
+        (("publisher_authentication",), "authenticated", "publisher_authentication"),
+        (("bindings",), [], "six legacy slots"),
+        (("bindings", "config"), None, "invalid binding fields"),
+        (
+            ("bindings", "head", "expected_sha256"),
+            None,
+            "requires path and both hashes",
+        ),
+        (
+            ("bindings", "head", "observed_sha256"),
+            "0" * 64,
+            "contradicts hash comparison",
+        ),
+        (("bindings", "head", "observed_sha256"), "bad", "invalid observed_sha256"),
+        (("bindings", "head", "status"), "mismatch", "contradicts hash comparison"),
+        (("bindings", "head", "path"), None, "requires path and both hashes"),
+        (("bindings", "head", "path"), [], "invalid path"),
+        (("bindings", "head", "expected_source"), None, "present together"),
+        (("bindings", "head", "expected_source"), [], "invalid expected_source"),
+        (
+            ("bindings", "head", "expected_source", "path"),
+            "/different/lineage",
+            "supplied metadata field",
+        ),
+        (
+            ("bindings", "head", "expected_source", "json_pointer"),
+            "/op_library/sha256",
+            "supplied metadata field",
+        ),
+        (
+            ("bindings", "config", "expected_sha256"),
+            "e" * 64,
+            "supplies no expected hash",
+        ),
+        (
+            ("bindings", "attestation", "status"),
+            "matched",
+            "requires path and both hashes",
+        ),
+        (("bindings", "lineage", "status"), "unchecked", "incomplete comparison"),
+        (
+            ("bindings", "attestation", "observed_sha256"),
+            None,
+            "requires observed bytes",
+        ),
+        (
+            ("bindings", "op_library", "expected_source", "path"),
+            "/frozen/lineage",
+            "differs from accepted metadata",
+        ),
+    ],
+)
+def test_identity_invalid_claims_are_diagnostic(
+    path: tuple[str, ...], value: Any, diagnostic: str
+) -> None:
+    identity = _good_identity()
+    node = identity
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = value
+    assert any(diagnostic in p for p in T.identity_problems(identity))
+
+
+def test_identity_slots_and_fields_are_exact() -> None:
+    identity = _good_identity()
+    identity["bindings"]["extra"] = {}
+    assert "six legacy slots" in " ".join(T.identity_problems(identity))
+    identity = _good_identity()
+    identity["bindings"]["head"]["loaded_buffer"] = True
+    assert "invalid binding fields" in " ".join(T.identity_problems(identity))
+
+
+@pytest.mark.parametrize("status", ["mismatch", "missing", "unchecked"])
+def test_partial_gate_a_diagnostics_cannot_complete(status: str) -> None:
+    identity = _good_identity()
+    identity["level"] = None
+    head = identity["bindings"]["head"]
+    head["status"] = status
+    head["observed_sha256"] = "0" * 64 if status == "mismatch" else None
+    assert T.identity_problems(identity, complete=False) == []
+    assert any("identity level" in p for p in T.identity_problems(identity))
+
+
+def test_requested_missing_attestation_cannot_become_optional_omission() -> None:
+    identity = _good_identity()
+    identity["level"] = None
+    identity["bindings"]["attestation"].update(status="missing", observed_sha256=None)
+    assert T.identity_problems(identity, complete=False) == []
+    identity["level"] = "checksum_matched"
+    assert any("attestation" in p for p in T.identity_problems(identity))
+    omitted = _good_identity(False)
+    omitted["bindings"]["attestation"]["status"] = "missing"
+    assert any("attestation" in p for p in T.identity_problems(omitted))
+
+
+def test_historical_report_keeps_null_identity() -> None:
+    rep, att, lineage = _good_report()
+    rep.update(format=T.LEGACY_TRACK_REPORT_FORMAT, identity={"level": None})
+    args = (att, lineage, ["S1", "S2"], "shipping", "none", None)
+    assert T.report_problems(rep, *args) == []
+    rep["identity"] = _good_identity()
+    assert any("historical identity" in p for p in T.report_problems(rep, *args))
 
 
 @pytest.mark.parametrize(
@@ -207,6 +414,131 @@ def test_report_problems_checks_the_schedule() -> None:
     args = (att, lineage, ["S1", "S2"], "shipping", "none", None)
     assert T.report_problems(rep, *args, "double_buffer") == []
     assert T.report_problems(rep, *args, "serial") != []
+
+
+@pytest.mark.parametrize(
+    "path,value,diagnostic",
+    [
+        (("detector",), None, "report detector is not an object"),
+        (("detector", "plan"), [], "report detector plan is not an object"),
+        (("detector", "load"), "loaded", "report detector load is not an object"),
+        (
+            ("detector", "plan", "op_library"),
+            None,
+            "report operator plan is not an object",
+        ),
+        (
+            ("detector", "plan", "head_artifact"),
+            [],
+            "report plan head_artifact is not an object",
+        ),
+        (("detector", "load", "constant_devices"), None, "head placement"),
+        (("detector", "load", "constant_devices"), 7, "head placement"),
+        (
+            ("detector", "plan", "head_artifact", "sha256"),
+            "0" * 64,
+            "identity binding head differs",
+        ),
+        (
+            ("detector", "plan", "head_artifact", "path"),
+            "/other/head",
+            "identity binding head differs",
+        ),
+    ],
+)
+def test_report_nested_corruption_is_diagnostic(
+    path: tuple[str, ...], value: Any, diagnostic: str
+) -> None:
+    rep, att, lineage = _good_report()
+    node = rep
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = value
+    problems = T.report_problems(
+        rep, att, lineage, ["S1", "S2"], "shipping", "none", None
+    )
+    assert any(diagnostic in p for p in problems)
+
+
+def test_identity_cannot_describe_other_bytes_than_the_load() -> None:
+    rep, att, lineage = _good_report()
+    rep["detector"]["plan"]["head_artifact"]["sha256"] = "0" * 64
+    rep["identity"]["bindings"]["head"].update(
+        expected_sha256="0" * 64, observed_sha256="0" * 64
+    )
+    problems = T.report_problems(
+        rep, att, lineage, ["S1", "S2"], "shipping", "none", None
+    )
+    assert any("identity binding head differs" in p for p in problems)
+
+
+def test_identity_lineage_expected_hash_is_the_supplied_attestation_value() -> None:
+    rep, att, lineage = _good_report()
+    rep["identity"]["bindings"]["lineage"].update(
+        expected_sha256="0" * 64, observed_sha256="0" * 64
+    )
+    problems = T.report_problems(
+        rep, att, lineage, ["S1", "S2"], "shipping", "none", None
+    )
+    assert any("lineage differs from supplied attestation" in p for p in problems)
+
+
+@pytest.mark.parametrize("root", ["", ".", "relative/root", "/absolute/root"])
+@pytest.mark.parametrize("absolute_artifact", [False, True])
+def test_report_binding_paths_use_recorded_model_root(
+    root: str, absolute_artifact: bool
+) -> None:
+    rep, att, lineage = _good_report()
+    rep["model_root"] = root
+    bindings = rep["identity"]["bindings"]
+    for name, argument in (
+        ("config", "./cfg/config.json"),
+        ("lineage", "./meta/lineage.json"),
+        ("attestation", "./meta/attestation.json"),
+    ):
+        rep[name] = argument
+        bindings[name]["path"] = argument
+    for name in ("lineage", "op_library", "head", "engine"):
+        source = bindings[name]["expected_source"]
+        source["path"] = bindings[
+            "attestation" if name in ("lineage", "op_library") else "lineage"
+        ]["path"]
+    for name, plan_name in (
+        ("op_library", "op_library"),
+        ("head", "head_artifact"),
+        ("engine", "backbone_engine"),
+    ):
+        raw = f"/elsewhere/{name}" if absolute_artifact else f"models/{name}"
+        rep["detector"]["plan"][plan_name]["path"] = raw
+        bindings[name]["path"] = raw if absolute_artifact else str(Path(root) / raw)
+    args = (att, lineage, ["S1", "S2"], "shipping", "none", None)
+    assert T.report_problems(rep, *args) == []
+    bindings["head"]["path"] = "/other/head"
+    assert any(
+        "identity binding head differs" in p for p in T.report_problems(rep, *args)
+    )
+
+
+@pytest.mark.parametrize("root", [None, 7, []])
+def test_current_report_requires_model_root(root: Any) -> None:
+    rep, att, lineage = _good_report()
+    rep["model_root"] = root
+    problems = T.report_problems(
+        rep, att, lineage, ["S1", "S2"], "shipping", "none", None
+    )
+    assert any("model_root" in p for p in problems)
+
+
+@pytest.mark.parametrize("name", ["config", "lineage", "attestation"])
+def test_current_report_metadata_argument_matches_observation(name: str) -> None:
+    rep, att, lineage = _good_report()
+    rep[name] = f"/different/{name}"
+    problems = T.report_problems(
+        rep, att, lineage, ["S1", "S2"], "shipping", "none", None
+    )
+    assert any(
+        f"identity binding {name} differs from metadata argument" in p for p in problems
+    )
 
 
 def _measurement_report(
@@ -517,13 +849,18 @@ def _completed_run(tmp_path: Path) -> tuple[Path, Path, Path, dict[str, Any]]:
                 "trace_sha256": _sha(tb),
             }
         )
-    report.write_bytes(b'{"run_id": "x"}\n')
+    identity = _good_identity()
+    report.write_text(
+        json.dumps(
+            {"format": T.TRACK_REPORT_FORMAT, "run_id": RUN_ID, "identity": identity}
+        )
+    )
     journal = {
         "format": T.JOURNAL_FORMAT,
         "run_id": RUN_ID,
         "entrypoint": "saccade_track",
         "state": "complete",
-        "identity": {"level": None},
+        "identity": identity,
         "sequences": entries,
         "report": {"path": str(report), "sha256": _sha(report.read_bytes())},
         "failure": None,
@@ -544,6 +881,67 @@ def test_journal_complete_run(tmp_path: Path) -> None:
     assert T.committed_sequences(j, out, RUN_ID) == SEQS
 
 
+def _replace_report(report: Path, journal: dict[str, Any], **changes: Any) -> None:
+    record = json.loads(report.read_text())
+    record.update(changes)
+    report.write_text(json.dumps(record))
+    journal["report"]["sha256"] = _sha(report.read_bytes())
+
+
+def test_historical_journal_report_pair_retains_null_identity(tmp_path: Path) -> None:
+    out, trace, report, journal = _completed_run(tmp_path)
+    journal.update(format=T.LEGACY_JOURNAL_FORMAT, identity={"level": None})
+    _replace_report(
+        report, journal, format=T.LEGACY_TRACK_REPORT_FORMAT, identity={"level": None}
+    )
+    assert _problems(out, trace, report, journal) == []
+    assert T.committed_sequences(journal, out, RUN_ID) == SEQS
+    journal["identity"] = _good_identity()
+    _replace_report(report, journal, identity=journal["identity"])
+    assert any(
+        "historical identity" in p for p in _problems(out, trace, report, journal)
+    )
+
+
+@pytest.mark.parametrize("historical", [False, True])
+@pytest.mark.parametrize("field", ["format", "run_id", "identity"])
+def test_report_journal_divergence_with_correct_report_hash(
+    tmp_path: Path, historical: bool, field: str
+) -> None:
+    out, trace, report, journal = _completed_run(tmp_path)
+    if historical:
+        journal.update(format=T.LEGACY_JOURNAL_FORMAT, identity={"level": None})
+        _replace_report(
+            report,
+            journal,
+            format=T.LEGACY_TRACK_REPORT_FORMAT,
+            identity={"level": None},
+        )
+    changes = {
+        "format": T.TRACK_REPORT_FORMAT if historical else T.LEGACY_TRACK_REPORT_FORMAT,
+        "run_id": "f" * 32,
+        "identity": _good_identity() if historical else {"level": None},
+    }
+    _replace_report(report, journal, **{field: changes[field]})
+    assert journal["report"]["sha256"] == _sha(report.read_bytes())
+    assert any(
+        f"report/journal {field}" in p for p in _problems(out, trace, report, journal)
+    )
+
+
+@pytest.mark.parametrize("state", ["running", "failed"])
+def test_checksum_identity_does_not_make_a_partial_run_complete(
+    tmp_path: Path, state: str
+) -> None:
+    out, trace, report, journal = _completed_run(tmp_path)
+    journal["state"] = state
+    assert T.identity_problems(journal["identity"], complete=False) == []
+    assert T.committed_sequences(journal, out, RUN_ID) == SEQS
+    problems = _problems(out, trace, report, journal)
+    assert any(f"state '{state}'" in p for p in problems)
+    assert not any("identity" in p for p in problems)
+
+
 @pytest.mark.parametrize(
     "edit",
     [
@@ -551,6 +949,8 @@ def test_journal_complete_run(tmp_path: Path) -> None:
         lambda j: j.update(state="running"),
         lambda j: j.update(state="failed"),
         lambda j: j.update(format="saccade.native_track_journal/v0"),
+        lambda j: j.update(format=[]),
+        lambda j: j.update(identity={"level": None}),
         lambda j: j.update(identity={"level": "checksum_matched"}),
         lambda j: j["sequences"].reverse(),
         lambda j: j["sequences"].pop(),
@@ -578,6 +978,8 @@ def test_journal_problems_fail_closed(tmp_path: Path, edit: Any) -> None:
         "null",
         '"complete"',
         "42",
+        '{"state":"running","state":"complete"}',
+        '{"failure":NaN}',
     ],
 )
 def test_corrupt_journal_is_a_problem(tmp_path: Path, text: str) -> None:
@@ -654,6 +1056,156 @@ def test_invocation_run_id() -> None:
     # A second run id line anywhere, of either entrypoint, is two runs' log.
     two = log + f"saccade_track_measurement: run_id {b}\n"
     assert T.invocation_run_id(two, "saccade_track") is None
+
+
+def _invalid_report_bytes(path: tuple[str, ...], value: Any) -> bytes:
+    rep, _, _ = _good_report()
+    rep.update(
+        entrypoint="saccade_track_measurement",
+        measurement=T.expected_measurement("none", None, "serial"),
+    )
+    node = rep
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = value
+    return json.dumps(rep).encode()
+
+
+@pytest.mark.parametrize(
+    "payload,diagnostic",
+    [
+        (b"", "unreadable track report (JSONDecodeError"),
+        (b"{", "unreadable track report (JSONDecodeError"),
+        (b'{"format": "saccade.native_track_report/v3", ', "JSONDecodeError"),
+        (b"\xff", "unreadable track report (UnicodeDecodeError"),
+        (b"[]", "track report is a list, not an object"),
+        (b"null", "track report is a NoneType, not an object"),
+        (b'"complete"', "track report is a str, not an object"),
+        (b"42", "track report is a int, not an object"),
+        (b"true", "track report is a bool, not an object"),
+        (b'{"run_id":"first","run_id":"second"}', "duplicate JSON key"),
+        (b'{"loop_seconds":NaN}', "nonfinite JSON value"),
+        (
+            _invalid_report_bytes(("detector",), None),
+            "report detector is not an object",
+        ),
+        (
+            _invalid_report_bytes(("detector", "load", "constant_devices"), None),
+            "head placement",
+        ),
+        (
+            _invalid_report_bytes(("sequences",), []),
+            "report sequences is not an object",
+        ),
+        (
+            _invalid_report_bytes(("sequences",), {"S1": None}),
+            "sequence stats is not an object",
+        ),
+        (
+            _invalid_report_bytes(("sequences",), {"S1": {"frames": "10"}}),
+            "sequence stats frames is not an integer",
+        ),
+    ],
+)
+def test_corrupt_report_run_is_unresolved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    payload: bytes,
+    diagnostic: str,
+) -> None:
+    """The report's bytes can match its journal and still be invalid evidence."""
+    native, rows, output = (
+        tmp_path / "native_run",
+        tmp_path / "oracle_rows",
+        tmp_path / "parity",
+    )
+    out = native / "native"
+    out.mkdir(parents=True)
+    (rows / "mot").mkdir(parents=True)
+    output.mkdir()
+    (rows / "oracle_rows.json").write_text(
+        json.dumps({"ok": True, "mot17_argv": ["--sequences", "S1"]})
+    )
+    (rows / "mot" / "_global_id_map.txt").write_text("")
+    report = native / "track_report.json"
+    report.write_bytes(payload)
+    txt = out / "S1.txt"
+    txt.write_bytes(b"1,1,10,20,30,40,0.9,-1,-1,-1\n")
+    journal = {
+        "format": T.JOURNAL_FORMAT,
+        "run_id": RUN_ID,
+        "state": "complete",
+        "identity": _good_identity(),
+        "sequences": [
+            {"name": "S1", "state": "written", "txt_sha256": _sha(txt.read_bytes())}
+        ],
+        "report": {"path": str(report), "sha256": _sha(payload)},
+        "failure": None,
+    }
+    (out / T.JOURNAL_NAME).write_text(json.dumps(journal))
+    (native / "saccade_track.log").write_text(
+        f"saccade_track_measurement: run_id {RUN_ID}\nexit=0\n"
+    )
+    # Supply only the CPU evidence this malformed-report path consumes.
+    _, att, lineage = _good_report()
+    (tmp_path / "lineage.json").write_text(json.dumps(lineage))
+    (tmp_path / "attestation.json").write_text(json.dumps(att))
+    (tmp_path / "track_binary").write_bytes(b"synthetic binary")
+    monkeypatch.setattr(T, "project_root", tmp_path)
+    monkeypatch.setattr(T.det, "LINEAGE", "lineage.json")
+    monkeypatch.setattr(T.det, "ATTESTATION", "attestation.json")
+    monkeypatch.setattr(T.det, "read_attestation", lambda: att)
+    monkeypatch.setattr(T.det, "_git_state", lambda: {"head": "test", "dirty": False})
+    monkeypatch.setattr(T, "_load_module", lambda *_: T.argparse.Namespace())
+    args = T.argparse.Namespace(
+        out=output,
+        native_from=native,
+        oracle_rows=rows,
+        oracle_txt=None,
+        sequences=["S1"],
+        schedule="serial",
+        entrypoint="measurement",
+        mutation="none",
+        ref_edit=False,
+        max_frames=None,
+        no_trace=True,
+        against=None,
+        track_binary=Path("track_binary"),
+        model_root=tmp_path,
+        track_library_path=None,
+    )
+    assert T.run_parity(args) == 2
+    result = json.loads((output / "report.json").read_text())
+    assert result["verdict"] == "UNRESOLVED"
+    assert any(str(report) in p and diagnostic in p for p in result["problems"])
+
+
+def test_sequence_stats_nested_shapes_are_checked_before_comparison() -> None:
+    stats = {
+        key: 1
+        for key in (
+            "im_width",
+            "im_height",
+            "frames",
+            "track_ids",
+            "tracker_updates",
+            "skipped_empty_frames",
+            "pre_roll_updates",
+            "hardware_decodes",
+            "decoupled_decodes",
+        )
+    }
+    stats.update(interpolation={}, loop_seconds=0.5, graphs=_native_graphs()["graphs"])
+    assert T.sequence_stats_problems(stats, "serial") == []
+    assert T.sequence_stats_problems(stats, "double_buffer") == []
+    stats["graphs"] = None
+    assert "graphs is not an object" in " ".join(
+        T.sequence_stats_problems(stats, "double_buffer")
+    )
+    stats["loop_seconds"] = "0.5"
+    assert "loop_seconds is not a number" in " ".join(
+        T.sequence_stats_problems(stats, "serial")
+    )
 
 
 @pytest.mark.skipif(not COMPLETION_TEST.exists(), reason="completion test not built")

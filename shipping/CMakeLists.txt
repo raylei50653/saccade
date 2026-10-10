@@ -133,8 +133,9 @@ add_test(NAME saccade_shipping_detector_plan_test
 # (#536). The test compiles run_completion.cpp itself with its kill points
 # (SACCADE_RUN_COMPLETION_TEST_FAULTS); saccade_shipping_completion has none.
 add_executable(saccade_shipping_run_completion_test
-    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_run_completion.cpp src/run_completion.cpp)
-target_compile_definitions(saccade_shipping_run_completion_test PRIVATE SACCADE_RUN_COMPLETION_TEST_FAULTS=1)
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_run_completion.cpp src/run_completion.cpp src/preflight.cpp)
+target_compile_definitions(saccade_shipping_run_completion_test PRIVATE SACCADE_RUN_COMPLETION_TEST_FAULTS=1
+    SACCADE_TEST_REPO_ROOT="${SACCADE_REPO_ROOT}")
 target_link_libraries(saccade_shipping_run_completion_test PRIVATE saccade_shipping_native_config)
 target_compile_options(saccade_shipping_run_completion_test PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME saccade_shipping_run_completion_test COMMAND saccade_shipping_run_completion_test)

@@ -22,9 +22,12 @@
 //      detector plan's (the detector load checks them again, Gate B).
 //
 // Gate A decodes no frame, dlopens nothing, deserializes no engine and loads
-// no head (Gate B, detector_host.hpp). It writes no identity: journal and
-// report keep {"level": null}; binding the checked hashes into `identity` is a
-// later slice of CC-536-01-02. The runtime re-reads each sequence's input when
+// no head (Gate B, detector_host.hpp). Through RunCompletion, Gate A records
+// the six legacy bindings and promotes to checksum_matched only after every
+// check passes. Metadata observations hash the same buffers the existing
+// parsers consume. The final Gate A identity is immutable, including on
+// rejection; it establishes neither trusted origin nor successful loading.
+// The runtime re-reads each sequence's input when
 // it runs it and refuses what it refuses here, so a file changed after Gate A
 // still fails closed, at that sequence.
 #pragma once
@@ -61,6 +64,6 @@ struct PreflightResult {
     DetectorPlan detector;
 };
 
-PreflightResult run_preflight(const PreflightInputs& in, const RunCompletion& completion);
+PreflightResult run_preflight(const PreflightInputs& in, RunCompletion& completion);
 
 }  // namespace saccade::shipping

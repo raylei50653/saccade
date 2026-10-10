@@ -210,25 +210,35 @@ def _assert_refused_in_gate_a(
     message = j["failure"]["message"]
     assert message.startswith("preflight: ") and needle in message, message
     assert f"{binary}: {message}" in r.stderr.splitlines()
-    assert j["identity"] == {"level": None}
+    assert j["identity"]["level"] is None
+    if INSTALLED:
+        assert j["identity"] == {"level": None}
+    else:
+        assert j["format"] == "saccade.native_track_journal/v2"
+        assert j["identity"]["expected_source"] is None
+        assert j["identity"]["publisher_authentication"] == "not_checked_by_runtime"
     assert all(s["state"] == "pending" for s in j["sequences"])
     assert not list((tmp_path / "out").glob("*.txt"))
 
 
 @pytest.mark.skipif(not _has_cuda_driver(), reason="no CUDA driver on this host")
-def test_positive_control_passes_gate_a_then_initializes_cuda(tmp_path: Path) -> None:
+@pytest.mark.parametrize("binary", BINARIES)
+def test_positive_control_passes_gate_a_then_initializes_cuda(
+    tmp_path: Path, binary: str
+) -> None:
     if INSTALLED:
         r, cuda_init = _run(
             tmp_path,
+            binary=binary,
             lineage=FROZEN_LINEAGE,
             model_root=MODEL_ROOT,
             attestation=ATTESTATION,
         )
     else:
         root, lineage = _standin_bundle(tmp_path)
-        r, cuda_init = _run(tmp_path, lineage=lineage, model_root=root)
+        r, cuda_init = _run(tmp_path, binary=binary, lineage=lineage, model_root=root)
     assert r.returncode == 2, r.stderr
-    assert "saccade_track: preflight passed" in r.stderr, r.stderr
+    assert f"{binary}: preflight passed" in r.stderr, r.stderr
     assert cuda_init, "the observer did not see cuInit after Gate A passed"
     j = json.loads((tmp_path / "out" / JOURNAL).read_text())
     assert j["state"] == "failed"
@@ -243,15 +253,61 @@ def test_positive_control_passes_gate_a_then_initializes_cuda(tmp_path: Path) ->
         assert not list((tmp_path / "out").glob("*.txt"))
     else:
         assert "dlopen" in message, message
+        identity = j["identity"]
+        assert identity["level"] == "checksum_matched"
+        assert identity["expected_source"] is None
+        assert identity["publisher_authentication"] == "not_checked_by_runtime"
+        assert identity["bindings"]["attestation"] == {
+            "path": None,
+            "expected_sha256": None,
+            "observed_sha256": None,
+            "status": "unchecked",
+            "expected_source": None,
+        }
+        for name in ("op_library", "head", "engine"):
+            b = identity["bindings"][name]
+            assert b["status"] == "matched"
+            assert b["expected_sha256"] == b["observed_sha256"]
+        assert all(s["state"] == "pending" for s in j["sequences"])
 
 
 @pytest.mark.parametrize("binary", BINARIES)
-def test_replaced_head_is_refused_without_cuda(tmp_path: Path, binary: str) -> None:
+@pytest.mark.parametrize("artifact", ["op_library", "head", "engine"])
+@pytest.mark.parametrize("missing", [False, True])
+def test_bad_artifact_is_refused_without_cuda(
+    tmp_path: Path, binary: str, artifact: str, missing: bool
+) -> None:
     root, lineage = _standin_bundle(tmp_path)
-    head = root / json.loads(lineage.read_text())["torchscript"]["path"]
-    head.write_bytes(b"another head")
+    claims = json.loads(lineage.read_text())
+    entries = {
+        "op_library": claims["op_library"],
+        "head": claims["torchscript"],
+        "engine": claims["companions"]["backbone_engine"],
+    }
+    path = root / entries[artifact]["path"]
+    if missing:
+        path.unlink()
+    else:
+        path.write_bytes(b"another artifact")
     r, cuda_init = _run(tmp_path, binary=binary, lineage=lineage, model_root=root)
-    _assert_refused_in_gate_a(tmp_path, r, cuda_init, "head artifact", binary)
+    label = {
+        "op_library": "operator library",
+        "head": "head artifact",
+        "engine": "backbone engine",
+    }[artifact]
+    _assert_refused_in_gate_a(tmp_path, r, cuda_init, label, binary)
+    if not INSTALLED:
+        identity = json.loads((tmp_path / "out" / JOURNAL).read_text())["identity"]
+        b = identity["bindings"][artifact]
+        assert b["status"] == ("missing" if missing else "mismatch")
+        assert b["expected_sha256"] == entries[artifact]["sha256"]
+        assert b["observed_sha256"] == (
+            None if missing else hashlib.sha256(b"another artifact").hexdigest()
+        )
+        assert b["expected_source"]["path"] == str(lineage)
+        if artifact == "engine":
+            assert identity["bindings"]["op_library"]["status"] == "matched"
+            assert identity["bindings"]["head"]["status"] == "matched"
 
 
 def test_self_consistent_lineage_with_the_attestation_is_refused_without_cuda(
@@ -262,6 +318,10 @@ def test_self_consistent_lineage_with_the_attestation_is_refused_without_cuda(
         tmp_path, lineage=lineage, model_root=root, attestation=ATTESTATION
     )
     _assert_refused_in_gate_a(tmp_path, r, cuda_init, "bound to a different lineage")
+    if not INSTALLED:
+        identity = json.loads((tmp_path / "out" / JOURNAL).read_text())["identity"]
+        assert identity["bindings"]["lineage"]["status"] == "mismatch"
+        assert identity["bindings"]["attestation"]["status"] == "unchecked"
 
 
 def test_missing_attestation_is_refused_without_cuda(tmp_path: Path) -> None:

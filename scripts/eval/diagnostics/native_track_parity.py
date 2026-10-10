@@ -65,9 +65,12 @@ elsewhere with the same arguments (the clean container:
 ``DIR/trace`` and ``DIR/track_report.json``.
 #536 CC-536-01-01 (docs/architecture/ship_export_contracts_536.md): the run
 counts only when its completion record does. The report is
-``saccade.native_track_report/v3`` (v2 plus ``run_id`` and ``identity``, which
-must stay ``{"level": null}``: nothing is verified beyond the supplied
-checksums yet); the run id ``saccade_track`` printed (the first line of
+``saccade.native_track_report/v4`` with Gate A's immutable legacy checksum
+identity. Its six bindings describe observed bytes and caller metadata
+comparisons, not source authentication or successful loading. Historical
+journal v1 / report v3 retains exactly ``{"level": null}``, without deriving
+identity from its other fields. Each report must have its journal's version
+pair, run id and identical identity. The run id ``saccade_track`` printed (the first line of
 ``saccade_track.log``, and its only ``run_id`` line) must be the report's and
 the journal's (``DIR/native/saccade_track.journal.json``), the journal must be
 a readable JSON object whose ``sequences`` is a list of objects and be
@@ -115,16 +118,24 @@ from typing import Any
 project_root = Path(__file__).resolve().parents[3]
 
 SCHEMA = "saccade.native_track_parity/v1"
-TRACK_REPORT_FORMAT = "saccade.native_track_report/v3"
+TRACK_REPORT_FORMAT = "saccade.native_track_report/v4"
+LEGACY_TRACK_REPORT_FORMAT = "saccade.native_track_report/v3"
 # saccade_track's run completion (#536 CC-536-01-01, run_completion.hpp).
-JOURNAL_FORMAT = "saccade.native_track_journal/v1"
+JOURNAL_FORMAT = "saccade.native_track_journal/v2"
+LEGACY_JOURNAL_FORMAT = "saccade.native_track_journal/v1"
+REPORT_FOR_JOURNAL = {
+    JOURNAL_FORMAT: TRACK_REPORT_FORMAT,
+    LEGACY_JOURNAL_FORMAT: LEGACY_TRACK_REPORT_FORMAT,
+}
 JOURNAL_NAME = "saccade_track.journal.json"
 _RUN_ID = re.compile(r"[0-9a-f]{32}")
 _RUN_ID_LINE = re.compile(
     r"^(saccade_track(?:_measurement)?): run_id ([0-9a-f]{32})$", re.M
 )
-# The identity record until CC-536-01-02: no level claimed.
+# Historical identity is never upgraded by this reader.
 UNVERIFIED_IDENTITY = {"level": None}
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+IDENTITY_BINDINGS = ("config", "lineage", "attestation", "op_library", "head", "engine")
 TRACK = "build/shipping/saccade_track"
 MEASUREMENT_TRACK = "build/shipping/saccade_track_measurement"
 # --entrypoint -> the name the report must carry, and the default binary.
@@ -367,6 +378,275 @@ def expected_measurement(
     }
 
 
+def identity_problems(
+    identity: Any, *, legacy: bool = False, complete: bool = True
+) -> list[str]:
+    """Validate recorded Gate A evidence without reopening historical sources."""
+    if legacy:
+        return (
+            []
+            if identity == UNVERIFIED_IDENTITY
+            else ["historical identity differs from {level: null}"]
+        )
+    if not isinstance(identity, dict) or set(identity) != {
+        "level",
+        "expected_source",
+        "publisher_authentication",
+        "bindings",
+    }:
+        return ["identity is not the legacy Gate A record"]
+    problems = []
+    level = identity["level"]
+    if level not in (None, "checksum_matched") or (
+        complete and level != "checksum_matched"
+    ):
+        problems.append(f"identity level {level!r}")
+    if identity["expected_source"] is not None:
+        problems.append("identity expected_source must be null in legacy mode")
+    if identity["publisher_authentication"] != "not_checked_by_runtime":
+        problems.append("identity publisher_authentication was not checked by runtime")
+    bindings = identity["bindings"]
+    if not isinstance(bindings, dict) or set(bindings) != set(IDENTITY_BINDINGS):
+        return problems + [
+            "identity bindings must contain exactly the six legacy slots"
+        ]
+    fields = {"path", "expected_sha256", "observed_sha256", "status", "expected_source"}
+    for name, binding in bindings.items():
+        prefix = f"identity binding {name}"
+        if not isinstance(binding, dict) or set(binding) != fields:
+            problems.append(f"{prefix}: invalid binding fields")
+            continue
+        path, expected, observed, status, source = (
+            binding[k]
+            for k in (
+                "path",
+                "expected_sha256",
+                "observed_sha256",
+                "status",
+                "expected_source",
+            )
+        )
+        if path is not None and (not isinstance(path, str) or not path):
+            problems.append(f"{prefix}: invalid path")
+        for key, value in (
+            ("expected_sha256", expected),
+            ("observed_sha256", observed),
+        ):
+            if value is not None and (
+                not isinstance(value, str) or not _SHA256.fullmatch(value)
+            ):
+                problems.append(f"{prefix}: invalid {key}")
+        if status not in ("matched", "mismatch", "missing", "unchecked"):
+            problems.append(f"{prefix}: invalid status")
+        elif status in ("matched", "mismatch"):
+            if path is None or expected is None or observed is None:
+                problems.append(f"{prefix}: comparison requires path and both hashes")
+            elif (expected == observed) != (status == "matched"):
+                problems.append(f"{prefix}: status contradicts hash comparison")
+        elif status == "missing" and (path is None or observed is not None):
+            problems.append(
+                f"{prefix}: missing requires a requested path without observed bytes"
+            )
+        if path is None and (
+            expected is not None
+            or observed is not None
+            or source is not None
+            or status != "unchecked"
+        ):
+            problems.append(f"{prefix}: unresolved path must remain unchecked")
+        if (expected is None) != (source is None):
+            problems.append(
+                f"{prefix}: expected hash and source must be present together"
+            )
+        if source is not None:
+            if not isinstance(source, dict) or set(source) != {"path", "json_pointer"}:
+                problems.append(f"{prefix}: invalid expected_source")
+                continue
+            allowed = {
+                "lineage": (("attestation", "/frozen_lineage/sha256"),),
+                "op_library": (
+                    ("attestation", "/op_library/sha256"),
+                    ("lineage", "/op_library/sha256"),
+                ),
+                "head": (("lineage", "/torchscript/sha256"),),
+                "engine": (("lineage", "/companions/backbone_engine/sha256"),),
+            }.get(name, ())
+            if not any(
+                isinstance(bindings.get(metadata), dict)
+                and isinstance(source["path"], str)
+                and source["path"] == bindings[metadata].get("path")
+                and source["json_pointer"] == pointer
+                for metadata, pointer in allowed
+            ):
+                problems.append(
+                    f"{prefix}: expected_source is not its supplied metadata field"
+                )
+        if name in ("config", "attestation") and (
+            expected is not None or source is not None
+        ):
+            problems.append(f"{prefix}: legacy mode supplies no expected hash")
+    # A promoted record has passed all of Gate A; partial diagnostics cannot
+    # stand in for that record, even when the run subsequently failed.
+    if level == "checksum_matched":
+        for name in IDENTITY_BINDINGS:
+            b = bindings[name]
+            if not isinstance(b, dict) or set(b) != fields:
+                continue
+            if name == "attestation" and b["path"] is None:
+                if b != {
+                    "path": None,
+                    "expected_sha256": None,
+                    "observed_sha256": None,
+                    "status": "unchecked",
+                    "expected_source": None,
+                }:
+                    problems.append(
+                        "identity optional attestation omission differs from the contract"
+                    )
+                continue
+            if (
+                not isinstance(b["path"], str)
+                or not b["path"]
+                or not isinstance(b["observed_sha256"], str)
+                or not _SHA256.fullmatch(b["observed_sha256"])
+            ):
+                problems.append(
+                    f"identity binding {name}: checksum level requires observed bytes"
+                )
+            attested = (
+                isinstance(bindings["attestation"], dict)
+                and bindings["attestation"].get("path") is not None
+            )
+            matched = name in ("op_library", "head", "engine") or (
+                name == "lineage" and attested
+            )
+            if b["status"] != ("matched" if matched else "unchecked"):
+                problems.append(
+                    f"identity binding {name}: checksum level has incomplete comparison"
+                )
+            if (
+                name == "lineage"
+                and not attested
+                and (
+                    b["expected_sha256"] is not None or b["expected_source"] is not None
+                )
+            ):
+                problems.append(
+                    "identity lineage without attestation has no expected hash"
+                )
+            if name == "op_library":
+                metadata = "attestation" if attested else "lineage"
+                if b["expected_source"] != {
+                    "path": bindings[metadata].get("path")
+                    if isinstance(bindings[metadata], dict)
+                    else None,
+                    "json_pointer": "/op_library/sha256",
+                }:
+                    problems.append(
+                        "identity operator expected_source differs from accepted metadata"
+                    )
+    return problems
+
+
+def _object_field(
+    record: dict[str, Any], key: str, label: str, problems: list[str]
+) -> dict[str, Any]:
+    value = record.get(key, {})
+    if not isinstance(value, dict):
+        problems.append(f"{label} is not an object")
+        return {}
+    return value
+
+
+def _same_path(actual: Any, expected: Any) -> bool:
+    # Match the path spellings the runtime used; no filesystem access or
+    # resolution against the reader's current working directory.
+    return (
+        isinstance(actual, str)
+        and bool(actual)
+        and isinstance(expected, str)
+        and bool(expected)
+        and Path(actual) == Path(expected)
+    )
+
+
+def _record_json(text: str) -> Any:
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError(f"duplicate JSON key {key!r}")
+            obj[key] = value
+        return obj
+
+    def invalid_constant(value: str) -> Any:
+        raise ValueError(f"nonfinite JSON value {value!r}")
+
+    return json.loads(
+        text, object_pairs_hook=unique_object, parse_constant=invalid_constant
+    )
+
+
+def read_track_report(path: Path) -> tuple[dict[str, Any], list[str]]:
+    """Read invalid/corrupt report inputs as diagnostics, never success."""
+    try:
+        record = _record_json(path.read_text())
+    except (OSError, ValueError) as exc:
+        return {}, [f"{path}: unreadable track report ({type(exc).__name__}: {exc})"]
+    if not isinstance(record, dict):
+        return {}, [f"{path}: track report is a {type(record).__name__}, not an object"]
+    return record, []
+
+
+def sequence_stats_problems(stats: Any, schedule: str) -> list[str]:
+    """Only well-shaped observations can reach the parity comparators."""
+    if not isinstance(stats, dict):
+        return ["sequence stats is not an object"]
+    integer_fields = (
+        "im_width",
+        "im_height",
+        "frames",
+        "track_ids",
+        "tracker_updates",
+        "skipped_empty_frames",
+        "pre_roll_updates",
+        "hardware_decodes",
+        "decoupled_decodes",
+    )
+    problems = [
+        f"sequence stats {key} is not an integer"
+        for key in integer_fields
+        if not isinstance(stats.get(key), int) or isinstance(stats.get(key), bool)
+    ]
+    if not isinstance(stats.get("interpolation"), dict):
+        problems.append("sequence stats interpolation is not an object")
+    loop = stats.get("loop_seconds", 0)
+    if loop is not None and (
+        not isinstance(loop, (int, float)) or isinstance(loop, bool)
+    ):
+        problems.append("sequence stats loop_seconds is not a number")
+    if schedule == "double_buffer":
+        graphs = stats.get("graphs")
+        if not isinstance(graphs, dict):
+            problems.append("sequence stats graphs is not an object")
+        else:
+            for key in (
+                "detector_captures",
+                "nms_captures",
+                "gmc_captures",
+                "tracker_captures",
+                "detector_replays",
+                "nms_replays",
+                "gmc_replays",
+                "tracker_replays",
+            ):
+                if not isinstance(graphs.get(key), int) or isinstance(
+                    graphs.get(key), bool
+                ):
+                    problems.append(f"sequence stats graphs {key} is not an integer")
+    return problems
+
+
 def report_problems(
     rep: dict[str, Any],
     att: dict[str, Any],
@@ -378,17 +658,24 @@ def report_problems(
     schedule: str = "serial",
 ) -> list[str]:
     """Validity of the saccade_track run, from its report (fail closed)."""
+    if not isinstance(rep, dict):
+        return ["track report is not an object"]
     problems = []
-    if rep.get("format") != TRACK_REPORT_FORMAT or rep.get("schedule") != schedule:
+    if (
+        rep.get("format") not in (TRACK_REPORT_FORMAT, LEGACY_TRACK_REPORT_FORMAT)
+        or rep.get("schedule") != schedule
+    ):
         problems.append(
             f"report {rep.get('format')!r} schedule {rep.get('schedule')!r}"
         )
     if not isinstance(rep.get("run_id"), str) or not _RUN_ID.fullmatch(rep["run_id"]):
         problems.append(f"report run_id {rep.get('run_id')!r}")
-    if rep.get("identity") != UNVERIFIED_IDENTITY:
-        problems.append(
-            f"report identity {rep.get('identity')!r}: no level is verified yet"
+    problems += [
+        f"report {p}"
+        for p in identity_problems(
+            rep.get("identity"), legacy=rep.get("format") == LEGACY_TRACK_REPORT_FORMAT
         )
+    ]
     name = ENTRYPOINTS[entrypoint][0]
     if rep.get("entrypoint") != name:
         problems.append(f"report entrypoint {rep.get('entrypoint')!r} != {name!r}")
@@ -406,11 +693,13 @@ def report_problems(
         )
     if rep.get("sequence_order") != sequences:
         problems.append("saccade_track ran the sequences in another order")
-    plan = rep.get("detector", {}).get("plan", {})
-    load = rep.get("detector", {}).get("load", {})
+    detector = _object_field(rep, "detector", "report detector", problems)
+    plan = _object_field(detector, "plan", "report detector plan", problems)
+    load = _object_field(detector, "load", "report detector load", problems)
+    op_plan = _object_field(plan, "op_library", "report operator plan", problems)
     if load.get("op_library_sha256") != att["op_library"]["sha256"]:
         problems.append("saccade_track loaded another operator library")
-    if not plan.get("op_library", {}).get("from_attestation"):
+    if op_plan.get("from_attestation") is not True:
         problems.append(
             "saccade_track did not bind the operator library through the attestation"
         )
@@ -427,12 +716,80 @@ def report_problems(
         problems.append(
             "saccade_track head graph scan-call count differs from the lineage's"
         )
-    if load.get("param_devices") != ["cuda:0"] or any(
-        d != "cpu" for d in load.get("constant_devices", ["?"])
+    constants = load.get("constant_devices")
+    if (
+        load.get("param_devices") != ["cuda:0"]
+        or not isinstance(constants, list)
+        or any(d != "cpu" for d in constants)
     ):
         problems.append(
             "saccade_track head placement is not parameters cuda:0 / constants cpu"
         )
+    if rep.get("format") == TRACK_REPORT_FORMAT:
+        identity = rep.get("identity")
+        bindings = identity.get("bindings", {}) if isinstance(identity, dict) else {}
+        bindings = bindings if isinstance(bindings, dict) else {}
+        model_root = rep.get("model_root")
+        if not isinstance(model_root, str):
+            problems.append("report model_root is not a path string")
+        for name in ("config", "lineage", "attestation"):
+            metadata_binding = bindings.get(name)
+            metadata_binding = (
+                metadata_binding if isinstance(metadata_binding, dict) else {}
+            )
+            requested = rep.get(name)
+            omitted = (
+                name == "attestation"
+                and requested == ""
+                and metadata_binding.get("path") is None
+            )
+            if not omitted and not _same_path(metadata_binding.get("path"), requested):
+                problems.append(
+                    f"report identity binding {name} differs from metadata argument"
+                )
+        lineage_binding = bindings.get("lineage")
+        if (
+            isinstance(lineage_binding, dict)
+            and lineage_binding.get("expected_sha256") is not None
+        ):
+            frozen_lineage = _object_field(
+                att, "frozen_lineage", "supplied attestation frozen_lineage", problems
+            )
+            if lineage_binding["expected_sha256"] != frozen_lineage.get("sha256"):
+                problems.append(
+                    "report identity lineage differs from supplied attestation"
+                )
+        for name, plan_name in (
+            ("op_library", "op_library"),
+            ("head", "head_artifact"),
+            ("engine", "backbone_engine"),
+        ):
+            binding = bindings.get(name)
+            binding = binding if isinstance(binding, dict) else {}
+            artifact = _object_field(
+                plan, plan_name, f"report plan {plan_name}", problems
+            )
+            load_key = {
+                "op_library": "op_library_sha256",
+                "head": "head_artifact_sha256",
+                "engine": "backbone_engine_sha256",
+            }[name]
+            raw_path = artifact.get("path")
+            resolved_path = None
+            if isinstance(raw_path, str) and raw_path and isinstance(model_root, str):
+                raw = Path(raw_path)
+                resolved_path = str(
+                    raw if raw.is_absolute() else Path(model_root) / raw
+                )
+            if (
+                binding.get("expected_sha256") != artifact.get("sha256")
+                or binding.get("observed_sha256") != artifact.get("sha256")
+                or not _same_path(binding.get("path"), resolved_path)
+                or binding.get("observed_sha256") != load.get(load_key)
+            ):
+                problems.append(
+                    f"report identity binding {name} differs from detector plan"
+                )
     return problems
 
 
@@ -458,7 +815,12 @@ def committed_sequences(
     ``run_id`` committed -- ``written`` in that run's journal with the file's
     sha256. ``pending`` is never committed, even when the file is there (a
     kill between its rename and the journal update)."""
-    if journal.get("format") != JOURNAL_FORMAT or journal.get("run_id") != run_id:
+    if (
+        not isinstance(journal, dict)
+        or not isinstance(journal.get("format"), str)
+        or journal.get("format") not in REPORT_FOR_JOURNAL
+        or journal.get("run_id") != run_id
+    ):
         return []
     entries = journal.get("sequences")
     if not isinstance(entries, list):
@@ -467,9 +829,15 @@ def committed_sequences(
     for s in entries:
         if not isinstance(s, dict) or s.get("state") != "written":
             continue
-        txt = out_dir / f"{s.get('name')}.txt"
-        if txt.is_file() and _sha256_bytes(txt.read_bytes()) == s.get("txt_sha256"):
-            out.append(s["name"])
+        name = s.get("name")
+        if not isinstance(name, str) or not name or "/" in name or "\\" in name:
+            continue
+        txt = out_dir / f"{name}.txt"
+        try:
+            if txt.is_file() and _sha256_bytes(txt.read_bytes()) == s.get("txt_sha256"):
+                out.append(name)
+        except OSError:
+            continue
     return out
 
 
@@ -489,7 +857,7 @@ def journal_problems(
     if not path.is_file():
         return [f"{path}: no run journal"]
     try:
-        j = json.loads(path.read_text())
+        j = _record_json(path.read_text())
     except (OSError, ValueError) as exc:
         return [f"{path}: unreadable journal ({type(exc).__name__}: {exc})"]
     if not isinstance(j, dict):
@@ -498,7 +866,10 @@ def journal_problems(
     if not isinstance(entries, list) or not all(isinstance(s, dict) for s in entries):
         return [f"{path}: journal sequences {entries!r} is not a list of objects"]
     problems = []
-    if j.get("format") != JOURNAL_FORMAT:
+    if (
+        not isinstance(j.get("format"), str)
+        or j.get("format") not in REPORT_FOR_JOURNAL
+    ):
         problems.append(f"journal format {j.get('format')!r}")
     if j.get("run_id") != run_id:
         problems.append(
@@ -508,8 +879,14 @@ def journal_problems(
         problems.append(
             f"journal state {j.get('state')!r} (failure {j.get('failure')!r})"
         )
-    if j.get("identity") != UNVERIFIED_IDENTITY:
-        problems.append(f"journal identity {j.get('identity')!r}")
+    problems += [
+        f"journal {p}"
+        for p in identity_problems(
+            j.get("identity"),
+            legacy=j.get("format") == LEGACY_JOURNAL_FORMAT,
+            complete=j.get("state") == "complete",
+        )
+    ]
     if [s.get("name") for s in entries] != sequences:
         problems.append("journal sequences differ from the request")
     committed = committed_sequences(j, out_dir, run_id)
@@ -518,16 +895,38 @@ def journal_problems(
     if trace_dir is not None:
         for s in entries:
             t = trace_dir / str(s.get("name")) / "detector.bin"
-            if not t.is_file() or _sha256_bytes(t.read_bytes()) != s.get(
-                "trace_sha256"
-            ):
+            try:
+                matches = t.is_file() and _sha256_bytes(t.read_bytes()) == s.get(
+                    "trace_sha256"
+                )
+            except OSError:
+                matches = False
+            if not matches:
                 problems.append(f"{t}: not the trace the journal recorded")
     if report_path is not None:
         rec = j.get("report") if isinstance(j.get("report"), dict) else {}
-        if not report_path.is_file() or _sha256_bytes(
-            report_path.read_bytes()
-        ) != rec.get("sha256"):
+        try:
+            matches = report_path.is_file() and _sha256_bytes(
+                report_path.read_bytes()
+            ) == rec.get("sha256")
+        except OSError:
+            matches = False
+        if not matches:
             problems.append(f"{report_path}: not the report the journal recorded")
+        report, report_errors = read_track_report(report_path)
+        problems += report_errors
+        if not report_errors:
+            expected_format = (
+                REPORT_FOR_JOURNAL.get(j.get("format"))
+                if isinstance(j.get("format"), str)
+                else None
+            )
+            if report.get("format") != expected_format:
+                problems.append("report/journal format pair differs")
+            if report.get("run_id") != j.get("run_id"):
+                problems.append("report/journal run_id differs")
+            if report.get("identity") != j.get("identity"):
+                problems.append("report/journal identity differs")
     return problems
 
 
@@ -662,9 +1061,8 @@ def run_parity(args: argparse.Namespace) -> int:
         rc, track_report_path = run_track(args, out)
     if rc != 0:
         problems.append(f"saccade_track exited {rc}")
-    rep = (
-        json.loads(track_report_path.read_text()) if track_report_path.exists() else {}
-    )
+    rep, report_errors = read_track_report(track_report_path)
+    problems += report_errors
     log_path = native / "saccade_track.log"
     run_id = invocation_run_id(
         log_path.read_text(errors="replace") if log_path.exists() else "",
@@ -682,25 +1080,35 @@ def run_parity(args: argparse.Namespace) -> int:
             f"report run_id {rep.get('run_id')!r} is not this run's {run_id}"
         )
     if rep:
-        problems += report_problems(
-            rep,
-            att,
-            lineage,
-            args.sequences,
-            args.entrypoint,
-            args.mutation,
-            args.max_frames,
-            args.schedule,
-        )
+        problems += [
+            f"{track_report_path}: {p}"
+            for p in report_problems(
+                rep,
+                att,
+                lineage,
+                args.sequences,
+                args.entrypoint,
+                args.mutation,
+                args.max_frames,
+                args.schedule,
+            )
+        ]
 
     ingest = _load_module(INGEST_HARNESS, "native_ingest_parity")
     blocks = id_blocks(map_path)
     per_seq: dict[str, Any] = {}
+    native_sequences = _object_field(
+        rep, "sequences", f"{track_report_path}: report sequences", problems
+    )
     for i, seq in enumerate(args.sequences):
-        if seq not in rep.get("sequences", {}):
+        if seq not in native_sequences:
             problems.append(f"{seq}: saccade_track wrote nothing")
             continue
-        st = rep["sequences"][seq]
+        st = native_sequences[seq]
+        stat_errors = sequence_stats_problems(st, args.schedule)
+        if stat_errors:
+            problems += [f"{track_report_path}: {seq}: {p}" for p in stat_errors]
+            continue
         w, h, frame_end = ingest.oracle_sequence_bounds(
             project_root / det.DATA_ROOT / det.SPLIT / seq, args.max_frames
         )
