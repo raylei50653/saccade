@@ -16,7 +16,11 @@ here does not exist, so every run stops in the CUDA-free detector plan):
   ``<seq>.txt`` of its sequences and the earlier journal, and leaves other
   files in ``<out>`` alone.
 
-Skips when ``build/shipping/saccade_track`` has not been built.
+By default, skips when ``build/shipping/saccade_track`` has not been built.
+Set ``SACCADE_SHIPPING_TEST_PREFIX`` to an installed tree to run its
+``bin/saccade_track`` launcher with its installed config. An explicit prefix
+must be usable; it never skips or falls back to a build binary. Installed mode
+collects only shipping cases, since the measurement tool is not installed.
 """
 
 # scope: system
@@ -27,6 +31,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -35,21 +40,42 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 BUILD = REPO / "build" / "shipping"
-CONFIG = REPO / "configs" / "shipping" / "mamba_whole_graph.resolved.json"
+_PREFIX = os.environ.get("SACCADE_SHIPPING_TEST_PREFIX")
+PREFIX = Path(_PREFIX).expanduser().resolve() if _PREFIX else None
+INSTALLED = _PREFIX is not None
+MODEL_ROOT = PREFIX / "share" / "saccade" if PREFIX else REPO
+CONFIG = MODEL_ROOT / "configs" / "shipping" / "mamba_whole_graph.resolved.json"
+BINARIES = (
+    ["saccade_track"] if INSTALLED else ["saccade_track", "saccade_track_measurement"]
+)
 JOURNAL = "saccade_track.journal.json"
 LOCK = "saccade_track.lock"
 
 pytestmark = pytest.mark.skipif(
-    not (BUILD / "saccade_track").exists(),
+    not INSTALLED and not (BUILD / "saccade_track").exists(),
     reason="build/shipping/saccade_track not built",
 )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _require_installed_tree() -> None:
+    if INSTALLED:
+        assert PREFIX is not None, (
+            "SACCADE_SHIPPING_TEST_PREFIX must name an installed tree"
+        )
+        launcher = PREFIX / "bin" / "saccade_track"
+        assert launcher.is_file() and os.access(launcher, os.X_OK), launcher
+        assert (PREFIX / "libexec" / "saccade_track").is_file(), PREFIX
+        assert CONFIG.is_file(), CONFIG
 
 
 def _run(
     tmp_path: Path, binary: str = "saccade_track", report: Path | None = None
 ) -> subprocess.CompletedProcess[str]:
-    exe = BUILD / binary
+    exe = PREFIX / "bin" / binary if PREFIX else BUILD / binary
     if not exe.exists():
+        if INSTALLED:
+            pytest.fail(f"installed entrypoint {exe} is missing")
         pytest.skip(f"{exe.relative_to(REPO)} not built")
     cmd = [
         str(exe),
@@ -81,7 +107,7 @@ def _snapshot(*roots: Path) -> dict[str, tuple[int, bytes]]:
     return out
 
 
-@pytest.mark.parametrize("binary", ["saccade_track", "saccade_track_measurement"])
+@pytest.mark.parametrize("binary", BINARIES)
 def test_run_id_is_the_first_line_and_names_the_journal(
     tmp_path: Path, binary: str
 ) -> None:
