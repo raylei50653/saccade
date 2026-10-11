@@ -119,7 +119,7 @@ def test_run_id_is_the_first_line_and_names_the_journal(
     assert j["format"] == (
         "saccade.native_track_journal/v1"
         if INSTALLED
-        else "saccade.native_track_journal/v2"
+        else "saccade.native_track_journal/v3"
     )
     assert (j["run_id"], j["entrypoint"], j["state"]) == (idb, binary, "failed")
     assert j["identity"]["level"] is None

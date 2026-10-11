@@ -99,13 +99,39 @@ std::string new_run_id() {
     return id;
 }
 
-JsonValue unverified_identity() {
+const char* identity_level_name(IdentityLevel level) {
+    switch (level) {
+        case IdentityLevel::None: return "none";
+        case IdentityLevel::ChecksumMatched: return "checksum_matched";
+        case IdentityLevel::ExpectedSourceVerified: return "expected_source_verified";
+    }
+    return "?";
+}
+
+IdentityLevel parse_identity_level(const std::string& name) {
+    for (IdentityLevel l :
+         {IdentityLevel::None, IdentityLevel::ChecksumMatched, IdentityLevel::ExpectedSourceVerified}) {
+        if (name == identity_level_name(l)) return l;
+    }
+    throw std::invalid_argument("--require-identity " + name +
+                                " is not one of none, checksum_matched, expected_source_verified");
+}
+
+JsonValue unverified_identity(bool manifest_mode, IdentityLevel required) {
     JsonValue o = JsonValue::make_object();
     o.set("level", JsonValue::make_null());
     o.set("expected_source", JsonValue::make_null());
     o.set("publisher_authentication", JsonValue::make_string("not_checked_by_runtime"));
+    o.set("mode", JsonValue::make_string(manifest_mode ? "model_bundle" : "legacy"));
+    o.set("required", JsonValue::make_string(identity_level_name(required)));
+    o.set("allowlist_sha256", JsonValue::make_null());
+    o.set("allowlist_entry", JsonValue::make_null());
+    o.set("bundle_manifest_sha256", JsonValue::make_null());
     JsonValue bindings = JsonValue::make_object();
-    for (const char* name : {"config", "lineage", "attestation", "op_library", "head", "engine"}) {
+    std::vector<const char*> names;
+    if (manifest_mode) names.push_back("bundle_manifest");
+    for (const char* name : {"config", "lineage", "attestation", "op_library", "head", "engine"}) names.push_back(name);
+    for (const char* name : names) {
         JsonValue b = JsonValue::make_object();
         b.set("path", JsonValue::make_null());
         b.set("expected_sha256", JsonValue::make_null());
@@ -133,8 +159,28 @@ void RunCompletion::record_gate_a_identity(const JsonValue& identity, bool final
     SACCADE_COMPLETION_POINT("identity_published", 0);
 }
 
-RunCompletion::RunCompletion(std::string run_id, std::string entrypoint, RunOutputs outputs)
-    : run_id_(std::move(run_id)), entrypoint_(std::move(entrypoint)), out_(std::move(outputs.out)),
+void RunCompletion::record_load_verification(bool verified) {
+    if (!identity_finalized_ || identity_.find("level")->kind == JsonValue::Kind::Null) {
+        throw std::logic_error("load verification before Gate A passed");
+    }
+    if (load_verification_.kind != JsonValue::Kind::Null) throw std::logic_error("load verification already recorded");
+    JsonValue v = JsonValue::make_object();
+    v.set("status", JsonValue::make_string(verified ? "verified" : "failed"));
+    // S2-1: Gate B rehashes each file, then opens it again by path to load it.
+    v.set("byte_scope", verified ? JsonValue::make_string("hashed_before_load") : JsonValue::make_null());
+    load_verification_ = std::move(v);
+    try {
+        write_journal();
+    } catch (...) {
+        load_verification_ = JsonValue::make_null();
+        throw;
+    }
+}
+
+RunCompletion::RunCompletion(std::string run_id, std::string entrypoint, RunOutputs outputs, bool manifest_mode,
+                             IdentityLevel required)
+    : run_id_(std::move(run_id)), entrypoint_(std::move(entrypoint)),
+      identity_(unverified_identity(manifest_mode, required)), out_(std::move(outputs.out)),
       report_(std::move(outputs.report)), journal_(out_ / kRunJournalName) {
     const fs::path lock = out_ / kRunLockName;
     for (const std::string& name : outputs.sequences) {
@@ -265,6 +311,7 @@ void RunCompletion::write_journal() const {
     j.set("entrypoint", JsonValue::make_string(entrypoint_));
     j.set("state", JsonValue::make_string(state_));
     j.set("identity", identity_);
+    j.set("load_verification", load_verification_);
     std::vector<JsonValue> seqs;
     for (const Sequence& s : sequences_) {
         JsonValue o = JsonValue::make_object();

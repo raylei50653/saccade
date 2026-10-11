@@ -34,6 +34,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -57,6 +58,32 @@ inline constexpr float kAnchorOffset = 0.5f;
 struct FileBinding {
     std::string path;  // as recorded (relative to the model root)
     std::string sha256;
+};
+
+// One file Gate A checked in manifest mode (#549 S2-1, contract section 2):
+// the root it is beneath, the absolute path Gate A hashed (the root resolved
+// once, plus the member's relative path), its size and sha256.
+struct ResolvedBinding {
+    std::string role;       // the manifest role: scan_operator / head_torchscript / backbone_engine
+    std::string root_kind;  // model_bundle / runtime_package
+    std::string absolute_path;
+    std::int64_t bytes = 0;
+    std::string sha256;
+};
+
+// Gate A's resolved bindings of the three files Gate B loads. Immutable once
+// Gate A built them; the detector load takes its paths only from here when the
+// plan has them (no model root, no manifest, no caller option is read again).
+struct ResolvedLoadBindings {
+    ResolvedBinding op_library, head_artifact, backbone_engine;
+};
+
+// A failure of the detector load (Gate B, detector_host.hpp): a hash, dlopen,
+// LibTorch, TensorRT or load-check failure while the three files are loaded.
+// The entrypoint records it as load_verification failed (run_completion.hpp).
+class DetectorLoadError : public ConfigError {
+public:
+    using ConfigError::ConfigError;
 };
 
 // The four runtime requirements of the PR-1L artifact (lineage).
@@ -83,6 +110,9 @@ struct DetectorPlan {
     int native_scan_calls = 0;
     HeadRuntimeRequirements runtime;
     double conf_thr_unused = 0.0;  // build.conf_thr: the fixed S2 never reads it
+    // Manifest mode only (Gate A, preflight.hpp): where the three files are.
+    // Null in legacy mode, where they are resolved against the model root.
+    std::shared_ptr<const ResolvedLoadBindings> resolved;
 };
 
 // sha256 of the lineage file is the caller's (it read the bytes).
@@ -98,9 +128,10 @@ struct DetectorInputs {
 };
 DetectorPlan plan_detector_files(const ResolvedShippingConfig& cfg, const DetectorInputs& in);
 
-// Where a plan path is read from: relative paths against the model root,
-// absolute ones as they are. Gate A (preflight.hpp) and the detector load
-// (detector_host.hpp) both read the files here.
+// Where a plan path is read from in legacy mode: relative paths against the
+// model root, absolute ones as they are. Gate A (preflight.hpp) and the
+// detector load (detector_host.hpp) both read the files here. Manifest mode
+// never calls it (DetectorPlan::resolved).
 std::string resolve_model_path(const std::string& model_root, const std::string& path);
 
 // set_whole_graph_img_dims: `self._whole_graph_sx.fill_(w_orig / self.img_size)`

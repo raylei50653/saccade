@@ -214,9 +214,12 @@ def _assert_refused_in_gate_a(
     if INSTALLED:
         assert j["identity"] == {"level": None}
     else:
-        assert j["format"] == "saccade.native_track_journal/v2"
+        assert j["format"] == "saccade.native_track_journal/v3"
         assert j["identity"]["expected_source"] is None
         assert j["identity"]["publisher_authentication"] == "not_checked_by_runtime"
+        assert j["identity"]["mode"] == "legacy"
+        assert j["identity"]["required"] == "none"
+        assert j["load_verification"] is None
     assert all(s["state"] == "pending" for s in j["sequences"])
     assert not list((tmp_path / "out").glob("*.txt"))
 
@@ -253,7 +256,11 @@ def test_positive_control_passes_gate_a_then_initializes_cuda(
         assert not list((tmp_path / "out").glob("*.txt"))
     else:
         assert "dlopen" in message, message
+        # Gate B's caught load failure (#549 S2-1, MB-58): load_verification
+        # failed; Gate A's identity is unchanged by it.
+        assert j["load_verification"] == {"status": "failed", "byte_scope": None}
         identity = j["identity"]
+        assert identity["mode"] == "legacy"
         assert identity["level"] == "checksum_matched"
         assert identity["expected_source"] is None
         assert identity["publisher_authentication"] == "not_checked_by_runtime"

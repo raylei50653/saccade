@@ -1,0 +1,134 @@
+{
+  "schema": "saccade.model_bundle_s2_1_coverage/v1",
+  "reading": "#549 S2-1 implementation coverage of the verification matrix (docs/architecture/model_bundle_549/verification_matrix.json): for each row this slice owns, and for the schema / semantic rows its VL0 reader must reject, the tests that exercise the implementation in a real process (CPU ctest, built-binary CLI, or GPU ctest). 'runs' names where each test runs: ci_ctest = the CPU ctests of CI job shipping-config-loader; local_cli = tests/unit CLI suites against build/shipping binaries (they skip in CI, which builds none); local_gpu = needs a CUDA device and the models. Whether a run passed is recorded in docs/reference/model_bundle_s2_1_549.md, not here; listing a test is not a verification claim. Checked by tests/contract/test_model_bundle_contract_549.py.",
+  "matrix": "docs/architecture/model_bundle_549/verification_matrix.json",
+  "vl0_rows": {
+    "reading": "Every matrix row with layer schema or semantic and a mutation is applied to the example document and must be rejected by the C++ reader at its instance path and keyword, or with exactly its rule (the test iterates the matrix; a new row is covered without editing this file).",
+    "tests": [
+      {"file": "tests/native/test_shipping_model_bundle.cpp", "case": "test_matrix", "runs": "ci_ctest"},
+      {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "manifest_unknown_schema", "runs": "ci_ctest"},
+      {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "manifest_pairing_wrong_role", "runs": "ci_ctest"}
+    ]
+  },
+  "rows": [
+    {
+      "id": "MB-30",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "approved", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "approved_required", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_model_bundle.cpp", "case": "AllowlistState::Approved", "runs": "ci_ctest"}
+      ],
+      "limits": "Approved entries are synthetic fixtures with a test pin; the production allowlist is empty, so no built entrypoint can reach expected_source_verified."
+    },
+    {
+      "id": "MB-31",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "self_consistent_substitution", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "self_consistent_substitution_required", "runs": "ci_ctest"},
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "policy_unlisted", "runs": "local_cli"}
+      ]
+    },
+    {
+      "id": "MB-32",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "allowlist_not_pinned", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "allowlist_missing", "runs": "ci_ctest"},
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "allowlist_not_pinned", "runs": "local_cli"}
+      ]
+    },
+    {
+      "id": "MB-33",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "example_entry", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "revoked_entry", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "example_entry_required", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "revoked_entry_required", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "check_frozen_model", "runs": "local_gpu"}
+      ]
+    },
+    {
+      "id": "MB-35",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "config_edited_same_size", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "config_edited_field_consistent", "runs": "ci_ctest"}
+      ]
+    },
+    {
+      "id": "MB-36",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "engine_size_differs", "runs": "ci_ctest"},
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "member_size", "runs": "local_cli"}
+      ]
+    },
+    {
+      "id": "MB-37",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "head_missing", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "op_library_missing", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "attestation_missing", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "manifest_missing", "runs": "ci_ctest"},
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "manifest_missing", "runs": "local_cli"}
+      ]
+    },
+    {
+      "id": "MB-38",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "engine_symlink_inside", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "lineage_symlink_outside", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "op_library_symlink_in_runtime", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "manifest_symlink", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_model_bundle.cpp", "case": "link.bin", "runs": "ci_ctest"},
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "member_symlink", "runs": "local_cli"}
+      ]
+    },
+    {
+      "id": "MB-39",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "directory_symlink_escape", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_model_bundle.cpp", "case": "dirlink/x.bin", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_model_bundle.cpp", "case": "../outside.bin", "runs": "ci_ctest"}
+      ]
+    },
+    {
+      "id": "MB-40",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "relocated_bundle", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "bundle_root_via_symlink", "runs": "ci_ctest"},
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "test_real_bundle_runs_from_two_roots", "runs": "local_gpu"}
+      ]
+    },
+    {
+      "id": "MB-54",
+      "tests": [
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "test_model_bundle_excludes_legacy_options_before_any_file", "runs": "local_cli"},
+        {"file": "tests/native/test_shipping_preflight_manifest.cpp", "case": "legacy_option_given", "runs": "ci_ctest"}
+      ]
+    },
+    {
+      "id": "MB-55",
+      "tests": [
+        {"file": "tests/native/test_shipping_model_bundle_gate_b.cpp", "case": "replaced", "runs": "local_gpu"},
+        {"file": "tests/native/test_shipping_model_bundle_gate_b.cpp", "case": "cross_root", "runs": "local_gpu"}
+      ]
+    },
+    {
+      "id": "MB-57",
+      "tests": [
+        {"file": "tests/native/test_shipping_preflight.cpp", "case": "require_expected_source", "runs": "ci_ctest"},
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "test_legacy_mode_cannot_meet_expected_source_verified", "runs": "local_cli"}
+      ]
+    },
+    {
+      "id": "MB-58",
+      "tests": [
+        {"file": "tests/native/test_shipping_run_completion.cpp", "case": "load_verification_failed", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_run_completion.cpp", "case": "killed_during_load", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_run_completion.cpp", "case": "load_verification_rules", "runs": "ci_ctest"},
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "test_standin_bundle_passes_gate_a_and_gate_b_records_the_failed_load", "runs": "local_gpu"},
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "test_real_bundle_killed_during_the_load_leaves_no_load_claim", "runs": "local_gpu"},
+        {"file": "tests/unit/test_saccade_track_preflight_cli.py", "case": "test_positive_control_passes_gate_a_then_initializes_cuda", "runs": "local_gpu"}
+      ],
+      "limits": "The loader auditor's _exit(127) runs only under the installed launcher (--audit); the installed package is not re-pinned, so that end is UNVERIFIED."
+    }
+  ]
+}

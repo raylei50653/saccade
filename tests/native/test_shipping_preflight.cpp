@@ -41,6 +41,12 @@
 // the failed check; journal state failed, failure.sequence null, the message
 // recorded, identity level null, every sequence pending; the earlier outputs
 // were removed (RunCompletion), nothing else written.
+// Journal v3 (#549 S2-1): the legacy identity says mode legacy, the requested
+// policy, no allowlist and no bundle manifest, six bindings. Policy
+// (--require-identity): checksum_matched passes; expected_source_verified is
+// refused after Gate A with the checksum level kept (MB-57: legacy mode
+// cannot exceed checksum_matched). Manifest mode:
+// test_shipping_preflight_manifest.cpp.
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -124,6 +130,7 @@ struct Bundle {
     std::string attestation;
     std::vector<std::string> sequences;
     int max_frames = 0;
+    sh::IdentityLevel required = sh::IdentityLevel::None;
     JsonValue lineage_json;
 };
 
@@ -180,11 +187,12 @@ Outcome run_gate(const Bundle& b) {
     Outcome o;
     o.run_id = sh::new_run_id();
     sh::RunOutputs outputs{b.out, b.report, b.trace, kSeqs};
-    const sh::PreflightInputs inputs{b.config.string(), b.lineage.string(), b.attestation,
-                                    b.root.string(), b.sequences, b.max_frames, false};
+    sh::PreflightInputs inputs{b.config.string(), b.lineage.string(), b.attestation,
+                              b.root.string(), b.sequences, b.max_frames, false};
+    inputs.required = b.required;
     std::optional<sh::RunCompletion> c;
     try {
-        c.emplace(o.run_id, "saccade_shipping_preflight_test", outputs);
+        c.emplace(o.run_id, "saccade_shipping_preflight_test", outputs, false, b.required);
         o.initial_identity = *sh::parse_strict_json(read_file(b.out / sh::kRunJournalName)).find("identity");
         o.result = sh::run_preflight(inputs, *c);
     } catch (const sh::PreflightError& e) {
@@ -273,14 +281,21 @@ void check_binding(const JsonValue& identity, const char* name, const std::optio
 
 void check_identity_shape(const JsonValue& identity) {
     CHECK(identity.kind == JsonValue::Kind::Object);
+    CHECK(identity.object.size() == 9);
     CHECK(is_null(identity, "expected_source"));
     CHECK(str(identity, "publisher_authentication") == "not_checked_by_runtime");
+    CHECK(str(identity, "mode") == "legacy");
+    const std::string& required = str(identity, "required");
+    CHECK(required == "none" || required == "checksum_matched" || required == "expected_source_verified");
+    CHECK(is_null(identity, "allowlist_sha256"));
+    CHECK(is_null(identity, "allowlist_entry"));
+    CHECK(is_null(identity, "bundle_manifest_sha256"));
+    CHECK(is_null(identity, "level") || str(identity, "level") == "checksum_matched");
     const JsonValue* bindings = identity.find("bindings");
     CHECK(bindings != nullptr && bindings->kind == JsonValue::Kind::Object && bindings->object.size() == 6);
     for (const char* key : {"config", "lineage", "attestation", "op_library", "head", "engine"}) {
         CHECK(binding(identity, key).kind == JsonValue::Kind::Object);
     }
-    CHECK(sh::dump_python_json(identity).find("expected_source_verified") == std::string::npos);
 }
 
 void check_initial_identity(const JsonValue& identity) {
@@ -415,6 +430,37 @@ void check_gate_a_once(const Fixture& fx, const fs::path& dir) {
     CHECK(*failed.find("identity") == sealed);
     CHECK(str(failed, "state") == "failed");
     CHECK(str(*failed.find("failure"), "message") == "later load failed");
+}
+
+// --require-identity in legacy mode: the policy is compared after every Gate A
+// check, against the sealed level.
+void check_legacy_policy(const Fixture& fx, const fs::path& dir) {
+    {
+        Bundle b = make_bundle(fx, dir / "require_checksum");
+        b.required = sh::IdentityLevel::ChecksumMatched;
+        const Outcome o = run_gate(b);
+        expect_pass("legacy_require_checksum", b, o);
+        CHECK(str(*o.journal.find("identity"), "required") == "checksum_matched");
+    }
+    {
+        // MB-57: legacy mode cannot exceed checksum_matched.
+        Bundle b = make_bundle(fx, dir / "require_expected_source");
+        b.required = sh::IdentityLevel::ExpectedSourceVerified;
+        const Outcome o = run_gate(b);
+        CHECK(!o.result);
+        CHECK(o.error == "preflight: identity level checksum_matched is below --require-identity "
+                         "expected_source_verified (legacy mode cannot exceed checksum_matched)");
+        CHECK(str(o.journal, "state") == "failed");
+        CHECK(str(*o.journal.find("failure"), "message") == o.error);
+        const JsonValue& id = *o.journal.find("identity");
+        check_identity_shape(id);
+        CHECK(str(id, "level") == "checksum_matched");  // the proven level is kept
+        CHECK(str(id, "required") == "expected_source_verified");
+        CHECK(is_null(o.journal, "load_verification"));
+        CHECK(str(binding(id, "engine"), "status") == "matched");
+        check_pending_sequences(o);
+        std::fprintf(stderr, "legacy_require_expected_source: %s\n", o.error.c_str());
+    }
 }
 
 void check_frozen_model(const fs::path& dir, const fs::path& root, const fs::path& config,
@@ -723,6 +769,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "%s: %s\n", c.name, o.error.empty() ? "passed" : o.error.c_str());
     }
     check_gate_a_once(fx, base / "gate_a_once");
+    check_legacy_policy(fx, base / "legacy_policy");
     if (!frozen_model_root.empty()) check_frozen_model(base / "frozen_model", frozen_model_root, argv[1], argv[2], argv[3]);
     if (keep.empty()) fs::remove_all(base);
     std::printf("%d checks, %d failures\n", g_checks, g_failures);

@@ -40,7 +40,16 @@
 //                     keeps the holder's run id;
 //   * collisions:     --report on the journal, the lock or a txt is refused
 //                     before <out> is created; a directory at --report fails
-//                     the run and is not removed.
+//                     the run and is not removed;
+//   * load_verification (#549 S2-1): every child records Gate B's result after
+//                     Gate A as saccade_track's load_runtime does -- verified
+//                     (hashed_before_load) in every completed run; a caught
+//                     detector load failure writes failed (byte_scope null)
+//                     and the run failed; a SIGKILL during the load leaves it
+//                     null and the run running; a failure after Gate A that is
+//                     not the detector load leaves it null; and the writer
+//                     rules: never before Gate A passed, never twice, never a
+//                     change of the sealed identity.
 // --keep DIR leaves each case's files in DIR/<case>/ with the run id of its
 // last invocation in DIR/<case>/invocation.run_id, for the reader check in
 // tests/unit/test_native_track_parity.py.
@@ -57,6 +66,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <optional>
 #include <sstream>
@@ -154,7 +164,9 @@ struct Child {
     Paths p;
     int gen = 1;
     int throw_at = -1;       // the sequence function throws in sequence i
-    bool load_failure = false;
+    bool load_failure = false;  // a failure after Gate A that is not the detector load
+    // Gate B, as track::load_runtime records it.
+    enum class Load { Verified, Failed, Killed } load = Load::Verified;
     bool report_failure = false;
     int kill_in = -1;        // SIGKILL inside sequence i (after half its trace)
     int block_in = -1;       // sequence i: touch `ready`, then wait to be killed
@@ -191,6 +203,13 @@ struct Status {
         sh::run_preflight(c.gate_a, *completion);
         write_file(c.identity_dir / (id + ".json"), sh::dump_python_json(completion->identity()));
         if (c.load_failure) throw std::runtime_error("injected model load failure after Gate A");
+        switch (c.load) {
+            case Child::Load::Killed: ::raise(SIGKILL); break;
+            case Child::Load::Failed:
+                completion->record_load_verification(false);
+                throw std::runtime_error("injected detector load failure");
+            case Child::Load::Verified: completion->record_load_verification(true); break;
+        }
         completion->run(
             [&](std::size_t i, const fs::path& trace_tmp) {
                 const std::string tb = trace_bytes(c.gen, i);
@@ -215,9 +234,10 @@ struct Status {
             [&]() {
                 if (c.report_failure) throw std::runtime_error("injected report failure after sequences");
                 JsonValue report = JsonValue::make_object();
-                report.set("format", JsonValue::make_string("saccade.native_track_report/v4"));
+                report.set("format", JsonValue::make_string("saccade.native_track_report/v5"));
                 report.set("run_id", JsonValue::make_string(completion->run_id()));
                 report.set("identity", completion->identity());
+                report.set("load_verification", completion->load_verification());
                 report.set("gen", JsonValue::make_int(c.gen));
                 return sh::dump_python_json(report) + "\n";
             });
@@ -400,10 +420,19 @@ void check_preserved_identity(const Case& c, const std::string& id) {
     CHECK(*j.find("identity") == sealed);
     if (fs::is_regular_file(c.p.report)) {
         const JsonValue report = sh::parse_strict_json(read_file(c.p.report));
-        CHECK(str(report, "format") == "saccade.native_track_report/v4");
+        CHECK(str(report, "format") == "saccade.native_track_report/v5");
         CHECK(str(report, "run_id") == id);
         CHECK(*report.find("identity") == sealed);
+        CHECK(*report.find("load_verification") == *j.find("load_verification"));
     }
+}
+
+void check_load_verified(const JsonValue& j) {
+    const JsonValue& v = *j.find("load_verification");
+    CHECK(v.kind == JsonValue::Kind::Object && v.object.size() == 2);
+    if (v.kind != JsonValue::Kind::Object) return;
+    CHECK(str(v, "status") == "verified");
+    CHECK(str(v, "byte_scope") == "hashed_before_load");
 }
 
 void check_fully_committed(const Case& c, int gen) {
@@ -414,6 +443,7 @@ void check_fully_committed(const Case& c, int gen) {
     CHECK(str(j, "state") == "complete");
     CHECK(is_null(j, "failure"));
     check_preserved_identity(c, id);
+    check_load_verified(j);
     for (std::size_t i = 0; i < kSeqs.size(); ++i) {
         const JsonValue& s = seq_entry(j, i);
         CHECK(str(s, "name") == kSeqs[i]);
@@ -491,10 +521,84 @@ void case_load_failure(const fs::path& base) {
     CHECK(str(j, "state") == "failed");
     CHECK(is_null(*j.find("failure"), "sequence"));
     CHECK(str(*j.find("failure"), "message") == "injected model load failure after Gate A");
+    CHECK(is_null(j, "load_verification"));  // not the detector load: no claim either way
     for (std::size_t i = 0; i < kSeqs.size(); ++i) CHECK(str(seq_entry(j, i), "state") == "pending");
     CHECK(!fs::exists(c.p.report));
     CHECK(committed(c.p, id).empty());
     CHECK(!complete(c.p, id));
+}
+
+void case_load_verification_failed(const fs::path& base) {
+    Case c = make_case(base, "load_verification_failed");
+    Child child = child_of(c, 1);
+    child.load = Child::Load::Failed;
+    const Status status = run_child(child);
+    CHECK(status.exited && status.code == 2);
+    const std::string id = last_run_id(c);
+    const JsonValue j = journal(c.p);
+    check_preserved_identity(c, id);  // Gate B never changes identity
+    CHECK(str(j, "state") == "failed");
+    CHECK(str(*j.find("failure"), "message") == "injected detector load failure");
+    const JsonValue& v = *j.find("load_verification");
+    CHECK(v.kind == JsonValue::Kind::Object && str(v, "status") == "failed" && is_null(v, "byte_scope"));
+    for (std::size_t i = 0; i < kSeqs.size(); ++i) CHECK(str(seq_entry(j, i), "state") == "pending");
+    CHECK(!complete(c.p, id));
+}
+
+void case_killed_during_load(const fs::path& base) {
+    Case c = make_case(base, "killed_during_load");
+    Child child = child_of(c, 1);
+    child.load = Child::Load::Killed;
+    const Status status = run_child(child);
+    CHECK(!status.exited && status.signal == SIGKILL);
+    const std::string id = last_run_id(c);
+    const JsonValue j = journal(c.p);
+    check_preserved_identity(c, id);
+    CHECK(str(j, "state") == "running");           // no failed write is promised
+    CHECK(is_null(j, "load_verification"));       // and no load claim
+    CHECK(!complete(c.p, id));
+}
+
+// The writer rules, in process: Gate B's record only after Gate A passed,
+// once, without touching identity.
+void case_load_verification_rules(const fs::path& base) {
+    Case c = make_case(base, "load_verification_rules");
+    auto logic_error = [](const std::function<void()>& f) {
+        try {
+            f();
+        } catch (const std::logic_error&) {
+            return true;
+        }
+        return false;
+    };
+    {
+        sh::RunCompletion rc(sh::new_run_id(), "fake_track", sh::RunOutputs{c.p.out, c.p.report, c.p.trace, kSeqs});
+        CHECK(logic_error([&] { rc.record_load_verification(true); }));  // before Gate A
+        CHECK(is_null(journal(c.p), "load_verification"));
+        sh::run_preflight(c.gate_a, rc);
+        const JsonValue sealed = rc.identity();
+        rc.record_load_verification(true);
+        CHECK(rc.identity() == sealed);
+        CHECK(*journal(c.p).find("identity") == sealed);
+        check_load_verified(journal(c.p));
+        CHECK(logic_error([&] { rc.record_load_verification(false); }));  // once
+        check_load_verified(journal(c.p));
+    }
+    {
+        // A refused Gate A (level null) has nothing for Gate B to verify.
+        sh::PreflightInputs refused = c.gate_a;
+        refused.sequences.back() += "_missing";
+        sh::RunCompletion rc(sh::new_run_id(), "fake_track", sh::RunOutputs{c.p.out, c.p.report, c.p.trace, kSeqs});
+        bool preflight_refused = false;
+        try {
+            sh::run_preflight(refused, rc);
+        } catch (const sh::PreflightError&) {
+            preflight_refused = true;
+        }
+        CHECK(preflight_refused);
+        CHECK(logic_error([&] { rc.record_load_verification(false); }));
+        CHECK(is_null(journal(c.p), "load_verification"));
+    }
 }
 
 void case_report_failure(const fs::path& base) {
@@ -730,6 +834,9 @@ int main(int argc, char** argv) {
         case_fresh(base);
         case_failed_rerun(base);
         case_load_failure(base);
+        case_load_verification_failed(base);
+        case_killed_during_load(base);
+        case_load_verification_rules(base);
         case_report_failure(base);
         case_metadata_buffer(base, "config");
         case_metadata_buffer(base, "lineage");

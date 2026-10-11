@@ -34,7 +34,7 @@ namespace saccade::shipping {
 namespace {
 
 [[noreturn]] void load_error(const std::string& what) {
-    throw ConfigError("shipping detector load: " + what);
+    throw DetectorLoadError("shipping detector load: " + what);
 }
 
 [[noreturn]] void run_error(const std::string& what) {
@@ -182,13 +182,31 @@ struct DetectorHost::Impl {
         : plan(p), raw_stream(s), stream(at::cuda::getStreamFromExternal(s, 0)) {}
 };
 
+// Any failure while the three files are loaded and checked is a
+// DetectorLoadError (the entrypoint records load_verification failed); its
+// message is the original one.
 DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_root,
-                           cudaStream_t stream)
+                           cudaStream_t stream) try
     : impl_(std::make_unique<Impl>(plan, stream)) {
     Impl& m = *impl_;
-    const std::string op_path = resolve_model_path(model_root, plan.op_library.path);
-    const std::string head_path = resolve_model_path(model_root, plan.head_artifact.path);
-    const std::string engine_path = resolve_model_path(model_root, plan.backbone_engine.path);
+    // Manifest mode (#549 S2-1): Gate A's resolved bindings are the only
+    // paths; nothing is resolved again. Legacy mode: the model root.
+    std::string op_path, head_path, engine_path;
+    if (plan.resolved) {
+        const ResolvedLoadBindings& r = *plan.resolved;
+        if (!model_root.empty()) load_error("a plan with resolved bindings has no model root");
+        if (r.op_library.sha256 != plan.op_library.sha256 || r.head_artifact.sha256 != plan.head_artifact.sha256 ||
+            r.backbone_engine.sha256 != plan.backbone_engine.sha256) {
+            load_error("the resolved bindings are not the plan's");
+        }
+        op_path = r.op_library.absolute_path;
+        head_path = r.head_artifact.absolute_path;
+        engine_path = r.backbone_engine.absolute_path;
+    } else {
+        op_path = resolve_model_path(model_root, plan.op_library.path);
+        head_path = resolve_model_path(model_root, plan.head_artifact.path);
+        engine_path = resolve_model_path(model_root, plan.backbone_engine.path);
+    }
 
     // 1. hashes before anything is loaded.
     check_sha("operator library", op_path, plan.op_library.sha256, m.report.op_library_sha256);
@@ -282,6 +300,10 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
 
     m.s2_raw = at::empty({plan.max_det, 6}, f32);
     m.s2_scaled = at::empty({plan.max_det, 6}, f32);
+} catch (const DetectorLoadError&) {
+    throw;
+} catch (const std::exception& e) {
+    throw DetectorLoadError(e.what());
 }
 
 DetectorHost::~DetectorHost() = default;  // the operator library stays loaded

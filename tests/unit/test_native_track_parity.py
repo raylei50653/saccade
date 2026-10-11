@@ -188,8 +188,22 @@ def _good_identity(attested: bool = True) -> dict[str, Any]:
     }
 
 
+def _s2_1_identity(attested: bool = True, required: str = "none") -> dict[str, Any]:
+    """The journal v3 / report v5 legacy-mode record (#549 S2-1): the S2-1a
+    record plus the mode / policy / allowlist fields, all of a legacy run."""
+    identity = _good_identity(attested)
+    identity.update(
+        mode="legacy",
+        required=required,
+        allowlist_sha256=None,
+        allowlist_entry=None,
+        bundle_manifest_sha256=None,
+    )
+    return identity
+
+
 def _good_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    identity = _good_identity()
+    identity = _s2_1_identity()
     bindings = identity["bindings"]
     att = {
         "op_library": {"sha256": bindings["op_library"]["expected_sha256"]},
@@ -209,7 +223,10 @@ def _good_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         "format": T.TRACK_REPORT_FORMAT,
         "run_id": RUN_ID,
         "identity": identity,
+        "load_verification": dict(T.LOAD_VERIFIED),
         "entrypoint": "saccade_track",
+        "mode": "legacy",
+        "model_bundle": None,
         "model_root": "/frozen",
         "config": bindings["config"]["path"],
         "lineage": bindings["lineage"]["path"],
@@ -232,6 +249,7 @@ def _good_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
                     "path": bindings["engine"]["path"],
                     "sha256": bindings["engine"]["expected_sha256"],
                 },
+                "resolved": None,
             },
             "load": {
                 "op_library_sha256": bindings["op_library"]["expected_sha256"],
@@ -358,8 +376,68 @@ def test_requested_missing_attestation_cannot_become_optional_omission() -> None
     assert any("attestation" in p for p in T.identity_problems(omitted))
 
 
-def test_historical_report_keeps_null_identity() -> None:
+def _s2_1a_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """The historical S2-1a report v4: no mode / policy / load verification."""
     rep, att, lineage = _good_report()
+    rep.update(format=T.S2_1A_TRACK_REPORT_FORMAT, identity=_good_identity())
+    for key in ("load_verification", "mode", "model_bundle"):
+        del rep[key]
+    del rep["detector"]["plan"]["resolved"]
+    return rep, att, lineage
+
+
+def test_s2_1a_report_is_read_as_written() -> None:
+    rep, att, lineage = _s2_1a_report()
+    args = (att, lineage, ["S1", "S2"], "shipping", "none", None)
+    assert T.report_problems(rep, *args) == []
+    # Never upgraded, never read as an S2-1 record.
+    upgraded = copy.deepcopy(rep)
+    upgraded["load_verification"] = dict(T.LOAD_VERIFIED)
+    assert any("historical report" in p for p in T.report_problems(upgraded, *args))
+    upgraded = copy.deepcopy(rep)
+    upgraded["identity"] = _s2_1_identity()
+    assert any(
+        "not the legacy Gate A record" in p for p in T.report_problems(upgraded, *args)
+    )
+    # And an S2-1 report cannot carry the S2-1a identity.
+    current, _, _ = _good_report()
+    current["identity"] = _good_identity()
+    assert any(
+        "not the legacy Gate A record" in p for p in T.report_problems(current, *args)
+    )
+
+
+@pytest.mark.parametrize("required", ["none", "checksum_matched"])
+def test_s2_1_identity_policy_of_a_complete_legacy_run(required: str) -> None:
+    assert T.identity_problems(_s2_1_identity(required=required), s2_1=True) == []
+    refused = _s2_1_identity(required="expected_source_verified")
+    # MB-57: a legacy run that required expected_source_verified never completes.
+    assert any("cannot meet" in p for p in T.identity_problems(refused, s2_1=True))
+    assert T.identity_problems(refused, s2_1=True, complete=False) == []
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("mode", "model_bundle"),
+        ("required", "anything"),
+        ("allowlist_sha256", "0" * 64),
+        ("allowlist_entry", "approved"),
+        ("bundle_manifest_sha256", "0" * 64),
+    ],
+)
+def test_s2_1_identity_fields_fail_closed(field: str, value: Any) -> None:
+    identity = _s2_1_identity()
+    identity[field] = value
+    assert T.identity_problems(identity, s2_1=True) != []
+    del identity[field]
+    assert T.identity_problems(identity, s2_1=True) == [
+        "identity is not the legacy Gate A record"
+    ]
+
+
+def test_historical_report_keeps_null_identity() -> None:
+    rep, att, lineage = _s2_1a_report()
     rep.update(format=T.LEGACY_TRACK_REPORT_FORMAT, identity={"level": None})
     args = (att, lineage, ["S1", "S2"], "shipping", "none", None)
     assert T.report_problems(rep, *args) == []
@@ -394,6 +472,16 @@ def test_historical_report_keeps_null_identity() -> None:
         (("detector", "load", "native_scan_calls"), 2),
         (("detector", "load", "param_devices"), ["cpu"]),
         (("detector", "load", "constant_devices"), ["cuda:0"]),
+        # #549 S2-1: only a complete legacy-mode run's record.
+        (("load_verification",), None),
+        (("load_verification",), {"status": "failed", "byte_scope": None}),
+        (("load_verification",), {"status": "verified", "byte_scope": "loaded_buffer"}),
+        (("mode",), "model_bundle"),
+        (("model_bundle",), "/bundle"),
+        (("detector", "plan", "resolved"), {}),
+        (("identity", "mode"), "model_bundle"),
+        (("identity", "required"), "expected_source_verified"),
+        (("identity", "allowlist_entry"), "approved"),
     ],
 )
 def test_report_problems_fail_closed(path: tuple[str, ...], value: Any) -> None:
@@ -849,10 +937,15 @@ def _completed_run(tmp_path: Path) -> tuple[Path, Path, Path, dict[str, Any]]:
                 "trace_sha256": _sha(tb),
             }
         )
-    identity = _good_identity()
+    identity = _s2_1_identity()
     report.write_text(
         json.dumps(
-            {"format": T.TRACK_REPORT_FORMAT, "run_id": RUN_ID, "identity": identity}
+            {
+                "format": T.TRACK_REPORT_FORMAT,
+                "run_id": RUN_ID,
+                "identity": identity,
+                "load_verification": T.LOAD_VERIFIED,
+            }
         )
     )
     journal = {
@@ -861,6 +954,7 @@ def _completed_run(tmp_path: Path) -> tuple[Path, Path, Path, dict[str, Any]]:
         "entrypoint": "saccade_track",
         "state": "complete",
         "identity": identity,
+        "load_verification": dict(T.LOAD_VERIFIED),
         "sequences": entries,
         "report": {"path": str(report), "sha256": _sha(report.read_bytes())},
         "failure": None,
@@ -888,11 +982,85 @@ def _replace_report(report: Path, journal: dict[str, Any], **changes: Any) -> No
     journal["report"]["sha256"] = _sha(report.read_bytes())
 
 
+def _historical(
+    report: Path,
+    journal: dict[str, Any],
+    journal_format: str,
+    report_format: str,
+    identity: dict[str, Any],
+) -> None:
+    """Rewrites a v3 / v5 run as an earlier writer wrote it."""
+    del journal["load_verification"]
+    journal.update(format=journal_format, identity=identity)
+    record = json.loads(report.read_text())
+    del record["load_verification"]
+    record.update(format=report_format, identity=identity)
+    report.write_text(json.dumps(record))
+    journal["report"]["sha256"] = _sha(report.read_bytes())
+
+
+def test_s2_1a_journal_report_pair_is_read_as_written(tmp_path: Path) -> None:
+    out, trace, report, journal = _completed_run(tmp_path)
+    _historical(
+        report,
+        journal,
+        T.S2_1A_JOURNAL_FORMAT,
+        T.S2_1A_TRACK_REPORT_FORMAT,
+        _good_identity(),
+    )
+    assert _problems(out, trace, report, journal) == []
+    journal["load_verification"] = dict(T.LOAD_VERIFIED)
+    assert any(
+        "historical journal carries" in p
+        for p in _problems(out, trace, report, journal)
+    )
+
+
+@pytest.mark.parametrize(
+    "load,state,ok",
+    [
+        (None, "running", True),  # an uncatchable end during the load
+        (None, "failed", True),  # a failure that was not the detector load
+        ({"status": "failed", "byte_scope": None}, "failed", True),
+        ({"status": "verified", "byte_scope": "hashed_before_load"}, "failed", True),
+        ({"status": "verified", "byte_scope": "loaded_buffer"}, "failed", False),
+        ({"status": "failed", "byte_scope": "hashed_before_load"}, "failed", False),
+        ("absent", "failed", False),
+        (None, "complete", False),
+        ({"status": "failed", "byte_scope": None}, "complete", False),
+    ],
+)
+def test_journal_load_verification(
+    tmp_path: Path, load: Any, state: str, ok: bool
+) -> None:
+    out, trace, report, journal = _completed_run(tmp_path)
+    journal["state"] = state
+    if load == "absent":
+        del journal["load_verification"]
+    else:
+        journal["load_verification"] = load
+        _replace_report(report, journal, load_verification=load)
+    problems = [p for p in _problems(out, trace, report, journal) if "state '" not in p]
+    assert (problems == []) == ok, problems
+
+
+def test_report_journal_load_verification_divergence(tmp_path: Path) -> None:
+    out, trace, report, journal = _completed_run(tmp_path)
+    _replace_report(report, journal, load_verification=None)
+    assert any(
+        "report/journal load_verification" in p
+        for p in _problems(out, trace, report, journal)
+    )
+
+
 def test_historical_journal_report_pair_retains_null_identity(tmp_path: Path) -> None:
     out, trace, report, journal = _completed_run(tmp_path)
-    journal.update(format=T.LEGACY_JOURNAL_FORMAT, identity={"level": None})
-    _replace_report(
-        report, journal, format=T.LEGACY_TRACK_REPORT_FORMAT, identity={"level": None}
+    _historical(
+        report,
+        journal,
+        T.LEGACY_JOURNAL_FORMAT,
+        T.LEGACY_TRACK_REPORT_FORMAT,
+        {"level": None},
     )
     assert _problems(out, trace, report, journal) == []
     assert T.committed_sequences(journal, out, RUN_ID) == SEQS
@@ -910,12 +1078,12 @@ def test_report_journal_divergence_with_correct_report_hash(
 ) -> None:
     out, trace, report, journal = _completed_run(tmp_path)
     if historical:
-        journal.update(format=T.LEGACY_JOURNAL_FORMAT, identity={"level": None})
-        _replace_report(
+        _historical(
             report,
             journal,
-            format=T.LEGACY_TRACK_REPORT_FORMAT,
-            identity={"level": None},
+            T.LEGACY_JOURNAL_FORMAT,
+            T.LEGACY_TRACK_REPORT_FORMAT,
+            {"level": None},
         )
     changes = {
         "format": T.TRACK_REPORT_FORMAT if historical else T.LEGACY_TRACK_REPORT_FORMAT,
@@ -935,7 +1103,7 @@ def test_checksum_identity_does_not_make_a_partial_run_complete(
 ) -> None:
     out, trace, report, journal = _completed_run(tmp_path)
     journal["state"] = state
-    assert T.identity_problems(journal["identity"], complete=False) == []
+    assert T.identity_problems(journal["identity"], complete=False, s2_1=True) == []
     assert T.committed_sequences(journal, out, RUN_ID) == SEQS
     problems = _problems(out, trace, report, journal)
     assert any(f"state '{state}'" in p for p in problems)
@@ -1137,7 +1305,8 @@ def test_corrupt_report_run_is_unresolved(
         "format": T.JOURNAL_FORMAT,
         "run_id": RUN_ID,
         "state": "complete",
-        "identity": _good_identity(),
+        "identity": _s2_1_identity(),
+        "load_verification": dict(T.LOAD_VERIFIED),
         "sequences": [
             {"name": "S1", "state": "written", "txt_sha256": _sha(txt.read_bytes())}
         ],
