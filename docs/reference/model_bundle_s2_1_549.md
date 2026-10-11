@@ -3,18 +3,18 @@
 <!-- doc-date: 2026-10-11 -->
 <!-- doc-module: cross -->
 
-# #549 S2-1：Model-bundle manifest mode 候選實作與驗證紀錄
+# #549 S2-1：Model-bundle manifest mode 實作與驗證紀錄
 
-本頁記錄 #549 S2-1 的候選實作（manifest mode Gate A、TR-1b allowlist、resolved bindings、Gate B `load_verification`）與逐層驗證邊界。
+本頁記錄 #549 S2-1 的實作（manifest mode Gate A、TR-1b allowlist、resolved bindings、Gate B `load_verification`）與逐層驗證邊界。
 Source baseline 是 `main@f06c90627e2a1dfa48615e9643f1d0a2c97b5a44`。
 實作授權是 [#549 S2-1 owner implementation authorization](https://github.com/raylei50653/saccade/issues/549#issuecomment-6104733886)，
 設計依據是 [ADR 028 D1–D7](../decisions/028-model-bundle-runtime-separation.md#decision-549-s1) 與
 [S1 model-bundle 契約 §2–§7](../architecture/model_bundle_contract_549.md)；identity 欄位與 Gate A／B 位置沿用
 [CC-536-01-02](../architecture/ship_export_contracts_536.md#cc-536-01-02)。
 
-**狀態：候選分支（一條 Draft PR，未 merge）。** merge 需要另一則釘在最終審查 head 的 owner 授權。
-實作狀態的唯一寫入處仍是 [CC-536-01-02 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-n-t3)
-與 ADR 028 決策段；本頁只保留候選的逐列證據，在授權 merge 且 main CI 成功之前不回寫那兩處。
+**狀態：已 merge，屬 source-level implemented。** [#576](https://github.com/raylei50653/saccade/pull/576) 依[指定 head 的 owner merge 授權](https://github.com/raylei50653/saccade/pull/576#issuecomment-6105974376)，以 merge commit `c5ddf51c62c382b8f6851c57bb07b2b72d18d083` 合併（parents `f06c9062`＋reviewed head `f294459e`）；main CI 8/8 SUCCESS。
+實作狀態的唯一寫入處是 [CC-536-01-02 S2-1 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-1)。ADR 028 與 S1 契約只引用該處。本頁保留逐列證據。
+下表各層的結果是在最終審查 head 上取得的。merge tree 與 head tree 相同，但本機與 GPU 證據沒有在 merge commit 上重跑。
 qualified GPU V5 仍為 **UNRESOLVED**，installed package 仍為 **UNVERIFIED**，`distribution.status` 維持 `local-only`。
 
 ## 1. Implemented
@@ -54,7 +54,7 @@ install 把 allowlist 放在 `share/saccade/trusted_model_bundles.json`，[check
 
 MB 列到實際測試的對應在 [model_bundle_s2_1_coverage_549.json](model_bundle_s2_1_coverage_549.json)，由
 [contract test](../../tests/contract/test_model_bundle_contract_549.py) 核對：S2-1 擁有的 14 列（MB-30…MB-33、MB-35…MB-40、MB-54、MB-55、MB-57、MB-58）都列出，每個測試檔與 case 都存在。
-schema／semantic 的 25 列由 [C++ reader ctest](../../tests/native/test_shipping_model_bundle.cpp) 逐列讀 matrix，在 runtime reader 上重跑，必須在同一個 instance path＋keyword 或同一條 rule 拒絕。
+schema／semantic 共 25 列，其中 MB-01、MB-02 是沒有 mutation 的正控制。[C++ reader ctest](../../tests/native/test_shipping_model_bundle.cpp) 逐列讀 matrix，把其餘 23 個負控制列在 runtime reader 上重跑，每一列都必須在同一個 instance path＋keyword 或同一條 rule 拒絕。
 
 ## 3. Verified／unverified：逐層證據
 
@@ -64,15 +64,15 @@ schema／semantic 的 25 列由 [C++ reader ctest](../../tests/native/test_shipp
 |:--|:--|:--|:--|
 | CPU ctest（CI `shipping-config-loader` 同一組） | standalone `-DCMAKE_COMPILE_WARNING_AS_ERROR=ON` CTest 10/10：reader（matrix 的 23 列 schema／semantic 全數拒絕於正確 path＋keyword 或 rule）、manifest Gate A 39 cases、legacy Gate A（含 MB-57）、completion（load_verification 的 writer 規則；Gate A 後、Gate B 記錄前的 SIGKILL）；0 failures | local verified；CI 以 PR checks 為準 | `results/549_s2_1/`（本機 build log） |
 | 真實 frozen N01–N06（manifest Gate A） | example manifest 原樣、真實 members：`checksum_matched`，`allowlist_entry=example`（example 不是批准） | local verified | `test_shipping_preflight_manifest --frozen-model-root` |
-| 真 binary CLI | 4 支 suite 58 passed／0 skipped（manifest 新增 29）：MB-54 在 run id 前拒絕；manifest 拒絕控制皆無 `cuInit`；stand-in bundle Gate B dlopen 失敗寫 `load_verification=failed`；真 bundle 兩 root 完整執行 `verified/hashed_before_load`；SIGKILL 只在 runtime root 的 operator 已映射進 process（dlopen 之後）且 journal 尚無 load 紀錄時送出，結果留 `running`＋`null`（CPU completion ctest 的 kill 沒有 loader，只驗 writer 規則） | local verified（CI 不 build binary，這些測試在 CI 會 skip） | `tests/unit/test_saccade_track_*_cli.py` |
+| 真 binary CLI | 4 支 suite 58 passed／0 skipped（manifest 新增 29）：MB-54 在 run id 前拒絕；manifest 拒絕控制皆無 `cuInit`；stand-in bundle Gate B dlopen 失敗寫 `load_verification=failed`；真 bundle 兩 root 完整執行 `verified/hashed_before_load`；SIGKILL 只在 runtime root 的 operator 已映射進 process（dlopen 之後）且 journal 尚無 load 紀錄時送出，結果留 `running`＋`null`（CPU completion ctest 的 kill 沒有 loader，只驗 writer 規則） | local verified（CI 的 C++ build 會編譯 `saccade_track`，但 pytest job 沒有 binary，這些測試在 CI 會 skip） | `tests/unit/test_saccade_track_*_cli.py` |
 | Native GPU ctest | `build/shipping` CTest 17/17（serial、double buffer、detector S2、post-detector、ingest、native build 無退化）；新 Gate B ctest 16 checks：cross-root load 映射的是 runtime root 的 operator 副本、MB-55 置換在 dlopen 前拒絕、帶 model root 與 bindings 不符皆拒絕 | local verified | `test_shipping_model_bundle_gate_b.cpp` |
 | GPU 七序列（V5） | 最終 head `a36f229bcc307a0b91de6ef49efb8c976ff89f61` 的 release binary（`saccade_track` `569b11d0…`、measurement `beafa499…`）4 個正向模式與 7 個負控制皆實際重播 7 序列／5316 frames。qualified parity **UNRESOLVED**（V5 driver `617.42 != 616.92`），負控制標準 `caught=false`。raw：正向 detector／MOT／graph 比較 EXACT（無 trace 為 NOT_RUN），7 個負控制在預期 section 為 DIFFERS；正向 journal v3／report v5 為 `checksum_matched`＋`verified`。較早 head（`0d78e597`、`f00cad4a`）的重播結果相同，已被此列取代 | **UNRESOLVED**（qualification）；raw 為 local diagnostic | `results/549_s2_1/gpu_a36f229bcc30/`，SHA256SUMS 的 SHA256 `c7ea59a97dda7061372973160d107773e06b211868a01f9638966e2cf2d2172e`，source manifest `731dde6d…` before／after 相同 |
 | Manifest mode 七序列 | 同一 release `saccade_track` 以 `--model-bundle`（operator 在 runtime root，其他在 bundle root）跑 7 序列／5316 frames：complete、`verified`，MOT 文字逐序列與 legacy shipping run 相同；`--require-identity expected_source_verified` 在 `checksum_matched` 被拒 | local diagnostic（不是 parity 宣稱） | 同上 `manifest_mode/` |
 | Surface／link | shipping measurement surface 與 link surface 通過；measurement binary 如預期被拒 | local verified | 同上 |
 | 本機 pre_push | 最終 head PASS（exit 0）：pytest 5650 passed、52 skipped（S2-1 相關 suites 無 skip）、105 deselected、5 xfailed | local verified | `results/549_s2_1/pre_push_r3.log` |
-| Runtime coordinate | 最終 head 的 fresh 完整候選（r3）：只有 implementation 軸移動（S2-1 起點 `0fcbdb09…` → `1f50133baa82…`，294→297 檔）；每輪 probe 重跑 digest 等於封存值（fixture change detector，`equivalence=unproven`）；attested 通過；每個 outgoing canonical 原樣封存。審查面為 stacked [#578](https://github.com/raylei50653/saccade/pull/578)（r3）；[#575](https://github.com/raylei50653/saccade/pull/575)、[#577](https://github.com/raylei50653/saccade/pull/577) 已被取代、不 merge | stacked review 待審 | `results/549_s2_1/runtime_identity_capture_r3.log`、`coordinate_attested_r3.log` |
-| PR CI／C++ build | 以 Draft PR 指定 head 的 checks 為準 | pending | — |
-| 獨立 review | Codex read-only review `9f899ec3`：3 項（歷史 report 接受 S2-1 欄位、MB-58 kill 未證明發生於載入中、VL0 拒絕 ≥2^53 的整數值 float），於 `8748566e` 修正。owner read-only review `8748566e`：1 項（R-08 比較前 clamp 大型 float），於 `c0b7d8f1` 修正。最終 head 的再審結果記在 PR；均不是 GitHub APPROVED review | 修正已 local verified；再審待做 | `results/549_s2_1/codex_review_9f899ec3.md` |
+| Runtime coordinate | 最終 head 的 fresh 完整候選（r3）：只有 implementation 軸移動（S2-1 起點 `0fcbdb09…` → `1f50133baa82…`，294→297 檔）；每輪 probe 重跑 digest 等於封存值（fixture change detector，`equivalence=unproven`）；attested 通過；每個 outgoing canonical 原樣封存。審查面為 stacked [#578](https://github.com/raylei50653/saccade/pull/578)（r3）；[#575](https://github.com/raylei50653/saccade/pull/575)、[#577](https://github.com/raylei50653/saccade/pull/577) 已被取代、不 merge | stacked review 完成：r3 再審沒有 findings，並以祖先身份隨 #576 落地（#575／#577／#578 以 closed without merge 收尾，審查證據保留）；stacked review 不是 remote CI pass | `results/549_s2_1/runtime_identity_capture_r3.log`、`coordinate_attested_r3.log` |
+| PR CI／C++ build | 最終 head `f294459e`：[CI 38114298315](https://github.com/raylei50653/saccade/actions/runs/38114298315)＋[C++ 38114298365](https://github.com/raylei50653/saccade/actions/runs/38114298365) 8/8 SUCCESS。merge 後 `c5ddf51c` 的 [main CI 38115253152](https://github.com/raylei50653/saccade/actions/runs/38115253152)＋[C++ 38115253145](https://github.com/raylei50653/saccade/actions/runs/38115253145) 8/8 SUCCESS（headSha 相符，pytest 5393 passed）。C++ build 只編譯 `saccade_track`，不執行 CLI 或 GPU 測試 | CI verified（只限 `ci_ctest`、C++ 編譯與 Python／contract jobs） | GitHub Actions |
+| 獨立 review | Codex read-only review `9f899ec3`：3 項（歷史 report 接受 S2-1 欄位、MB-58 kill 未證明發生於載入中、VL0 拒絕 ≥2^53 的整數值 float），於 `8748566e` 修正。owner read-only review `8748566e`：1 項（R-08 比較前 clamp 大型 float），於 `c0b7d8f1` 修正。最終 head `f294459e`／`a36f229b` 由 Codex 與 owner 再審，都沒有 findings；均不是 GitHub APPROVED review | 完成（read-only review） | `results/549_s2_1/codex_review_9f899ec3.md` |
 | Installed package | 未 re-pin、未驗證（包含 auditor `_exit(127)` 路徑） | **UNVERIFIED** | — |
 
 ## 4. Deferred／known limits
