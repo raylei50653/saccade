@@ -259,7 +259,9 @@ bool refuses(const sh::DetectorPlan& plan, const std::string& root, const std::s
 void check_loader(const std::string& config, const std::string& lineage, const std::string& attestation,
                   const std::string& root) {
     const sh::ResolvedShippingConfig cfg = sh::load_resolved_shipping_config_file(config);
-    const sh::DetectorPlan plan = sh::plan_detector_files(cfg, {lineage, attestation});
+    // D-N03-5: name the model root's attested operator as the runtime package's.
+    const sh::DetectorPlan plan = sh::plan_detector_files(
+        cfg, {lineage, attestation, sh::resolve_model_path(root, "build/libsaccade_scan_torchop.so")});
     for (const std::string& rel : {plan.op_library.path, plan.head_artifact.path, plan.backbone_engine.path}) {
         if (!std::filesystem::exists(std::filesystem::path(root) / rel)) {
             std::printf("SKIP loader checks: %s not present\n", rel.c_str());
@@ -276,12 +278,28 @@ void check_loader(const std::string& config, const std::string& lineage, const s
     p = plan;
     p.backbone_engine.sha256 = zero;
     CHECK(refuses(p, root, "backbone engine"));
-    // Refused on hashes before anything was loaded.
+    // Refused on hashes before anything was loaded (neither the path nor the
+    // operator's sealed memfd is mapped).
     CHECK(!mapped(std::filesystem::path(plan.op_library.path).filename().string()));
+    CHECK(!mapped("memfd:saccade-n03:"));
+    // D-N03-5: no named operator, or a binding naming another file, is refused
+    // before anything is read.
+    p = plan;
+    p.runtime_operator_path.clear();
+    CHECK(refuses(p, root, "no runtime package operator library was named (D-N03-5)"));
+    p = plan;
+    p.runtime_operator_path = plan.runtime_operator_path + ".other";
+    CHECK(refuses(p, root, "is not the runtime package's"));
+    CHECK(!mapped("memfd:saccade-n03:"));
 
     sh::DetectorHost host(plan, root, nullptr);
     const sh::HeadLoadReport& r = host.load_report();
     CHECK(r.op_library_sha256 == plan.op_library.sha256);
+    // The operator runs from its sealed memfd; the source path is not mapped.
+    CHECK(r.op_library_byte_scope == "loaded_buffer");
+    CHECK(r.op_library_mapped.rfind("/memfd:saccade-n03:src-fd=", 0) == 0);
+    CHECK(mapped("memfd:saccade-n03:"));
+    CHECK(!mapped(std::filesystem::path(plan.op_library.path).filename().string()));
     CHECK(r.param_devices == std::vector<std::string>{"cuda:0"});
     CHECK(!r.constant_devices.empty());
     for (const auto& d : r.constant_devices) CHECK(d == "cpu");

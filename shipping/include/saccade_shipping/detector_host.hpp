@@ -13,9 +13,12 @@
 //      backbone engine == the plan's bindings (frozen lineage, or the
 //      realization attestation for the operator library; in manifest mode
 //      also the manifest's). Head and engine load the owned immutable buffer
-//      whose SHA-256 was checked. The operator is hashed, then dlopen'ed by
-//      its path; its TOCTOU gap remains (#549 S2-2, ADR 028 D5);
-//   2. the operator library is dlopen'ed (it registers
+//      whose SHA-256 was checked. The operator must be the runtime package's
+//      file the caller named (DetectorPlan::runtime_operator_path, D-N03-5);
+//      it is read once, hashed and sealed into a memfd that is read back
+//      (operator_loader.hpp, #549 S2-2 P-N03);
+//   2. the operator library is dlopen'ed from that sealed memfd and the
+//      mapping is checked to be it (it registers
 //      `saccade_native::selective_scan_fwd` with the dispatcher);
 //   3. the artifact's runtime requirements are set and read back (graph
 //      executor optimize off, cuDNN benchmark off, cuDNN TF32 on, matmul TF32
@@ -76,10 +79,11 @@ struct HeadLoadReport {
     int trt_version = 0;                 // getInferLibVersion()
     std::string torch_version;
     std::string gpu_sm;  // manifest mode: device 0's actual SM, checked before deserialization
-    // Per-object byte readback; the aggregate remains hashed_before_load
-    // while the operator retains its path load and unresolved TOCTOU gap.
-    std::string op_library_byte_scope = "hashed_before_load";
-    std::string head_artifact_byte_scope, backbone_engine_byte_scope;
+    // Per-object byte scopes (D-N03-2): each object is loaded from the buffer
+    // whose SHA-256 was checked (the operator from its sealed memfd). The
+    // aggregate load_verification stays hashed_before_load (not promoted here).
+    std::string op_library_byte_scope, head_artifact_byte_scope, backbone_engine_byte_scope;
+    std::string op_library_mapped;  // the kernel's path of the operator mapping (its memfd)
 };
 
 #ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS

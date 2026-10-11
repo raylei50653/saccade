@@ -54,9 +54,9 @@ set_target_properties(saccade_shipping_mot PROPERTIES POSITION_INDEPENDENT_CODE 
 add_library(saccade_shipping_native_config STATIC
     src/native_config.cpp src/post_detector_plan.cpp src/sequence_output.cpp src/ingest_plan.cpp
     src/sha256.cpp src/detector_plan.cpp src/schedule_plan.cpp src/model_compatibility.cpp
-    src/verified_model_bytes.cpp)
+    src/verified_model_bytes.cpp src/operator_loader.cpp)
 target_link_libraries(saccade_shipping_native_config PUBLIC
-    saccade_shipping_config saccade_tracker_params saccade_shipping_mot)
+    saccade_shipping_config saccade_tracker_params saccade_shipping_mot ${CMAKE_DL_LIBS})
 target_compile_options(saccade_shipping_native_config PRIVATE -Wall -Wextra -Wpedantic)
 set_target_properties(saccade_shipping_native_config PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -203,6 +203,24 @@ add_executable(saccade_shipping_verified_model_bytes_test
 target_link_libraries(saccade_shipping_verified_model_bytes_test PRIVATE saccade_shipping_native_config)
 target_compile_options(saccade_shipping_verified_model_bytes_test PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME saccade_shipping_verified_model_bytes_test COMMAND saccade_shipping_verified_model_bytes_test)
+
+# N03 operator load (#549 S2-2): two stand-in operator objects (values 1, 2)
+# loaded through the sealed-memfd path on the real dynamic loader. CPU only.
+foreach(_saccade_fixture_value 1 2)
+    add_library(saccade_shipping_operator_fixture${_saccade_fixture_value} MODULE
+        ${SACCADE_REPO_ROOT}/tests/native/fixtures/operator_fixture.cpp)
+    target_compile_definitions(saccade_shipping_operator_fixture${_saccade_fixture_value} PRIVATE
+        SACCADE_OPERATOR_FIXTURE_VALUE=${_saccade_fixture_value})
+endforeach()
+add_executable(saccade_shipping_operator_loader_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_operator_loader.cpp)
+target_link_libraries(saccade_shipping_operator_loader_test PRIVATE saccade_shipping_native_config)
+target_compile_options(saccade_shipping_operator_loader_test PRIVATE -Wall -Wextra -Wpedantic)
+add_dependencies(saccade_shipping_operator_loader_test
+    saccade_shipping_operator_fixture1 saccade_shipping_operator_fixture2)
+add_test(NAME saccade_shipping_operator_loader_test
+    COMMAND saccade_shipping_operator_loader_test
+            $<TARGET_FILE:saccade_shipping_operator_fixture1> $<TARGET_FILE:saccade_shipping_operator_fixture2>)
 
 if(TARGET saccade_tracking)
     # Measurement boundary (#465 Phase C PR-C2). Each runtime library below is

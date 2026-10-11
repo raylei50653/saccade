@@ -109,6 +109,11 @@ struct DetectorPlan {
     // Manifest versions matched by Gate A, SM and ordered I/O for Gate B.
     // Null in legacy mode; Gate B never reopens the manifest to obtain it.
     std::shared_ptr<const ManifestLoadContract> manifest_contract;
+    // D-N03-5 (#549 S2-2): the only operator library the detector load may
+    // open, set by the caller of Gate B (the shipping entrypoints: their
+    // runtime package's, operator_loader.hpp). Empty is refused; a plan whose
+    // operator binding names another file is refused.
+    std::string runtime_operator_path;
 };
 
 // sha256 of the lineage file is the caller's (it read the bytes).
@@ -121,6 +126,9 @@ DetectorPlan plan_detector(const ResolvedShippingConfig& cfg, const JsonValue& l
 struct DetectorInputs {
     std::string lineage_path;
     std::string attestation_path;  // may be empty
+    // Copied into DetectorPlan::runtime_operator_path (D-N03-5); empty is
+    // refused by the detector load.
+    std::string runtime_operator_path{};
 };
 DetectorPlan plan_detector_files(const ResolvedShippingConfig& cfg, const DetectorInputs& in);
 
