@@ -1,0 +1,6 @@
+{
+  "schema": "saccade.trusted_model_bundles/v1",
+  "reading": "Approved model-bundle manifests for this runtime build, by exact manifest file sha256. Engineering identity only: not publisher authentication of the bundle, not a rights grant, not a benchmark claim.",
+  "detector_contract": "saccade.native_detector_contract/v1",
+  "entries": []
+}

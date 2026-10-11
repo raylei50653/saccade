@@ -10,8 +10,10 @@
 // does: the decoder, detector and PerceptionPipeline are per run; the frame
 // pools, tracker, GMC and track ids are per sequence. The only inputs are the
 // resolved config, the frozen head lineage, the operator library's
-// realization attestation and the files they bind; no environment variable is
-// read.
+// realization attestation and the files they bind -- given one by one
+// (legacy mode) or as a model bundle whose manifest binds them all
+// (--model-bundle, #549 S2-1; the operator library and the allowlist come from
+// this installation's share/saccade/); no environment variable is read.
 //
 // Exit 0: every sequence written and the journal's state=complete written;
 // 2: any error (message on stderr; an argument that is not listed below is
@@ -32,8 +34,11 @@
 //   saccade_track --config configs/shipping/mamba_whole_graph.resolved.json
 //       --lineage models/yolo/<stem>.lineage.json
 //       [--attestation configs/shipping/mamba_head_realization.attestation.json]
-//       [--model-root DIR] --out DIR [--report JSON] [--trace DIR] SEQUENCE_DIR...
-// (--report / --trace: track_driver.hpp). This is the whole interface: the
+//       [--model-root DIR] [--require-identity LEVEL] --out DIR [--report JSON]
+//       [--trace DIR] SEQUENCE_DIR...
+//   saccade_track --model-bundle DIR [--require-identity LEVEL] --out DIR
+//       [--report JSON] [--trace DIR] SEQUENCE_DIR...
+// (--model-bundle, --require-identity, --report / --trace: track_driver.hpp). This is the whole interface: the
 // shipping build has no developer option and no measurement hook (PR-C2); the
 // negative controls, the serial override and --max-frames are
 // saccade_track_measurement, a developer build that is not installed.
@@ -57,8 +62,9 @@ namespace track = saccade::shipping::track;
 namespace {
 
 constexpr const char* kUsage =
-    "usage: saccade_track --config JSON --lineage JSON [--attestation JSON] "
-    "[--model-root DIR] --out DIR [--report JSON] [--trace DIR] SEQUENCE_DIR...";
+    "usage: saccade_track (--config JSON --lineage JSON [--attestation JSON] [--model-root DIR] | "
+    "--model-bundle DIR) [--require-identity none|checksum_matched|expected_source_verified] "
+    "--out DIR [--report JSON] [--trace DIR] SEQUENCE_DIR...";
 
 track::Options parse_args(int argc, char** argv) {
     track::Options o;
@@ -78,12 +84,13 @@ int run(const track::Options& opt, sh::RunCompletion& completion) {
     // Gate A (track_driver.hpp): no CUDA call happens before it returns.
     sh::PreflightResult pre =
         track::preflight(opt, "saccade_track", completion, 0, /*serial_requested=*/false);
+    // Gate B: the runtime loads the detector (track::load_runtime).
     if (pre.schedule == sh::Schedule::Serial) {
-        sh::SerialRuntime rt(pre.config, std::move(pre.detector), opt.model_root);
-        return track::run_sequences(rt, opt, completion, "saccade_track", "serial", 0, nullptr);
+        auto rt = track::load_runtime<sh::SerialRuntime>(opt, pre, completion);
+        return track::run_sequences(*rt, opt, completion, "saccade_track", "serial", 0, nullptr);
     }
-    sh::DoubleBufferRuntime rt(pre.config, std::move(pre.detector), opt.model_root);
-    return track::run_sequences(rt, opt, completion, "saccade_track", "double_buffer", 0, nullptr);
+    auto rt = track::load_runtime<sh::DoubleBufferRuntime>(opt, pre, completion);
+    return track::run_sequences(*rt, opt, completion, "saccade_track", "double_buffer", 0, nullptr);
 }
 
 }  // namespace

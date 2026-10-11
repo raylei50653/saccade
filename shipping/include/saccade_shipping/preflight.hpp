@@ -21,12 +21,40 @@
 //      engine are regular files under the model root and their sha256 is the
 //      detector plan's (the detector load checks them again, Gate B).
 //
+// Manifest mode (#549 S2-1, --model-bundle DIR; model_bundle.hpp,
+// docs/architecture/model_bundle_contract_549.md): there is no config,
+// lineage, attestation or model root argument. Two roots are each resolved
+// once: the bundle directory (every member carried_by model_bundle) and the
+// runtime package's share/saccade/ (the operator library and the allowlist).
+// Before step 1:
+//   0a. VL0: <bundle>/model_bundle.json, opened beneath the bundle root, is
+//       the exact saccade.model_bundle/v1 schema and R-01..R-08;
+//   0b. VL2 input: <runtime root>/trusted_model_bundles.json has the sha256
+//       the entrypoint was built with (`allowlist_sha256`), the
+//       saccade.trusted_model_bundles/v1 schema and R-09, and the manifest's
+//       detector contract; its entry for the manifest's sha256 (if any) is
+//       recorded;
+// then steps 1-4 as above, except that every file is a manifest member: each
+// is opened beneath its root with openat2 (no symlink, no escape; a kernel
+// without openat2 is refused), its size is checked before it is hashed, and
+// its sha256 must be the manifest's -- the config, lineage and attestation
+// too (the attestation is required). The lineage / attestation must bind the
+// same three files (path and sha256) as the manifest's pairing. Gate A then
+// gives the detector plan the resolved bindings of those three files
+// (DetectorPlan::resolved): the only paths the detector load reads.
+//
 // Gate A decodes no frame, dlopens nothing, deserializes no engine and loads
 // no head (Gate B, detector_host.hpp). Through RunCompletion, Gate A records
-// the six legacy bindings and promotes to checksum_matched only after every
-// check passes. Metadata observations hash the same buffers the existing
-// parsers consume. The final Gate A identity is immutable, including on
-// rejection; it establishes neither trusted origin nor successful loading.
+// the bindings and promotes the level only after every check passes:
+// checksum_matched, or in manifest mode expected_source_verified when the
+// allowlist has an `approved` entry for the manifest's exact sha256
+// (`example`, `revoked` and an unlisted manifest stay checksum_matched;
+// legacy mode never exceeds checksum_matched). Metadata observations hash the
+// same buffers the existing parsers consume. The final Gate A identity is
+// immutable, including on rejection; it establishes neither publisher
+// authentication nor successful loading (Gate B writes load_verification).
+// Last, the level is compared with --require-identity (`required`, recorded
+// in the identity): a lower level exits 2, with the identity kept as it is.
 // The runtime re-reads each sequence's input when
 // it runs it and refuses what it refuses here, so a file changed after Gate A
 // still fails closed, at that sequence.
@@ -49,11 +77,16 @@ public:
 };
 
 struct PreflightInputs {
-    std::string config, lineage, attestation;  // attestation may be empty
-    std::string model_root = ".";
+    std::string config, lineage, attestation;  // legacy mode; attestation may be empty
+    std::string model_root = ".";              // legacy mode only
     std::vector<std::string> sequences;        // sequence directories, argv order
     int max_frames = 0;                        // developer build only; <= 0 = every frame
     bool serial_requested = false;             // developer build only (--schedule serial)
+    IdentityLevel required = IdentityLevel::None;  // --require-identity
+    // Manifest mode (non-empty model_bundle): the bundle directory, the
+    // runtime package's share/saccade/ and the allowlist sha256 the
+    // entrypoint was built with (track_driver.hpp; never a caller option).
+    std::string model_bundle{}, runtime_root{}, allowlist_sha256{};
 };
 
 // What Gate A checked, for the runtime to build from: the same config and

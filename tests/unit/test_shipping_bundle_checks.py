@@ -142,6 +142,7 @@ def test_expected_files_cover_the_bundle() -> None:
     } <= files
     assert sum(f.startswith("lib/vendor/") for f in files) == 27
     assert "share/saccade/build/libsaccade_scan_torchop.so" in files
+    assert "share/saccade/trusted_model_bundles.json" in files  # #549 S2-1 TR-1b
     assert "licenses/THIRD_PARTY.md" in files
     # #547: the licence texts the package supplies itself
     assert {

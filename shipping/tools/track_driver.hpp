@@ -5,11 +5,22 @@
 // SACCADE_SHIPPING_MEASUREMENT_HOOKS: what the developer build adds is in its
 // own main and in the measurement variant of the runtime libraries.
 //
-// Interface options both binaries accept (shipping interface):
-//   --config JSON --lineage JSON [--attestation JSON] [--model-root DIR]
-//   --out DIR SEQUENCE_DIR...
-//   --report JSON   what ran: run id, identity, plan bindings, load report,
-//                   per-sequence counts (format saccade.native_track_report/v4)
+// Interface options both binaries accept (shipping interface), in one of two
+// mutually exclusive modes (#549 S2-1; docs/architecture/
+// model_bundle_contract_549.md section 3.4):
+//   legacy:   --config JSON --lineage JSON [--attestation JSON] [--model-root DIR]
+//   manifest: --model-bundle DIR
+//   either:   [--require-identity none|checksum_matched|expected_source_verified]
+//             --out DIR SEQUENCE_DIR...
+//   --model-bundle together with any legacy option exits 2 before any file is
+//   read (and before the run id). Manifest mode reads the operator library and
+//   the allowlist from this installation's share/saccade/ (the entrypoint's
+//   ../share/saccade), and the allowlist must have the sha256 this binary was
+//   built with (SACCADE_TRUSTED_MODEL_BUNDLES_SHA256). --require-identity
+//   (default none) exits 2 in Gate A when the identity level is lower.
+//   --report JSON   what ran: run id, identity, load verification, plan
+//                   bindings, load report, per-sequence counts (format
+//                   saccade.native_track_report/v5)
 //   --trace DIR     per sequence, DIR/<sequence>/detector.bin: each frame's
 //                   detector rows in the PR-5 detector.bin record format
 //                   (int32 frame, n, is_tiled; float32 boxes [n, 4]; float32
@@ -33,6 +44,10 @@
 // seqinfo.ini and img1 listing, the output directories and the three model
 // files' sha256 are checked; a failure exits 2 with the journal failed and
 // no CUDA call. Passing prints "<entrypoint>: preflight passed" to stderr.
+//
+// Gate B (detector_host.hpp): building the runtime loads the detector's three
+// files; the journal's load_verification is then `verified` (byte_scope
+// hashed_before_load), or `failed` when the load throws DetectorLoadError.
 #pragma once
 
 #include <cstdint>
@@ -45,25 +60,43 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
+#include "saccade_shipping/detector_plan.hpp"
 #include "saccade_shipping/preflight.hpp"
 #include "saccade_shipping/run_completion.hpp"
 #include "saccade_shipping/serial_runtime.hpp"
 #include "saccade_shipping/sha256.hpp"
 #include "saccade_shipping/strict_json.hpp"
 
+#ifndef SACCADE_TRUSTED_MODEL_BUNDLES_SHA256
+#error "the entrypoint is built with the allowlist's sha256 (shipping/CMakeLists.txt, #549 S2-1 TR-1b)"
+#endif
+
 namespace saccade::shipping::track {
 
-// v4 (S2-1a): immutable Gate A identity. Historical v3's null identity and
-// v2's lack of completion evidence retain their original meanings.
-inline constexpr const char* kReportFormat = "saccade.native_track_report/v4";
+// v5 (S2-1): identity mode / policy / allowlist fields, load_verification, the
+// manifest mode's resolved bindings. Historical v4's legacy checksum
+// identity, v3's null identity and v2's lack of completion evidence retain
+// their original meanings.
+inline constexpr const char* kReportFormat = "saccade.native_track_report/v5";
+
+// The allowlist sha256 this entrypoint was built with (TR-1b). Not a caller
+// option: replacing the allowlist means replacing the entrypoint.
+inline constexpr const char* kTrustedModelBundlesSha256 = SACCADE_TRUSTED_MODEL_BUNDLES_SHA256;
 
 [[noreturn]] inline void fail(const std::string& what) { throw std::runtime_error(what); }
 
 struct Options {
-    std::string config, lineage, attestation, model_root = ".", out, report, trace;
+    std::string config, lineage, attestation, model_root, model_bundle, out, report, trace;
+    IdentityLevel required = IdentityLevel::None;
     std::vector<std::string> sequences;
+    bool legacy_option = false;  // --config / --lineage / --attestation / --model-root given
+
+    bool manifest_mode() const { return !model_bundle.empty(); }
+    // The legacy model root (default "."); manifest mode has none.
+    std::string legacy_model_root() const { return manifest_mode() ? "" : (model_root.empty() ? "." : model_root); }
 };
 
 // One argument of the shipping interface: true when `a` was consumed (`next`
@@ -74,16 +107,38 @@ inline bool parse_interface_arg(const std::string& a, const std::function<std::s
     else if (a == "--lineage") o.lineage = next();
     else if (a == "--attestation") o.attestation = next();
     else if (a == "--model-root") o.model_root = next();
+    else if (a == "--model-bundle") {
+        o.model_bundle = next();
+        if (o.model_bundle.empty()) fail("--model-bundle needs a directory");
+    }
+    else if (a == "--require-identity") o.required = parse_identity_level(next());
     else if (a == "--out") o.out = next();
     else if (a == "--report") o.report = next();
     else if (a == "--trace") o.trace = next();
     else if (a.rfind("--", 0) == 0) return false;
     else o.sequences.push_back(a);
+    if (a == "--config" || a == "--lineage" || a == "--attestation" || a == "--model-root") o.legacy_option = true;
     return true;
 }
 
+// After every argument is parsed, before any file is read: the two modes are
+// mutually exclusive (MB-54), then each needs its own options.
 inline bool interface_complete(const Options& o) {
-    return !o.config.empty() && !o.lineage.empty() && !o.out.empty() && !o.sequences.empty();
+    if (o.manifest_mode() && o.legacy_option) {
+        fail("--model-bundle cannot be combined with --config, --lineage, --attestation or --model-root");
+    }
+    const bool model = o.manifest_mode() || (!o.config.empty() && !o.lineage.empty());
+    return model && !o.out.empty() && !o.sequences.empty();
+}
+
+// The runtime package's root of this installation: <prefix>/share/saccade for
+// the entrypoint <prefix>/libexec/saccade_track (the entrypoint's own
+// location, resolved by the kernel; no environment variable, no search).
+inline std::string runtime_package_root() {
+    std::error_code ec;
+    const std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (ec) fail("cannot resolve the entrypoint's location (/proc/self/exe): " + ec.message());
+    return (exe.parent_path().parent_path() / "share" / "saccade").string();
 }
 
 // Sequence name = the directory's name, as the oracle names <seq>.txt.
@@ -109,7 +164,7 @@ inline void begin_run(const Options& o, const char* entrypoint, std::optional<Ru
     require_distinct_sequences(o);
     RunOutputs outputs{o.out, o.report, o.trace, {}};
     for (const std::string& s : o.sequences) outputs.sequences.push_back(sequence_name(s));
-    completion.emplace(run_id, entrypoint, std::move(outputs));
+    completion.emplace(run_id, entrypoint, std::move(outputs), o.manifest_mode(), o.required);
 }
 
 // Gate A, right after begin_run; the runtime is built from what it returns.
@@ -117,12 +172,46 @@ inline void begin_run(const Options& o, const char* entrypoint, std::optional<Ru
 // saccade_track).
 inline PreflightResult preflight(const Options& o, const char* entrypoint, RunCompletion& completion,
                                  int max_frames, bool serial_requested) {
-    PreflightResult p = run_preflight(
-        PreflightInputs{o.config, o.lineage, o.attestation, o.model_root, o.sequences, max_frames,
-                        serial_requested},
-        completion);
+    PreflightInputs in;
+    in.sequences = o.sequences;
+    in.max_frames = max_frames;
+    in.serial_requested = serial_requested;
+    in.required = o.required;
+    if (o.manifest_mode()) {
+        in.model_root.clear();
+        in.model_bundle = o.model_bundle;
+        in.runtime_root = runtime_package_root();
+        in.allowlist_sha256 = kTrustedModelBundlesSha256;
+    } else {
+        in.config = o.config;
+        in.lineage = o.lineage;
+        in.attestation = o.attestation;
+        in.model_root = o.legacy_model_root();
+    }
+    PreflightResult p = run_preflight(in, completion);
     std::cerr << entrypoint << ": preflight passed" << std::endl;
     return p;
+}
+
+// Gate B: builds the runtime from Gate A's result -- the detector load hashes
+// and loads the three files (manifest mode: from the resolved bindings only)
+// -- then records load_verification: verified, or failed when the load throws
+// DetectorLoadError. Any other failure leaves it null.
+template <class Runtime>
+std::unique_ptr<Runtime> load_runtime(const Options& o, PreflightResult& pre, RunCompletion& completion) {
+    std::unique_ptr<Runtime> rt;
+    try {
+        rt = std::make_unique<Runtime>(pre.config, std::move(pre.detector), o.legacy_model_root());
+    } catch (const DetectorLoadError&) {
+        try {
+            completion.record_load_verification(false);
+        } catch (...) {
+            // The load's own error is what the run reports.
+        }
+        throw;
+    }
+    completion.record_load_verification(true);
+    return rt;
 }
 
 class DetectorTrace : public FrameObserver {
@@ -175,6 +264,16 @@ inline JsonValue runtime_json(const HeadRuntimeRequirements& r) {
     return o;
 }
 
+inline JsonValue resolved_json(const ResolvedBinding& b) {
+    JsonValue o = JsonValue::make_object();
+    o.set("role", JsonValue::make_string(b.role));
+    o.set("root_kind", JsonValue::make_string(b.root_kind));
+    o.set("path", JsonValue::make_string(b.absolute_path));
+    o.set("bytes", JsonValue::make_int(b.bytes));
+    o.set("sha256", JsonValue::make_string(b.sha256));
+    return o;
+}
+
 template <class Runtime>
 JsonValue load_json(const Runtime& rt) {
     const DetectorPlan& p = rt.detector_plan();
@@ -186,6 +285,15 @@ JsonValue load_json(const Runtime& rt) {
     op.set("lineage_sha256", JsonValue::make_string(p.op_library_lineage_sha256));
     op.set("from_attestation", JsonValue::make_bool(p.op_library_from_attestation));
     plan.set("op_library", std::move(op));
+    if (p.resolved) {
+        JsonValue resolved = JsonValue::make_object();
+        resolved.set("op_library", resolved_json(p.resolved->op_library));
+        resolved.set("head_artifact", resolved_json(p.resolved->head_artifact));
+        resolved.set("backbone_engine", resolved_json(p.resolved->backbone_engine));
+        plan.set("resolved", std::move(resolved));
+    } else {
+        plan.set("resolved", JsonValue::make_null());
+    }
     JsonValue load = JsonValue::make_object();
     load.set("op_library_sha256", JsonValue::make_string(r.op_library_sha256));
     load.set("head_artifact_sha256", JsonValue::make_string(r.head_artifact_sha256));
@@ -274,11 +382,18 @@ int run_sequences(Runtime& rt, const Options& opt, RunCompletion& completion, co
         rep.set("format", JsonValue::make_string(kReportFormat));
         rep.set("run_id", JsonValue::make_string(completion.run_id()));
         rep.set("identity", completion.identity());
+        rep.set("load_verification", completion.load_verification());
         rep.set("entrypoint", JsonValue::make_string(entrypoint));
-        rep.set("config", JsonValue::make_string(opt.config));
-        rep.set("lineage", JsonValue::make_string(opt.lineage));
-        rep.set("attestation", JsonValue::make_string(opt.attestation));
-        rep.set("model_root", JsonValue::make_string(opt.model_root));
+        const bool manifest = opt.manifest_mode();
+        auto legacy = [&](const std::string& v) {
+            return manifest ? JsonValue::make_null() : JsonValue::make_string(v);
+        };
+        rep.set("mode", JsonValue::make_string(manifest ? "model_bundle" : "legacy"));
+        rep.set("model_bundle", manifest ? JsonValue::make_string(opt.model_bundle) : JsonValue::make_null());
+        rep.set("config", legacy(opt.config));
+        rep.set("lineage", legacy(opt.lineage));
+        rep.set("attestation", legacy(opt.attestation));
+        rep.set("model_root", legacy(opt.legacy_model_root()));
         rep.set("schedule", JsonValue::make_string(schedule));
         if (measurement != nullptr) rep.set("measurement", *measurement);
         rep.set("detector", load_json(rt));

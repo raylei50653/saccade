@@ -47,6 +47,8 @@ SHIPPING_OPTIONS = {
     "--lineage",
     "--attestation",
     "--model-root",
+    "--model-bundle",  # #549 S2-1 manifest mode
+    "--require-identity",
     "--out",
     "--report",
     "--trace",

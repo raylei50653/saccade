@@ -66,14 +66,31 @@ target_link_libraries(saccade_shipping_completion PUBLIC saccade_shipping_native
 target_compile_options(saccade_shipping_completion PRIVATE -Wall -Wextra -Wpedantic)
 set_target_properties(saccade_shipping_completion PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# Model bundle manifest, release-side allowlist and confined member opens
+# (#549 S2-1, saccade_shipping/model_bundle.hpp). CUDA-free.
+add_library(saccade_shipping_model_bundle STATIC src/model_bundle.cpp)
+target_link_libraries(saccade_shipping_model_bundle PUBLIC saccade_shipping_native_config)
+target_compile_options(saccade_shipping_model_bundle PRIVATE -Wall -Wextra -Wpedantic)
+set_target_properties(saccade_shipping_model_bundle PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # Gate A of saccade_track (#536 CC-536-01-02, N-T2): config, lineage,
 # attestation, sequence inputs, output directories and model file hashes,
-# before the first CUDA API call. CUDA-free: links no CUDA library, so it
+# before the first CUDA API call; in manifest mode (#549 S2-1) the manifest,
+# the allowlist and every member. CUDA-free: links no CUDA library, so it
 # cannot initialize a device.
 add_library(saccade_shipping_preflight STATIC src/preflight.cpp)
-target_link_libraries(saccade_shipping_preflight PUBLIC saccade_shipping_completion)
+target_link_libraries(saccade_shipping_preflight PUBLIC saccade_shipping_completion saccade_shipping_model_bundle)
 target_compile_options(saccade_shipping_preflight PRIVATE -Wall -Wextra -Wpedantic)
 set_target_properties(saccade_shipping_preflight PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# The release-side allowlist of model bundle manifests (#549 S2-1, TR-1b):
+# installed as share/saccade/trusted_model_bundles.json, its sha256 built into
+# both entrypoints (SACCADE_TRUSTED_MODEL_BUNDLES_SHA256, track_driver.hpp),
+# so a caller cannot replace it without replacing the entrypoint. The
+# production list starts empty: no bundle is approved.
+set(SACCADE_TRUSTED_MODEL_BUNDLES ${CMAKE_CURRENT_SOURCE_DIR}/trusted_model_bundles.json)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SACCADE_TRUSTED_MODEL_BUNDLES})
+file(SHA256 ${SACCADE_TRUSTED_MODEL_BUNDLES} SACCADE_TRUSTED_MODEL_BUNDLES_SHA256)
 
 enable_testing()
 add_executable(saccade_resolved_config_test ${SACCADE_REPO_ROOT}/tests/native/test_resolved_config.cpp)
@@ -136,7 +153,7 @@ add_executable(saccade_shipping_run_completion_test
     ${SACCADE_REPO_ROOT}/tests/native/test_shipping_run_completion.cpp src/run_completion.cpp src/preflight.cpp)
 target_compile_definitions(saccade_shipping_run_completion_test PRIVATE SACCADE_RUN_COMPLETION_TEST_FAULTS=1
     SACCADE_TEST_REPO_ROOT="${SACCADE_REPO_ROOT}")
-target_link_libraries(saccade_shipping_run_completion_test PRIVATE saccade_shipping_native_config)
+target_link_libraries(saccade_shipping_run_completion_test PRIVATE saccade_shipping_model_bundle)
 target_compile_options(saccade_shipping_run_completion_test PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME saccade_shipping_run_completion_test COMMAND saccade_shipping_run_completion_test)
 
@@ -149,6 +166,28 @@ add_test(NAME saccade_shipping_preflight_test
     COMMAND saccade_shipping_preflight_test ${SACCADE_RESOLVED_CONFIG}
             ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_head_lineage.json
             ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json)
+
+# Gate A in manifest mode (#549 S2-1): two roots, the allowlist pin, VL0-VL2,
+# the policy and the resolved bindings, on self-consistent stand-in bundles.
+add_executable(saccade_shipping_preflight_manifest_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_preflight_manifest.cpp)
+target_link_libraries(saccade_shipping_preflight_manifest_test PRIVATE saccade_shipping_preflight)
+target_compile_options(saccade_shipping_preflight_manifest_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_preflight_manifest_test
+    COMMAND saccade_shipping_preflight_manifest_test ${SACCADE_RESOLVED_CONFIG}
+            ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_head_lineage.json
+            ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json
+            ${SACCADE_REPO_ROOT}/docs/architecture/model_bundle_549/examples/headline_s_n01_n06.model_bundle.example.json)
+
+# The manifest / allowlist reader against the published schemas' examples and
+# every schema / semantic row of the #549 verification matrix (S2-1).
+add_executable(saccade_shipping_model_bundle_test ${SACCADE_REPO_ROOT}/tests/native/test_shipping_model_bundle.cpp)
+target_link_libraries(saccade_shipping_model_bundle_test PRIVATE saccade_shipping_model_bundle)
+target_compile_options(saccade_shipping_model_bundle_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_model_bundle_test
+    COMMAND saccade_shipping_model_bundle_test
+            ${SACCADE_REPO_ROOT}/docs/architecture/model_bundle_549/verification_matrix.json
+            ${SACCADE_REPO_ROOT} ${SACCADE_TRUSTED_MODEL_BUNDLES})
 
 if(TARGET saccade_tracking)
     # Measurement boundary (#465 Phase C PR-C2). Each runtime library below is
@@ -265,6 +304,11 @@ if(TARGET saccade_tracking)
     add_executable(saccade_track tools/saccade_track.cpp)
     target_link_libraries(saccade_track PRIVATE saccade_shipping_runtime)
     target_link_libraries(saccade_track PRIVATE saccade_shipping_preflight)
+    # TR-1b (#549 S2-1): both entrypoints carry the allowlist's sha256.
+    target_compile_definitions(saccade_track PRIVATE
+        SACCADE_TRUSTED_MODEL_BUNDLES_SHA256="${SACCADE_TRUSTED_MODEL_BUNDLES_SHA256}")
+    target_compile_definitions(saccade_track_measurement PRIVATE
+        SACCADE_TRUSTED_MODEL_BUNDLES_SHA256="${SACCADE_TRUSTED_MODEL_BUNDLES_SHA256}")
     # NEEDED = what the entrypoint uses. The toolchain default is
     # --no-as-needed, so otherwise any library that lands before torch's own
     # --as-needed switch on the link line (e.g. libnvinfer_plugin, which nothing
@@ -349,6 +393,9 @@ if(TARGET saccade_tracking)
         install(TARGETS saccade_track RUNTIME DESTINATION libexec COMPONENT shipping)
     endif()
     install(PROGRAMS launcher/saccade_track.sh DESTINATION bin RENAME saccade_track COMPONENT shipping)
+    # The allowlist the entrypoint's pin names (#549 S2-1): next to the
+    # operator library in the runtime package's root.
+    install(FILES ${SACCADE_TRUSTED_MODEL_BUNDLES} DESTINATION share/saccade COMPONENT shipping)
 
     # The loader provenance check (PR-C1): C and libc only (it runs in the
     # loader's audit namespace). Its bundled-name list comes from the pinned set.
@@ -441,6 +488,15 @@ if(TARGET saccade_tracking)
                     ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json
                     ${SACCADE_REPO_ROOT}
                     ${SACCADE_REPO_ROOT}/datasets/MOT17/train)
+
+        # Gate B in manifest mode (#549 S2-1): cross-root load from Gate A's
+        # resolved bindings, a member replaced after Gate A (MB-55).
+        add_executable(saccade_shipping_model_bundle_gate_b_test
+            ${SACCADE_REPO_ROOT}/tests/native/test_shipping_model_bundle_gate_b.cpp)
+        target_link_libraries(saccade_shipping_model_bundle_gate_b_test PRIVATE
+            saccade_shipping_detector saccade_shipping_preflight)
+        add_test(NAME saccade_shipping_model_bundle_gate_b_test
+            COMMAND saccade_shipping_model_bundle_gate_b_test ${SACCADE_REPO_ROOT})
 
         add_executable(saccade_shipping_ingest_host_test
             ${SACCADE_REPO_ROOT}/tests/native/test_shipping_ingest_host.cpp)

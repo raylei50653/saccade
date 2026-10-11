@@ -15,7 +15,7 @@
 //                   the PR-9 serial, eager runtime (serial_runtime.hpp) instead
 //                   of the config's schedule (the PR-9 reference)
 //   --max-frames N  frames 1..min(N, seqLength), the oracle's --max-frames
-// The report (format saccade.native_track_report/v4) names this entrypoint and
+// The report (format saccade.native_track_report/v5) names this entrypoint and
 // records the three under "measurement". A mutation name is checked after Gate
 // A and before any model is loaded. Run id, <out> lock and journal: as saccade_track
 // (track_driver.hpp).
@@ -65,9 +65,10 @@ Options parse_args(int argc, char** argv) {
     }
     if (!track::interface_complete(o.track) || o.max_frames < 0 ||
         !(o.schedule.empty() || o.schedule == "serial")) {
-        track::fail("usage: saccade_track_measurement --config JSON --lineage JSON "
-                    "[--attestation JSON] [--model-root DIR] --out DIR [--report JSON] "
-                    "[--trace DIR] SEQUENCE_DIR... [--measurement-mutation M] "
+        track::fail("usage: saccade_track_measurement (--config JSON --lineage JSON "
+                    "[--attestation JSON] [--model-root DIR] | --model-bundle DIR) "
+                    "[--require-identity none|checksum_matched|expected_source_verified] --out DIR "
+                    "[--report JSON] [--trace DIR] SEQUENCE_DIR... [--measurement-mutation M] "
                     "[--schedule serial] [--max-frames N]");
     }
     return o;
@@ -90,15 +91,15 @@ int run(const Options& opt, sh::RunCompletion& completion) {
     if (pre.schedule == sh::Schedule::Serial) {
         const sh::RuntimeMutation m = sh::parse_runtime_mutation(opt.mutation);
         const JsonValue meas = measurement_json(opt, sh::runtime_mutation_name(m));
-        sh::SerialRuntime rt(pre.config, std::move(pre.detector), opt.track.model_root);
-        rt.set_mutation_for_measurement(m);
-        return track::run_sequences(rt, opt.track, completion, kEntrypoint, "serial", opt.max_frames, &meas);
+        auto rt = track::load_runtime<sh::SerialRuntime>(opt.track, pre, completion);
+        rt->set_mutation_for_measurement(m);
+        return track::run_sequences(*rt, opt.track, completion, kEntrypoint, "serial", opt.max_frames, &meas);
     }
     const sh::DoubleBufferMutation m = sh::parse_double_buffer_mutation(opt.mutation);
     const JsonValue meas = measurement_json(opt, sh::double_buffer_mutation_name(m));
-    sh::DoubleBufferRuntime rt(pre.config, std::move(pre.detector), opt.track.model_root);
-    rt.set_mutation_for_measurement(m);
-    return track::run_sequences(rt, opt.track, completion, kEntrypoint, "double_buffer", opt.max_frames,
+    auto rt = track::load_runtime<sh::DoubleBufferRuntime>(opt.track, pre, completion);
+    rt->set_mutation_for_measurement(m);
+    return track::run_sequences(*rt, opt.track, completion, kEntrypoint, "double_buffer", opt.max_frames,
                                 &meas);
 }
 

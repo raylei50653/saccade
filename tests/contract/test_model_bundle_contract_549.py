@@ -303,3 +303,51 @@ def test_matrix_negative_controls(row: dict[str, Any]) -> None:
         assert not schema_errors, f"{row['id']} should pass the schema and fail a rule"
         rules = {e.split()[0] for e in RULES[row["target"]](doc)}
         assert rules == {want["rule"]}, f"{row['id']}: {rules}"
+
+
+# ── #549 S2-1: the production allowlist and the implementation coverage ───────
+
+PRODUCTION_ALLOWLIST = REPO / "shipping" / "trusted_model_bundles.json"
+COVERAGE = REPO / "docs" / "reference" / "model_bundle_s2_1_coverage_549.json"
+RUNS = {"ci_ctest", "local_cli", "local_gpu"}
+
+
+def test_production_allowlist_is_valid_and_empty() -> None:
+    """Owner authorization (#549 S2-1): the shipped allowlist starts EMPTY;
+    no N01-N06 manifest is approved by this slice."""
+    allowlist = _load(PRODUCTION_ALLOWLIST)
+    assert not list(_validator(ALLOWLIST_SCHEMA).iter_errors(allowlist))
+    assert allowlist_rule_errors(allowlist) == []
+    assert allowlist["entries"] == []
+    # Its sha256 is built into the entrypoints, not read from a caller.
+    cmake = (REPO / "shipping" / "CMakeLists.txt").read_text()
+    assert (
+        "file(SHA256 ${SACCADE_TRUSTED_MODEL_BUNDLES} SACCADE_TRUSTED_MODEL_BUNDLES_SHA256)"
+        in cmake
+    )
+    for target in ("saccade_track", "saccade_track_measurement"):
+        assert re.search(
+            rf"target_compile_definitions\({target} PRIVATE\s+"
+            r'SACCADE_TRUSTED_MODEL_BUNDLES_SHA256="\$\{SACCADE_TRUSTED_MODEL_BUNDLES_SHA256\}"\)',
+            cmake,
+        ), target
+
+
+def test_s2_1_coverage_names_every_owned_row_and_real_tests() -> None:
+    coverage = _load(COVERAGE)
+    assert coverage["matrix"] == str(MATRIX.relative_to(REPO))
+    owned = {r["id"] for r in MATRIX_DOC["rows"] if r["slice"] == "S2-1"}
+    listed = [r["id"] for r in coverage["rows"]]
+    assert len(listed) == len(set(listed))
+    assert set(listed) == owned
+    entries = [t for r in coverage["rows"] for t in r["tests"]]
+    entries += coverage["vl0_rows"]["tests"]
+    for t in entries:
+        path = REPO / t["file"]
+        assert path.is_file(), t
+        assert t["case"] in path.read_text(), t
+        assert t["runs"] in RUNS, t
+    # Every owned row has at least one test that runs in a real process; the
+    # rows that need the built binaries or a GPU say so.
+    for r in coverage["rows"]:
+        assert r["tests"], r["id"]

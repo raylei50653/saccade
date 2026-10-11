@@ -2,10 +2,16 @@
 // LibTorch head (PR-1L artifact) -> S2, serial and eager. See
 // detector_plan.hpp for the oracle path it reproduces.
 //
-// Loading is fail-closed, in this order, before anything is executed:
+// Loading is fail-closed, in this order, before anything is executed; any
+// failure is a DetectorLoadError (detector_plan.hpp):
+//   0. the three paths: in manifest mode (#549 S2-1) only Gate A's resolved
+//      bindings (DetectorPlan::resolved; there is no model root), in legacy
+//      mode the plan's paths against the model root;
 //   1. sha256 of the operator library, the TorchScript artifact and the
 //      backbone engine == the plan's bindings (frozen lineage, or the
-//      realization attestation for the operator library);
+//      realization attestation for the operator library; in manifest mode
+//      also the manifest's), each file read again by its path: the bytes
+//      then loaded are opened again (TOCTOU, #549 S2-2);
 //   2. the operator library is dlopen'ed (it registers
 //      `saccade_native::selective_scan_fwd` with the dispatcher);
 //   3. the artifact's runtime requirements are set and read back (graph
@@ -114,7 +120,8 @@ struct DetectorStages {
 
 class DetectorHost {
 public:
-    // Paths in the plan are resolved against `model_root`.
+    // Paths in the plan are resolved against `model_root` (legacy); a plan
+    // with resolved bindings takes its paths from them and an empty root.
     DetectorHost(const DetectorPlan& plan, const std::string& model_root, cudaStream_t stream);
     ~DetectorHost();
     DetectorHost(const DetectorHost&) = delete;
