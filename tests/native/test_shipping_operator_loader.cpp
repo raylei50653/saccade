@@ -135,6 +135,37 @@ std::string strsz_oversized(std::string elf) {
     return elf;
 }
 
+// Review round 3: an earlier PT_LOAD extended over the dynamic table's pages,
+// PT_DYNAMIC's file offset moved to where that segment would read zeros
+// (DT_NULL); the loader maps the later, original segment over it (MAP_FIXED)
+// and reads the real table.
+std::string overlapping_dynamic(std::string elf) {
+    Elf64_Phdr* d = dynamic_phdr(elf);
+    const std::uint64_t dyn_vaddr = d->p_vaddr, dyn_size = d->p_filesz;
+    int count = 0;
+    Elf64_Phdr* ph = phdrs(elf, count);
+    Elf64_Phdr* container = nullptr;
+    Elf64_Phdr* prev = nullptr;
+    for (int i = 0; i < count; ++i) {
+        if (ph[i].p_type == PT_LOAD && dyn_vaddr >= ph[i].p_vaddr && dyn_vaddr < ph[i].p_vaddr + ph[i].p_memsz) container = &ph[i];
+    }
+    for (int i = 0; i < count; ++i) {
+        if (ph[i].p_type == PT_LOAD && container != nullptr && ph[i].p_vaddr < container->p_vaddr &&
+            (prev == nullptr || ph[i].p_vaddr > prev->p_vaddr)) {
+            prev = &ph[i];
+        }
+    }
+    if (prev == nullptr) return elf;
+    const std::uint64_t span = dyn_vaddr + dyn_size - prev->p_vaddr;
+    const std::uint64_t fake = prev->p_offset + (dyn_vaddr - prev->p_vaddr);
+    prev->p_filesz = prev->p_memsz = span;
+    d->p_offset = fake;
+    const std::uint64_t needed = prev->p_offset + span;
+    if (elf.size() < needed) elf.resize(needed, '\0');     // may reallocate: no pointer use after
+    std::memset(elf.data() + fake, 0, sizeof(Elf64_Dyn));  // DT_NULL there
+    return elf;
+}
+
 std::string two_dynamic(std::string elf) {
     int count = 0;
     Elf64_Phdr* ph = phdrs(elf, count);
@@ -364,6 +395,8 @@ int main(int argc, char** argv) {
                       "strsz has a string table outside its file-backed segment"));
             CHECK(has(refusal([&] { sh::require_no_origin_search_path(two_dynamic(origin), "twice"); }),
                       "twice has more than one dynamic segment"));
+            CHECK(has(refusal([&] { sh::require_no_origin_search_path(overlapping_dynamic(origin), "overlap"); }),
+                      "overlap has overlapping or unordered loadable segments"));
         }
         {
             const fs::path origin = dir / "origin" / "libsaccade_scan_torchop.so";

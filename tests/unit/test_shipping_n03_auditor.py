@@ -16,7 +16,8 @@ refuse.
   by direct exec with LD_AUDIT both derive <prefix>/share/saccade/build/...
   and run the operator from its memfd; the vDSO and the vendor library pass;
 * D-N03-5: a plan naming another file is refused by the host (exit 2); so is
-  an operator whose RUNPATH uses $ORIGIN (it would expand under /proc/self/fd);
+  an operator whose RUNPATH or DT_NEEDED uses $ORIGIN (it would expand under
+  /proc/self/fd);
 * races (production host, real auditor): rename-replace or in-place write of
   the source after the hash is refused by the auditor (127); an in-place
   write after the load does not change what runs;
@@ -355,6 +356,34 @@ def test_an_origin_runpath_is_refused_by_the_host(prefix: Path) -> None:
     r = _audited(prefix, "saccade_track", "load", _sha(op))
     assert r.returncode == 2, (r.stdout, r.stderr)
     assert "DT_RUNPATH $ORIGIN/../lib uses $ORIGIN" in r.stdout
+    assert "value=" not in r.stdout
+
+
+def test_an_origin_needed_name_is_refused_by_the_host(prefix: Path) -> None:
+    """The loader expands $ORIGIN in DT_NEEDED as well (review round 3)."""
+    dep = prefix / "other" / "libdep.so"
+    (prefix / "src" / "dep.c").write_text("int dep(void) { return 0; }\n")
+    _cc(
+        "-shared",
+        "-fPIC",
+        "-Wl,-soname,$ORIGIN/libdep.so",
+        "-o",
+        str(dep),
+        str(prefix / "src/dep.c"),
+    )
+    op = prefix / OP_REL
+    _cc(
+        "-shared",
+        "-fPIC",
+        "-DVALUE=1",
+        "-o",
+        str(op),
+        str(prefix / "src/op.c"),
+        str(dep),
+    )
+    r = _audited(prefix, "saccade_track", "load", _sha(op))
+    assert r.returncode == 2, (r.stdout, r.stderr)
+    assert "DT_NEEDED $ORIGIN/libdep.so uses $ORIGIN" in r.stdout
     assert "value=" not in r.stdout
 
 

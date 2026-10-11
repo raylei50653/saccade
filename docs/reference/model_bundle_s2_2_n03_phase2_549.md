@@ -50,10 +50,16 @@ legal operator library:
 
 1. Open the legal path once with `openat2`, allowing no symlink or magic link in any component.
 2. Require a regular file and Gate A's size when known, read the whole file, and require the
-   plan's SHA-256. Require a 64-bit ELF whose `DT_RPATH`/`DT_RUNPATH` do not use `$ORIGIN`
-   (it would expand under `/proc/self/fd` when loaded from the memfd). The dynamic table is read
-   where the loader reads it (through `p_vaddr`, within a file-backed `PT_LOAD`); its file
-   location must agree, it must be terminated, and the string table must lie within its segment.
+   plan's SHA-256. Require a 64-bit ELF whose loader-expanded dynamic strings (`DT_RPATH`,
+   `DT_RUNPATH`, `DT_NEEDED`, `DT_AUXILIARY`, `DT_FILTER`) do not use `$ORIGIN`, which would
+   expand under `/proc/self/fd` when loaded from the memfd. They are read where the loader maps
+   them:
+   - loadable segments must be ascending and page-disjoint, with offsets congruent to their
+     addresses, so every mapped byte comes from one segment;
+   - the dynamic table is read through `p_vaddr` within a file-backed `PT_LOAD`, its stated file
+     offset must agree, and it must be terminated;
+   - the string table must lie within its segment.
+
    A non-ELF or malformed object is refused here, before anything is sealed or `dlopen`'ed.
 3. Write the buffer into a memfd labeled `saccade-n03:src-fd=<S>` (`MFD_NOEXEC_SEAL`, with a
    retry only on `EINVAL`).
@@ -148,6 +154,14 @@ Its findings and their resolution:
 | major | the ELF check read the dynamic table at `p_offset` while the loader reads it at `p_vaddr` (a split table could hide `$ORIGIN`); no terminator or segment bounds | read through `p_vaddr` with agreement, terminator and segment bounds (overflow-safe); CPU controls for a split, an unterminated table, an oversized `DT_STRSZ` and two `PT_DYNAMIC`; the split is accepted by the round 1 parser and refused now (`elf_split_attack_old_vs_new.log`) |
 | minor | a throwing copy after registry publication bypassed poisoning | staged before publication |
 | minor | `..` spellings described as refused | corrected |
+
+Round 3 (`8a7307fc`) found no blocker. Its review of the republished coordinate found nothing.
+Its findings and their resolution:
+
+| Severity | Finding | Resolution |
+|:--|:--|:--|
+| major | overlapping `PT_LOAD` segments: the check translated through an earlier segment that the loader overwrites (`MAP_FIXED`), hiding `$ORIGIN` | ascending, page-disjoint, congruent loadable segments required; CPU overlap control; the overlap is accepted by the round 2 parser and refused now (`elf_overlap_attack_r2_vs_new.log`) |
+| minor | the malformed-ELF closure was overstated | scoped to the stated layout rule; `$ORIGIN` also refused in `DT_NEEDED`/`DT_AUXILIARY`/`DT_FILTER` (real-loader `DT_NEEDED` control) |
 
 ## Known limits and residuals
 

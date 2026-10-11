@@ -271,6 +271,26 @@ void require_no_origin_search_path(const std::string& elf, const std::string& wh
     }
     std::vector<Elf64_Phdr> ph(eh.e_phnum);
     if (eh.e_phnum != 0) std::memcpy(ph.data(), elf.data() + eh.e_phoff, eh.e_phnum * sizeof(Elf64_Phdr));
+    // The loader maps every PT_LOAD at its page-rounded range, later ones
+    // MAP_FIXED over earlier ones. With ascending, page-disjoint segments whose
+    // file offset is congruent to their address, each mapped byte comes from
+    // exactly one segment, so reading the file through that segment is reading
+    // what the loader maps. Anything else is refused.
+    constexpr std::uint64_t kPage = 4096;
+    std::uint64_t mapped_end = 0;  // page-rounded end of the previous segment
+    bool first = true;
+    for (const Elf64_Phdr& h : ph) {
+        if (h.p_type != PT_LOAD || h.p_memsz == 0) continue;
+        if (h.p_filesz > h.p_memsz || h.p_vaddr % kPage != h.p_offset % kPage ||
+            h.p_memsz > UINT64_MAX - h.p_vaddr - (kPage - 1)) {
+            bad("has a malformed loadable segment");
+        }
+        const std::uint64_t lo = h.p_vaddr - h.p_vaddr % kPage;
+        const std::uint64_t hi = (h.p_vaddr + h.p_memsz + kPage - 1) / kPage * kPage;
+        if (!first && lo < mapped_end) bad("has overlapping or unordered loadable segments");
+        mapped_end = hi;
+        first = false;
+    }
     const Elf64_Phdr* dyn = nullptr;
     for (const Elf64_Phdr& h : ph) {
         if (h.p_type != PT_DYNAMIC) continue;
@@ -297,22 +317,28 @@ void require_no_origin_search_path(const std::string& elf, const std::string& wh
         }
         if (d.d_tag == DT_STRTAB) strtab = d.d_un.d_ptr, have_strtab = true;
         if (d.d_tag == DT_STRSZ) strsz = d.d_un.d_val, have_strsz = true;
-        if (d.d_tag == DT_RPATH || d.d_tag == DT_RUNPATH) paths.emplace_back(d.d_tag, d.d_un.d_val);
+        // Every tag whose string the loader expands dynamic string tokens in
+        // (last DT_STRTAB / DT_STRSZ win, as in the loader).
+        if (d.d_tag == DT_RPATH || d.d_tag == DT_RUNPATH || d.d_tag == DT_NEEDED || d.d_tag == DT_AUXILIARY ||
+            d.d_tag == DT_FILTER) {
+            paths.emplace_back(d.d_tag, d.d_un.d_val);
+        }
     }
     if (!terminated) bad("has an unterminated dynamic section");
     if (paths.empty()) return;
-    if (!have_strtab || !have_strsz) bad("has a search path but no string table");
+    if (!have_strtab || !have_strsz) bad("has dynamic strings but no string table");
     const std::optional<std::uint64_t> str_off = file_range(ph, n, strtab, strsz);
     if (!str_off) bad("has a string table outside its file-backed segment");
     for (const auto& [tag, off] : paths) {
-        if (off >= strsz) bad("has a malformed search path");
+        if (off >= strsz) bad("has a malformed dynamic string");
         const char* begin = elf.data() + *str_off + off;
         const void* stop = std::memchr(begin, '\0', strsz - off);
-        if (stop == nullptr) bad("has an unterminated search path");
+        if (stop == nullptr) bad("has an unterminated dynamic string");
         const std::string entry(begin, static_cast<const char*>(stop));
         if (entry.find("$ORIGIN") != std::string::npos || entry.find("${ORIGIN}") != std::string::npos) {
-            bad(std::string(tag == DT_RPATH ? "DT_RPATH" : "DT_RUNPATH") + " " + entry +
-                " uses $ORIGIN, which a load from its memfd would expand under /proc/self/fd");
+            const char* name = tag == DT_RPATH ? "DT_RPATH" : tag == DT_RUNPATH ? "DT_RUNPATH"
+                             : tag == DT_NEEDED ? "DT_NEEDED" : tag == DT_AUXILIARY ? "DT_AUXILIARY" : "DT_FILTER";
+            bad(std::string(name) + " " + entry + " uses $ORIGIN, which a load from its memfd would expand under /proc/self/fd");
         }
     }
 }

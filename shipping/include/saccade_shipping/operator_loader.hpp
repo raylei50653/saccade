@@ -73,9 +73,13 @@ bool mapped_from_memfd(void* handle, int fd);
 // (F_SEAL_FUTURE_WRITE does not count for F_SEAL_WRITE).
 bool sealed_against_writes(int fd);
 
-// Step 2: a 64-bit ELF whose DT_RPATH / DT_RUNPATH do not use $ORIGIN (a load
-// from /proc/self/fd/<M> would expand it there). DetectorLoadError naming
-// `what` otherwise, also for a malformed or non-ELF object.
+// Step 2: a 64-bit ELF whose dynamic strings that the loader expands
+// (DT_RPATH, DT_RUNPATH, DT_NEEDED, DT_AUXILIARY, DT_FILTER) do not use
+// $ORIGIN (a load from /proc/self/fd/<M> would expand it there), read where
+// the loader maps them: ascending, page-disjoint PT_LOAD segments, the dynamic
+// table through its address with an agreeing file offset and a terminator,
+// the string table within its segment. DetectorLoadError naming `what`
+// otherwise, also for a malformed or non-ELF object.
 void require_no_origin_search_path(const std::string& elf, const std::string& what);
 
 class VerifiedOperator {
