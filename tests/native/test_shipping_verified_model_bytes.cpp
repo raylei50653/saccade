@@ -79,7 +79,10 @@ int main() {
         CHECK(error(dir / "absent", sha).find("cannot open") != std::string::npos);
         CHECK(error(dir, sha).find("not a regular file") != std::string::npos);
         fs::create_symlink(path, dir / "link");
-        CHECK(error(dir / "link", sha).find("cannot open") != std::string::npos);
+        CHECK(error(dir / "link", sha, original.size()).find("cannot open") != std::string::npos);
+        const std::string replacement_sha = sh::sha256_hex(replacement.data(), replacement.size());
+        const auto legacy_link = sh::VerifiedModelBytes::read("legacy model", (dir / "link").string(), replacement_sha);
+        CHECK(std::string(legacy_link.data(), legacy_link.size()) == replacement);
         CHECK(::mkfifo((dir / "fifo").c_str(), 0600) == 0);
         CHECK(error(dir / "fifo", sha).find("not a regular file") != std::string::npos);
     } catch (const std::exception& e) {

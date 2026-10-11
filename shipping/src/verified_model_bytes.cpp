@@ -30,7 +30,11 @@ VerifiedModelBytes VerifiedModelBytes::read(const std::string& what, const std::
                                             const std::string& expected_sha256,
                                             std::int64_t expected_size) {
     const std::string description = what + " " + path;
-    const int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | O_NOCTTY);
+    // Manifest mode retains its symlink refusal. Legacy mode retains its
+    // existing path acceptance; integrity still comes from this exact buffer.
+    const int flags = O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOCTTY |
+                      (expected_size >= 0 ? O_NOFOLLOW : 0);
+    const int fd = ::open(path.c_str(), flags);
     if (fd < 0) fail("cannot open " + description + ": " + std::strerror(errno));
     const CloseFd guard{fd};
     struct stat st {};
