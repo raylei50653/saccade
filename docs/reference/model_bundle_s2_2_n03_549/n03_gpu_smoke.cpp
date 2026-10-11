@@ -1,6 +1,7 @@
 // #549 S2-2 N03 research GPU smoke (evidence only, not production).
 //
 // usage: n03_gpu_smoke <path|proposed> <op_path> <expected_sha256>
+//        n03_gpu_smoke parser-selftest   (maps record parser on parser_cases.h)
 //
 // Loads N03 either by path after a pre-load hash (main@74f2f5cb) or through
 // the proposal (one source descriptor, verified buffer, labeled sealed memfd,
@@ -26,6 +27,8 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -67,9 +70,42 @@ std::string tensor_sha(const at::Tensor& t) {
     return sha_hex(c.data_ptr(), c.nbytes());
 }
 
+// The maps record containing addr (device, inode). Complete records of any
+// length via std::getline (review r3/r4).
+bool record_of(std::istream& in, uintptr_t addr, unsigned* maj, unsigned* mnr, unsigned long* ino) {
+    std::string line;
+    while (std::getline(in, line)) {
+        unsigned long lo, hi, off;
+        char perm[8];
+        if (std::sscanf(line.c_str(), "%lx-%lx %7s %lx %x:%x %lu", &lo, &hi, perm, &off, maj, mnr, ino) == 7 &&
+            addr >= lo && addr < hi)
+            return true;
+    }
+    return false;
+}
+
 }  // namespace
 
+#include "parser_cases.h"
+
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]) == "parser-selftest") {
+        int fails = 0;
+        for (size_t t = 0; t < sizeof kParserCases / sizeof kParserCases[0]; ++t) {
+            char* text = build_case(static_cast<int>(t));
+            std::istringstream in(text);
+            unsigned maj = 0, mnr = 0;
+            unsigned long ino = 0;
+            const int found = record_of(in, 0x5000, &maj, &mnr, &ino) ? 1 : 0;
+            const int want = kParserCases[t].found == 2 ? 1 : kParserCases[t].found;
+            const bool ok = found == want && (!found || ino == kParserCases[t].ino);
+            std::printf("gpu-smoke-parser case %-38s found=%d ino=%lu %s\n", kParserCases[t].name, found, ino,
+                        ok ? "PASS" : "FAIL");
+            fails += !ok;
+            std::free(text);
+        }
+        return fails ? 1 : 0;
+    }
     if (argc != 4) return 64;
     const std::string mode = argv[1], op = argv[2], expected = argv[3];
     std::string load = op;
@@ -112,25 +148,11 @@ int main(int argc, char** argv) {
         struct stat ms{};
         bool ok = false;
         if (lm != nullptr && fstat(m, &ms) == 0) {
-            FILE* f = std::fopen("/proc/self/maps", "r");
-            char line[8192];
-            bool continuation = false;
-            while (f && std::fgets(line, sizeof line, f)) {
-                // complete records only; overlong records are discarded through '\n'
-                const bool complete = std::strchr(line, '\n') != nullptr || std::feof(f);
-                const bool skip = continuation || !complete;
-                continuation = !complete;
-                if (skip) continue;
-                unsigned long lo, hi, off, ino;
-                unsigned maj, mnr;
-                char perm[8];
-                if (std::sscanf(line, "%lx-%lx %7s %lx %x:%x %lu", &lo, &hi, perm, &off, &maj, &mnr, &ino) == 7 &&
-                    reinterpret_cast<uintptr_t>(lm->l_ld) >= lo && reinterpret_cast<uintptr_t>(lm->l_ld) < hi) {
-                    ok = ino == static_cast<unsigned long>(ms.st_ino) && maj == major(ms.st_dev) && mnr == minor(ms.st_dev);
-                    break;
-                }
-            }
-            if (f) std::fclose(f);
+            std::ifstream maps("/proc/self/maps");
+            unsigned maj = 0, mnr = 0;
+            unsigned long ino = 0;
+            ok = record_of(maps, reinterpret_cast<uintptr_t>(lm->l_ld), &maj, &mnr, &ino) &&
+                 ino == static_cast<unsigned long>(ms.st_ino) && maj == major(ms.st_dev) && mnr == minor(ms.st_dev);
         }
         std::printf("postcheck mapped_is_verified_memfd=%d\n", ok);
         if (!ok) refuse("loaded object is not the verified memfd");

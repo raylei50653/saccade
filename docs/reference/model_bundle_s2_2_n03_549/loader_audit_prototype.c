@@ -216,9 +216,7 @@ struct mapped_id {
 };
 static char g_maps[1 << 16];
 
-static int mapping_of(uintptr_t addr, struct mapped_id *out) {
-    int fd = open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
-    if (fd < 0) return 0;
+static int mapping_from_fd(int fd, uintptr_t addr, struct mapped_id *out) {
     size_t have = 0;
     int found = 0, eof = 0, bad = 0, skipping = 0;
     for (;;) {
@@ -273,8 +271,15 @@ static int mapping_of(uintptr_t addr, struct mapped_id *out) {
         memmove(g_maps, g_maps + used, have - used);
         have -= used;
     }
-    close(fd);
     return found && !bad;
+}
+
+static int mapping_of(uintptr_t addr, struct mapped_id *out) {
+    int fd = open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return 0;
+    int found = mapping_from_fd(fd, addr, out);
+    close(fd);
+    return found;
 }
 
 /* The mapped object is the file `real` names: the kernel's mapped path is that

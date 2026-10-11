@@ -22,6 +22,9 @@
  *                    (post-check, then M closed so its number is reused), registry (default: one
  *                    verified operator per process, keyed by SHA-256 and source path,
  *                    plus the postcheck).
+ *   parser-selftest  host post-check record parser on synthetic maps texts
+ *                    (parser_cases.h): 8191-byte records with and without '\n',
+ *                    oversized earlier and target records.
  *   forge-unlabeled  #582 candidate: sealed memfd without label from op_path.
  *   forge-unsealed   labeled memfd (S = op_path) without F_SEAL_WRITE.
  *   forge-content    label S = op_path, bytes from aux_path (expected = aux sha).
@@ -143,29 +146,35 @@ static void verify_memfd(int m, const char *expected) {
 /* Host post-check (review finding 3): the mapping holding the returned
  * object's dynamic section is the memfd just verified (glibc returns an
  * already-loaded object by name, without mapping or auditing anything). */
+/* The maps record containing addr: device and inode. review r3/r4: getline
+ * returns each complete record whatever its length (the last one with or
+ * without '\n'); no fixed-buffer boundary exists. */
+static int record_of(FILE *f, uintptr_t addr, unsigned *maj, unsigned *mnr, unsigned long *ino) {
+    char *line = NULL;
+    size_t cap = 0;
+    int found = 0;
+    while (f && getline(&line, &cap, f) != -1) {
+        unsigned long lo, hi, off;
+        char perm[8];
+        if (sscanf(line, "%lx-%lx %7s %lx %x:%x %lu", &lo, &hi, perm, &off, maj, mnr, ino) == 7 && addr >= lo &&
+            addr < hi) {
+            found = 1;
+            break;
+        }
+    }
+    free(line);
+    return found;
+}
+
 static int mapped_is(void *h, int m) {
     struct link_map *lm = NULL;
     struct stat ms;
     if (dlinfo(h, RTLD_DI_LINKMAP, &lm) != 0 || lm == NULL || fstat(m, &ms) != 0) return 0;
     FILE *f = fopen("/proc/self/maps", "r");
-    char line[8192];
-    int ok = 0, continuation = 0;
-    while (f && fgets(line, sizeof line, f)) {
-        /* review r3: parse complete records only; a chunk without '\n' is part of
-         * an overlong record, discarded through its newline. */
-        int complete = strchr(line, '\n') != NULL || feof(f);
-        int skip = continuation || !complete;
-        continuation = !complete;
-        if (skip) continue;
-        unsigned long lo, hi, off, ino;
-        unsigned maj, mnr;
-        char perm[8];
-        if (sscanf(line, "%lx-%lx %7s %lx %x:%x %lu", &lo, &hi, perm, &off, &maj, &mnr, &ino) == 7 &&
-            (uintptr_t)lm->l_ld >= lo && (uintptr_t)lm->l_ld < hi) {
-            ok = major(ms.st_dev) == maj && minor(ms.st_dev) == mnr && ms.st_ino == ino;
-            break;
-        }
-    }
+    unsigned maj = 0, mnr = 0;
+    unsigned long ino = 0;
+    int ok = record_of(f, (uintptr_t)lm->l_ld, &maj, &mnr, &ino) && major(ms.st_dev) == maj &&
+             minor(ms.st_dev) == mnr && ms.st_ino == ino;
     if (f) fclose(f);
     printf("postcheck mapped_is_verified_memfd=%d\n", ok);
     return ok;
@@ -241,6 +250,10 @@ static void print_objects(void) {
     if (f) fclose(f);
 }
 
+/* Synthetic maps texts for the parser self-test (shared with the auditor's
+ * test via parser_cases.h). */
+#include "parser_cases.h"
+
 /* The proposal's host sequence. legacy=1 reproduces the r1 host (closes M,
  * no post-check); registry=1 refuses a second, different operator. */
 static void *proposed_load(const char *op, const char *expected, int legacy, int registry) {
@@ -290,6 +303,24 @@ int main(int argc, char **argv) {
     int all = F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL;
     char label[64];
 
+    if (strcmp(mode, "parser-selftest") == 0) { /* argv: parser-selftest - - */
+        int fails = 0;
+        for (int t = 0; t < (int)(sizeof kParserCases / sizeof kParserCases[0]); ++t) {
+            char *text = build_case(t);
+            FILE *f = fmemopen(text, strlen(text), "r");
+            unsigned maj = 0, mnr = 0;
+            unsigned long ino = 0;
+            int found = record_of(f, 0x5000, &maj, &mnr, &ino);
+            fclose(f);
+            int want = kParserCases[t].found == 2 ? 1 : kParserCases[t].found; /* getline: any length */
+            int ok = found == want && (!found || ino == kParserCases[t].ino);
+            printf("host-parser case %-34s found=%d ino=%lu %s\n", kParserCases[t].name, found, ino, ok ? "PASS" : "FAIL");
+            fails += !ok;
+            free(text);
+        }
+        fflush(stdout);
+        _exit(fails ? 1 : 0);
+    }
     if (strcmp(mode, "twice") == 0) {
         const char *how = getenv("N03_TWICE") ? getenv("N03_TWICE") : "registry";
         const char *second = getenv("N03_SECOND_SHA");

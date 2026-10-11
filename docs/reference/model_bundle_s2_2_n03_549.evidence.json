@@ -1,6 +1,6 @@
 {
   "schema": "saccade.s2_2_n03_research_evidence/v1",
-  "scope": "Phase 1 research evidence (revision 3a, after independent reviews r1-r3) for the #549 S2-2 N03 TOCTOU proposal. Prototype auditor and probes only; no production source, installed package, N03 bytes, allowlist or pin is changed.",
+  "scope": "Phase 1 research evidence (revision 3b, after independent reviews r1-r4) for the #549 S2-2 N03 TOCTOU proposal. Prototype auditor and probes only; no production source, installed package, N03 bytes, allowlist or pin is changed.",
   "status": {
     "n03_mb41": "OPEN",
     "s2_2": "PARTIAL",
@@ -40,10 +40,10 @@
       "source_sha256": "f51b81c7f6208840552e8f862bd0d194f705a573bddfc4caf35ae64e99c512bf"
     },
     "prototype_auditor": {
-      "revision": 3,
+      "revision": "3b",
       "source": "results/549_s2_2_n03/prototype/loader_audit_proto.c",
       "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/loader_audit_prototype.c",
-      "source_sha256": "1ebb01afb4e357892a0f11d331b6f2359bd830b3649c4b4d3ecee9a55febf788",
+      "source_sha256": "5fb7d6884e72868a7388b50640b41ddc54da4f946704d0e337a5077b7067d4a5",
       "binary_sha256": "6d0ded181531c9edb7dcbcf1835ac7a854e77bc853a58879c76fbd2ec9f98ff8",
       "build": "cc -std=c11 -O3 -DNDEBUG -fPIC -shared -Wall -Wextra -Werror -Igen (generated name list sha256 5c70b555cd0b76fa55fdbd0569635c0b26999145a8fbec11d02aa1578f42fe99)",
       "superseded": {
@@ -60,13 +60,18 @@
           "source": "results/549_s2_2_n03/prototype/loader_audit_proto_r2.c",
           "source_sha256": "16643ecc3503ea8af9e4201effbdb580b065cd2070811244467f84cd641bce6d",
           "binary_sha256": "22c5d0de377171deb6d710353bd15b81ccee9f10e6cac3e9d8e8755c8357f717"
+        },
+        "revision_3": {
+          "source": "results/549_s2_2_n03/prototype/loader_audit_proto_r3.c",
+          "source_sha256": "1ebb01afb4e357892a0f11d331b6f2359bd830b3649c4b4d3ecee9a55febf788"
         }
-      }
+      },
+      "note": "mapping_from_fd refactor for testability; the binary is byte-identical to revision 3"
     },
     "host_probe": {
-      "revision": "3a",
+      "revision": "3b",
       "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/n03_host_probe.c",
-      "source_sha256": "36502426edf87a7acd1e90b4828e9dad55eaeab43415cb72bfc2866a99d62fdc",
+      "source_sha256": "3e44f716e8c5d4d45d04249a3c9d85c093aedf172c2a7b26a4401982aea4d974",
       "revision_1": {
         "source": "results/549_s2_2_n03/prototype/n03_host_probe_r1.c",
         "binary_sha256_r3": "fdbdbad3fe712a0662d6e3edd0d3392330dc41370d3b57c8a3f4d4c87021df67"
@@ -81,13 +86,18 @@
         "source_sha256": "4f0f5063db48f85762aeb0f779e01a83bd1c4120181d42b02b311f2b2a3d4f31",
         "binary_sha256_r7": "36dec9c5d0ccacf4be3c7c256407ae1fe2eaf37d647a6290acd5a24ea6aaf555"
       },
-      "binary_sha256_r8": "d8abc0d3fd9fb6dcfa8c533e7a164f43833b82c0c027456f80ee3e1b8c462c98"
+      "revision_3a": {
+        "source": "results/549_s2_2_n03/prototype/n03_host_probe_r3a.c",
+        "source_sha256": "36502426edf87a7acd1e90b4828e9dad55eaeab43415cb72bfc2866a99d62fdc",
+        "binary_sha256_r8": "d8abc0d3fd9fb6dcfa8c533e7a164f43833b82c0c027456f80ee3e1b8c462c98"
+      },
+      "binary_sha256_r9": "88275d05ebdea98f5e327ec0f31f649684ab5d635501f8fcd3334e6599ad8a37"
     },
     "gpu_smoke": {
-      "revision": "3a",
+      "revision": "3b",
       "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/n03_gpu_smoke.cpp",
-      "source_sha256": "14d0a23a5f6783f9a352a1477ca2d32c101f013c8f9fed52ce9859489ee8f48c",
-      "binary_sha256": "9aca45eacb6452dba4155ca52590b5dadf9cacb7ed0c8b66869b7056d06d20ec",
+      "source_sha256": "923785aae83f06ae0a2cd7a3a1d0cc53d8e02cda47cc072a23bc0110c928f735",
+      "binary_sha256": "fcdcebc8e4f53d91b99d0d3cf9d6db51282639830aaf7555cdd3c6f2d6b22b13",
       "revision_1": {
         "source": "results/549_s2_2_n03/prototype/n03_gpu_smoke_r1.cpp",
         "source_sha256": "394477f1225b69822643595075d8630c6b2f5b18f7a4a77219110debe036b1b8",
@@ -102,6 +112,11 @@
         "source": "results/549_s2_2_n03/prototype/n03_gpu_smoke_r3.cpp",
         "source_sha256": "8f537f4391f4df7e64b2789ebdbc25150e80de7bc6a3e78fbe69d4f45da6b4cb",
         "binary_sha256": "737fe380db871feecc2bf4fbe19409f1f360a5f1fe75a8e153a619e342392829"
+      },
+      "revision_3a": {
+        "source": "results/549_s2_2_n03/prototype/n03_gpu_smoke_r3a.cpp",
+        "source_sha256": "14d0a23a5f6783f9a352a1477ca2d32c101f013c8f9fed52ce9859489ee8f48c",
+        "binary_sha256": "9aca45eacb6452dba4155ca52590b5dadf9cacb7ed0c8b66869b7056d06d20ec"
       }
     },
     "runners": {
@@ -109,6 +124,17 @@
       "results/549_s2_2_n03/run_matrix.py": "f18e182f0185ae7e5bd1f62acdb4c51a95c0503203fbbd83f7a13ca39a6d05ab",
       "results/549_s2_2_n03/run_matrix_r1r3.py (runner of r3)": "a0b2110c2bb09d52cf2f3ce2f49cfc1252f53a585b958cdff380b4fd2be7cdb2",
       "results/549_s2_2_n03/run_gpu_smoke.py": "1527df8a06a5ba466b4f9989f8f5deebde1181c08819685ca3f4dcd05dae8c33"
+    },
+    "parser_selftests": {
+      "cases": {
+        "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/parser_cases.h",
+        "source_sha256": "2ce69742c9dcfcfc1b679c07be0c4a435c849ce312e75821b025d68d14837b03"
+      },
+      "auditor_test": {
+        "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/auditor_parser_selftest.c (include comment added)",
+        "source_sha256_as_built": "135f67c502e6d80e031b7de3a73a2a0ebec2fbea33073453f38e0119c8c1d3e6",
+        "binary_sha256": "9b87186c4bfbdab7c505cfe87239e825ce5e598f9b27ca8b7b87ec97dbe2ca67"
+      }
     }
   },
   "runs": [
@@ -179,7 +205,8 @@
       "main": "14 passed (results/549_s2_2_n03/main_auditor_pytest.log, sha256 d4be4faebbb5520abc2eb3f12907afdcdcdab6ae20509af987bbd3efea327a78)",
       "revision_1": "14 passed (results/549_s2_2_n03/proto_auditor_pytest.log, sha256 b1c490639115277310301c6400dd22ac8d16d9c96fbc6406aac68ef37e8ab1ed)",
       "revision_2": "14 passed with the revision 2 prototype as shipping/src/loader_audit.c in a scratch worktree (results/549_s2_2_n03/proto_r2_auditor_pytest.log, sha256 6a7490fb6d5a3dd67fe9e28368bd27fc8076d5e90bd3e6e0fdc1a8eb2d070277)",
-      "revision_3": "14 passed (results/549_s2_2_n03/proto_r3_auditor_pytest.log, sha256 212a9a4cb9b3728c9e24acba92fae89b3743c5315294c17a14b535eae86c8652)"
+      "revision_3": "14 passed (results/549_s2_2_n03/proto_r3_auditor_pytest.log, sha256 212a9a4cb9b3728c9e24acba92fae89b3743c5315294c17a14b535eae86c8652)",
+      "revision_3b": "14 passed (results/549_s2_2_n03/proto_r3b_auditor_pytest.log, sha256 9aac954abe3b3c45b8cb47818f192d3558b8bc3fa8b666d96236f28b0de9e82a)"
     },
     {
       "id": "pre_push_r1",
@@ -216,19 +243,55 @@
     {
       "id": "matrix_r8",
       "summary_sha256": "ed72703f20bde19ea20baddb7687659b162fffb3d523b177ce1dbac5920dc31a",
-      "result": "45/45 with revision 3 auditor and revision 3a probe (complete-record post-check parser); inputs unchanged in every case"
+      "result": "45/45 with revision 3 auditor and revision 3a probe (complete-record post-check parser); inputs unchanged in every case",
+      "note": "revision 3a probe; superseded by matrix_r9"
     },
     {
       "id": "gpu_smoke_r4",
       "summary_sha256": "08eb5d3fc61f1671385a146b464ad3d16af8ebe034aab29a74f35eb97a529183",
       "result": "6/6 with revision 3a smoke (complete-record post-check parser); eager outputs identical across load modes; graph replays equal eager; foreign same-byte source refused 127. Output hashes only",
+      "serialization": "tools/resctl.py run --wait gpu0",
+      "note": "revision 3a smoke; superseded by gpu_smoke_r5"
+    },
+    {
+      "id": "codex_review_r4",
+      "reviewed_commit": "7d1d04d13ed394983e0942a542fff149539f6dcc",
+      "output": "results/549_s2_2_n03/review/codex_review_r4.md",
+      "output_sha256": "ed510c35ed6e555449976dc70b454fa68d8b1db568d20c791567ad92560506cd",
+      "stalled_first_attempt": "results/549_s2_2_n03/review/codex_review_r4.stalled_stdin.log (codex exec waited on an open stdin; no review output; rerun with stdin from /dev/null)",
+      "result": "no blocker or major; revision 3a cleared for owner review; 2 minor (8191-byte final-record false refusal; parser list inconsistency) addressed in revision 3b"
+    },
+    {
+      "id": "parser_selftest_r1",
+      "directory": "results/549_s2_2_n03/parser_selftest_r1/",
+      "result": "auditor, host post-check and GPU smoke parsers each 12/12: 8191/8192/65535-byte boundaries with and without newline, oversized earlier records with header-shaped decoys, oversized target, PATH_MAX boundary (auditor refuses path length >= 4096 by design)"
+    },
+    {
+      "id": "matrix_r9",
+      "summary_sha256": "742d2f0d858effb6b2fa00cb929c8fb179e44c9a3c7177f3207d76c87646a53a",
+      "result": "45/45 with revision 3b auditor (binary identical to revision 3) and probe; inputs unchanged in every case"
+    },
+    {
+      "id": "gpu_smoke_r5",
+      "summary_sha256": "885a83a121a5f67640c83d2c6d1de9c5f52d4c845e0b6eead7604816217b505c",
+      "result": "6/6 with revision 3b smoke; eager outputs identical across load modes; graph replays equal eager; foreign same-byte source refused 127. Output hashes only",
       "serialization": "tools/resctl.py run --wait gpu0"
+    },
+    {
+      "id": "pre_push_r3",
+      "commit": "1d8d9abe6d14a010d66dc2cef22c15b24ad63468",
+      "result": "scripts/pre_push.sh exit 0; pytest 5670 passed, 52 skipped, 5 xfailed"
+    },
+    {
+      "id": "pre_push_r3a",
+      "commit": "7d1d04d13ed394983e0942a542fff149539f6dcc",
+      "result": "scripts/pre_push.sh exit 0; pytest 5670 passed, 52 skipped, 5 xfailed"
     }
   ],
   "raw_evidence": {
     "directory": "results/549_s2_2_n03/",
     "sha256sums": "results/549_s2_2_n03/SHA256SUMS",
-    "sha256sums_digest": "1a142a1ed86cd0fa8d8e5bb02fcaee63b2f252ec408362b73b28da5d8e28c14e",
+    "sha256sums_digest": "4dafa94205cca3da17adccb8bb6fee82d1d840ffccb9666561635f634a79a172",
     "excluded": "prefix_installed/, prefix_proto_r1/ and prefix_proto/ (lib/vendor hard links to the #536 evidence tree; per-case N03 copies are re-created from the frozen source)"
   },
   "unverified": [
@@ -238,14 +301,15 @@
     "a host with vm.memfd_noexec=2, seccomp-blocked memfd_create or an SELinux/AppArmor execute policy on memfd",
     "SIGKILL during the proposed load",
     "qualified V5 (driver 616.92 required; host is 617.42)",
-    "independent review of revision 3a changes (host parser, wording)",
-    "owner acceptance (D-N03-1..6)"
+    "owner acceptance (D-N03-1..6)",
+    "independent review of revision 3b changes (getline parsers, mapping_from_fd refactor, self-tests, wording)"
   ],
   "residuals": [
     "P2/I2 is an audit-time observation, as on main: neither establishes the path through which the source was originally opened (review r1 finding 2, r2 finding A); a writer to the fixed directory can rename a foreign-opened inode onto the fixed path. Requires owner acceptance (D-N03-6) or host-side binding (D-N03-5)",
     "I2 chunked comparison is not a single-instant snapshot of a mutable file (review r1 finding 4); I1 does not depend on it",
     "direct mapped-memory comparison covers 170,457 bytes of non-writable PT_LOAD segments outside PT_GNU_RELRO",
     "compatibility restrictions: ordinary files named '... (deleted)' (E8) and objects whose l_ld is not file-backed (untested) are refused; ordinary objects are identified by path+inode without device (overlayfs)",
-    "oversized /proc/self/maps record handling is untested in all three parsers (auditor, host post-check, GPU smoke); Phase 2 must test an oversized earlier and target record"
+    "auditor refuses objects whose mapped path is >= PATH_MAX (4096) bytes (parser self-test boundary)",
+    "parser self-tests use synthetic maps texts; no live oversized mapping was exercised"
   ]
 }
