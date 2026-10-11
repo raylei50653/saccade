@@ -622,7 +622,11 @@ def test_real_engine_io_refusal_keeps_gate_a_identity(
     j = _journal(tmp_path)
     assert j["state"] == "failed" and j["load_verification"] == LOAD_FAILED
     assert j["identity"]["level"] == "checksum_matched"
-    assert all(b["status"] == "matched" for b in j["identity"]["bindings"].values())
+    bindings = j["identity"]["bindings"]
+    assert all(
+        bindings[name]["status"] == "matched"
+        for name in ("config", "lineage", "attestation", "op_library", "head", "engine")
+    )
     assert mismatch in j["failure"]["message"], j["failure"]
     assert all(s["state"] == "pending" for s in j["sequences"])
 
