@@ -492,13 +492,27 @@ const RootKind* carrier_of(const std::string& role) {
     return nullptr;
 }
 
-std::vector<std::int64_t> ints(const JsonValue& shape) {
-    std::vector<std::int64_t> out;
-    for (const JsonValue& d : shape.array) {
-        std::int64_t n = 0;
-        integral(d, &n);
-        out.push_back(n);
+// A schema-valid integer as R-08 compares it: by its exact value, as Python's
+// `==` does (128 == 128.0; 1e300 != 1e299; no int64 clamping).
+struct Num {
+    bool is_int = true;
+    std::int64_t i = 0;
+    double d = 0.0;
+    explicit Num(const JsonValue& v)
+        : is_int(v.kind == Kind::Int), i(v.integer), d(v.kind == Kind::Float ? v.number : 0.0) {}
+    bool operator==(const Num& o) const {
+        if (is_int && o.is_int) return i == o.i;
+        if (!is_int && !o.is_int) return d == o.d;
+        const std::int64_t n = is_int ? i : o.i;
+        const double f = is_int ? o.d : d;  // integral (schema)
+        return f >= -9223372036854775808.0 && f < 9223372036854775808.0 && static_cast<std::int64_t>(f) == n;
     }
+    bool operator!=(const Num& o) const { return !(*this == o); }
+};
+
+std::vector<Num> nums(const JsonValue& shape) {
+    std::vector<Num> out;
+    for (const JsonValue& d : shape.array) out.emplace_back(d);
     return out;
 }
 
@@ -595,7 +609,7 @@ std::vector<BundleIssue> model_bundle_rule_issues(const JsonValue& m) {
     const auto& bb_out = bb.find("outputs")->array;
     bool same = head_in.size() == bb_out.size();
     for (std::size_t i = 0; same && i < head_in.size(); ++i) {
-        same = ints(*head_in[i].find("shape")) == ints(*bb_out[i].find("shape")) &&
+        same = nums(*head_in[i].find("shape")) == nums(*bb_out[i].find("shape")) &&
                head_in[i].find("dtype")->string == bb_out[i].find("dtype")->string;
     }
     if (!same) rule(out, "R-08", "head inputs do not match backbone outputs (shape, dtype)");
@@ -605,25 +619,20 @@ std::vector<BundleIssue> model_bundle_rule_issues(const JsonValue& m) {
         rule(out, "R-08", "head must emit one cls and one reg tensor per level");
     } else {
         const JsonValue& post = *m.find("postprocessing");
-        std::int64_t num_classes = 0, box_channels = 0;
-        integral(*post.find("num_classes"), &num_classes);
-        integral(*post.find("box_channels"), &box_channels);
+        const Num num_classes(*post.find("num_classes")), box_channels(*post.find("box_channels"));
         for (std::size_t k = 0; k < head_out.size(); ++k) {
-            const std::vector<std::int64_t> level = ints(*head_in[k % levels].find("shape"));
-            std::vector<std::int64_t> want_shape{level[0], k < levels ? num_classes : box_channels};
+            const std::vector<Num> level = nums(*head_in[k % levels].find("shape"));
+            std::vector<Num> want_shape{level[0], k < levels ? num_classes : box_channels};
             for (std::size_t d = 2; d < level.size(); ++d) want_shape.push_back(level[d]);
-            if (ints(*head_out[k].find("shape")) != want_shape) {
+            if (nums(*head_out[k].find("shape")) != want_shape) {
                 rule(out, "R-08", "head output " + head_out[k].find("name")->string + " shape is not the level's");
             }
         }
     }
     const JsonValue& resize = *m.find("preprocessing")->find("resize");
-    const std::vector<std::int64_t> bb_in = ints(*bb.find("inputs")->array[0].find("shape"));
-    std::int64_t height = 0, width = 0;
-    integral(*resize.find("height"), &height);
-    integral(*resize.find("width"), &width);
-    if (std::vector<std::int64_t>(bb_in.begin() + std::min<std::size_t>(2, bb_in.size()), bb_in.end()) !=
-        std::vector<std::int64_t>{height, width}) {
+    const std::vector<Num> bb_in = nums(*bb.find("inputs")->array[0].find("shape"));
+    if (std::vector<Num>(bb_in.begin() + std::min<std::size_t>(2, bb_in.size()), bb_in.end()) !=
+        std::vector<Num>{Num(*resize.find("height")), Num(*resize.find("width"))}) {
         rule(out, "R-08", "resize does not produce the backbone input H/W");
     }
     return out;

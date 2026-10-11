@@ -255,6 +255,24 @@ void test_more_keywords(const JsonValue& manifest) {
         apply(d, sh::parse_strict_json(R"([{"op": "replace", "path": "/members/0/bytes", "value": -1e300}])"));
         CHECK(has_issue(sh::model_bundle_schema_issues(d), "/members/0/bytes", "minimum"));
     }
+    // R-08 compares numbers by value, never clamped (#576 review): a backbone
+    // output channel 1e300 against a head input channel 1e299 is R-08; the
+    // same value spelled 128 / 128.0 is equal, as in Python.
+    {
+        JsonValue d = manifest;
+        apply(d, sh::parse_strict_json(R"([{"op": "replace", "path": "/io/backbone_engine/outputs/0/shape/1", "value": 1e300},
+                                           {"op": "replace", "path": "/io/head/inputs/0/shape/1", "value": 1e299}])"));
+        CHECK(sh::model_bundle_schema_issues(d).empty());
+        CHECK(rules(sh::model_bundle_rule_issues(d)) == std::set<std::string>{"R-08"});
+        JsonValue e = manifest;
+        apply(e, sh::parse_strict_json(R"([{"op": "replace", "path": "/io/head/inputs/0/shape/1", "value": 128.0},
+                                           {"op": "replace", "path": "/preprocessing/resize/height", "value": 640.0}])"));
+        CHECK(sh::model_bundle_issues(e).empty());
+        JsonValue f = manifest;  // 2^53 + 1 (int) != 2^53 (float)
+        apply(f, sh::parse_strict_json(R"([{"op": "replace", "path": "/io/backbone_engine/outputs/0/shape/1", "value": 9007199254740993},
+                                           {"op": "replace", "path": "/io/head/inputs/0/shape/1", "value": 9007199254740992.0}])"));
+        CHECK(rules(sh::model_bundle_rule_issues(f)) == std::set<std::string>{"R-08"});
+    }
     // The strict reader refuses an integer literal outside int64 (stricter
     // than the schema, which has no upper bound): the manifest never parses.
     {
