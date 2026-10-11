@@ -1,0 +1,116 @@
+{
+  "schema": "saccade.s2_2_n03_research_evidence/v1",
+  "scope": "Phase 1 research evidence for the #549 S2-2 N03 TOCTOU proposal. Prototype auditor and probes only; no production source, installed package, N03 bytes, allowlist or pin is changed.",
+  "status": {
+    "n03_mb41": "OPEN",
+    "s2_2": "PARTIAL",
+    "gate_1": "research evidence supports provenance preservation; production implementation requires independent review and owner acceptance",
+    "aggregate_byte_scope": "hashed_before_load",
+    "qualified_v5": "UNRESOLVED"
+  },
+  "distribution": {
+    "status": "local-only",
+    "owner_confirmation": null
+  },
+  "coordinates": {
+    "base_sha": "74f2f5cb1a3db8a1f42da48d533e3322f243d138",
+    "production_sources_changed": false,
+    "host": {
+      "kernel": "6.18.33.1-microsoft-standard-WSL2",
+      "glibc": "2.44",
+      "cc": "GCC 16.2.1 20260810",
+      "torch": "2.11.0+cu130",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU, compute 12.0",
+      "driver": "617.42",
+      "vm_memfd_noexec": 0
+    }
+  },
+  "inputs": {
+    "n03": {
+      "sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+      "bytes": 3517632,
+      "source": "results/536_package_repin/full_b24c27f/installed/saccade/share/saccade/build/libsaccade_scan_torchop.so (copied, never modified)"
+    },
+    "n03_mutated_control": {
+      "sha256_recorded_in": "results/549_s2_2_n03/matrix_r3/matrix.summary.json",
+      "mutation": ".rodata offset 0x13ab8 'u' -> 'U' (error message text)"
+    },
+    "installed_auditor": {
+      "sha256": "1ee968abb8f431c770723a3a1a9263d37ab58c92a9915b18b98506f91b95d74b",
+      "source_sha256": "f51b81c7f6208840552e8f862bd0d194f705a573bddfc4caf35ae64e99c512bf"
+    },
+    "prototype_auditor": {
+      "source": "results/549_s2_2_n03/prototype/loader_audit_proto.c",
+      "source_sha256": "724386b1fb44a9bdc78590cafc69df5a68bc7256776c7015098f64ff010c4800",
+      "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/loader_audit_prototype.c",
+      "binary_sha256": "b967b13fcad998346bff6e2f0ac1a6c463ef00adc545f9a78591082efb523aaa",
+      "build": "cc -std=c11 -O3 -DNDEBUG -fPIC -shared -Wall -Wextra -Werror -Igen (generated name list sha256 5c70b555cd0b76fa55fdbd0569635c0b26999145a8fbec11d02aa1578f42fe99)"
+    },
+    "host_probe": {
+      "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/n03_host_probe.c",
+      "source_sha256": "98a2901d431c22c22e45d0021cae06a9d82e4f544bdb28dbff2d6fabd1e4a483",
+      "binary_sha256_r3": "fdbdbad3fe712a0662d6e3edd0d3392330dc41370d3b57c8a3f4d4c87021df67"
+    },
+    "gpu_smoke": {
+      "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/n03_gpu_smoke.cpp",
+      "source_sha256": "394477f1225b69822643595075d8630c6b2f5b18f7a4a77219110debe036b1b8",
+      "binary_sha256": "a58566eeca05cc7c0a739e00a5842ee7783b13a841f5a52a99ac92f2e5fa98a5"
+    },
+    "runners": {
+      "results/549_s2_2_n03/reproduce/run_reproduce.py": "9dfa3e586ce240c5b2391cd03be22f039823412c886b5dd280df0cf977ad19c4",
+      "results/549_s2_2_n03/run_matrix.py": "a0b2110c2bb09d52cf2f3ce2f49cfc1252f53a585b958cdff380b4fd2be7cdb2",
+      "results/549_s2_2_n03/run_gpu_smoke.py": "21ac9af82507358e84da98ace42bd7a32ed7028e006e3e4b0117834dfb87610a"
+    }
+  },
+  "runs": [
+    {
+      "id": "reproduce_582",
+      "summary": "results/549_s2_2_n03/reproduce/reproduce.summary.json",
+      "summary_sha256": "82d610c1bb1e3930012f3b11c68407491796581a18d7bdcb9e38c1b436736c1d",
+      "result": "pinned 0, foreign 127, unlabeled sealed memfd 0 (bypass reproduced); inputs unchanged"
+    },
+    {
+      "id": "matrix_r1",
+      "summary_sha256": "de81d58d507136e8f3a0c97f8f47249d27248320bd44bbe7403b1579f574a50c",
+      "result": "29/30; C05 refused with exit 127 as predicted but by the path rule (source d_path ' (deleted)'), not the predicted dev/ino message",
+      "note": "runner and probe bytes of this round are not retained; the probe SHA-256 is in the summary"
+    },
+    {
+      "id": "matrix_r2",
+      "summary_sha256": "722785af3b2ab42bac232bc994c5727ab696eda6451188b5711bab48c888b52b",
+      "result": "30/31; C20 falsified the prediction that a MFD_NOEXEC_SEAL memfd cannot be dlopen'ed (it loads, exit 0)",
+      "note": "runner and probe bytes of this round are not retained; the probe SHA-256 is in the summary"
+    },
+    {
+      "id": "matrix_r3",
+      "summary_sha256": "64a1d51037624422e69f034b0fa26f3216d6f578e4f0fa55a6cba24c9a51e58e",
+      "result": "31/31 with the final runner, probe and prototype auditor; inputs unchanged in every case"
+    },
+    {
+      "id": "gpu_smoke_r1",
+      "summary_sha256": "8266ee512f08c19e18a550eece94eb0643cb6b45c32516ca4cd320ef5d7a97a8",
+      "result": "5/5; eager float32/float16 outputs identical across path and memfd loads; graph capture + 3 replays equal eager; foreign same-byte source refused 127",
+      "serialization": "tools/resctl.py run --wait gpu0"
+    },
+    {
+      "id": "auditor_regressions",
+      "command": "pytest tests/unit/test_shipping_bundle_checks.py -k 'auditor or launcher'",
+      "main": "14 passed (results/549_s2_2_n03/main_auditor_pytest.log, sha256 d4be4faebbb5520abc2eb3f12907afdcdcdab6ae20509af987bbd3efea327a78)",
+      "prototype": "14 passed with the prototype as shipping/src/loader_audit.c in a scratch worktree (results/549_s2_2_n03/proto_auditor_pytest.log, sha256 b1c490639115277310301c6400dd22ac8d16d9c96fbc6406aac68ef37e8ab1ed)"
+    }
+  ],
+  "raw_evidence": {
+    "directory": "results/549_s2_2_n03/",
+    "sha256sums": "results/549_s2_2_n03/SHA256SUMS",
+    "sha256sums_digest": "c36d83e3c8329e019331f87b5c6b1b9ece6ddfb50fed95482316d5b294a608ce",
+    "excluded": "prefix_installed/ and prefix_proto/ (lib/vendor hard links to the #536 evidence tree; per-case N03 copies are re-created from the frozen source)"
+  },
+  "unverified": [
+    "production DetectorHost/auditor implementation (not written)",
+    "full saccade_track CLI, journal/report readers, serial/double-buffer and seven-sequence replays under the proposal",
+    "installed package / launcher acceptance and re-pin",
+    "a host with vm.memfd_noexec=2, seccomp-blocked memfd_create or an SELinux/AppArmor execute policy on memfd",
+    "SIGKILL during the proposed load",
+    "qualified V5 (driver 616.92 required; host is 617.42)"
+  ]
+}
