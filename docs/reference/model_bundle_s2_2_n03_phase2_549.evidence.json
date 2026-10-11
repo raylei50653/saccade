@@ -15,18 +15,18 @@
   "authorization": "owner in-session decision: P-N03 rev 3c ACCEPT, D-N03-5 SELECTED, D-N03-6 NOT SELECTED, Phase 2 implementation authorized, merge not authorized; owner chose strict D-N03-5 in both modes with the kernel-mapping root derivation",
   "coordinates": {
     "base_sha": "74f2f5cb1a3db8a1f42da48d533e3322f243d138",
-    "replay_source_head": "85086d596c2d9213e3932d82cda8cfdbe5c3841b",
-    "replay_source_tree": "3e0a85da1b5ffb1cc7423b1dc5ffab73e23054fc",
+    "replay_source_head": "c5510fdd8e419a15c2e4d2996d0e4861e5c723ba",
+    "replay_source_tree": "4d2292f44e79145d52d5f7a86e9b4574898f36c5",
     "binaries": [
       {
         "path": "build/runtime_identity/shipping/saccade_track",
         "bytes": 3793872,
-        "sha256": "e25b7e0c9d27b1313116accf4e7e41c1b8111ade29d4b9ece239e9c90941e4d4"
+        "sha256": "887ebbf32b1c48900328ab8507a5f2ab0b6eb689f0bbd63e711808d57f3e4e4e"
       },
       {
         "path": "build/runtime_identity/shipping/saccade_track_measurement",
         "bytes": 3809352,
-        "sha256": "e0d3a91351a8be31e1b484f8526839752fddc87885a443e55a0da4b6c203055b"
+        "sha256": "9656710bb372b30cc41119ae64386668bc0a17a4be714945146eae0b5b1e5264"
       },
       {
         "path": "build/runtime_identity/shipping/saccade_loader_audit.so",
@@ -46,10 +46,10 @@
   "runs": [
     {
       "id": "cpu_operator_loader_test",
-      "commit": "7fb8c7a9",
-      "result": "52 checks, 0 failures per run; 30/30 repeated runs",
-      "raw_evidence": "results/549_s2_2_n03_phase2/cpu_operator_loader_repeat30_7fb8c7a9.log",
-      "sha256": "28ded5fcc5c85ee9a5d4d46a0839fabd546b730ed1afa4e31ca3c87f2368fa88"
+      "commit": "0e09a85d",
+      "result": "53 checks, 0 failures per run; 30/30 repeated runs",
+      "raw_evidence": "results/549_s2_2_n03_phase2/cpu_operator_loader_repeat30_0e09a85d.log",
+      "sha256": "cc79dab4e194aeb3a8ea88090636da65759b001524d3a363915707a1a28c422e"
     },
     {
       "id": "mutation_postcheck_removed",
@@ -65,32 +65,41 @@
       "program": "results/549_s2_2_n03_phase2/elf_split_attack.cpp"
     },
     {
+      "id": "elf_overlap_attack",
+      "result": "an earlier PT_LOAD extended over the dynamic table's pages with PT_DYNAMIC's file offset at its zeros: accepted by the 7fb8c7a9 parser, refused by 0e09a85d ('overlapping or unordered loadable segments')",
+      "raw_evidence": "results/549_s2_2_n03_phase2/elf_overlap_attack_r2_vs_new.log",
+      "sha256": "6b0f63e6f32ad0d92a5d7e4594d508c20bcaafae7a59d9a42f1dda12d51f9b36",
+      "program": "results/549_s2_2_n03_phase2/elf_overlap_attack.cpp"
+    },
+    {
       "id": "gpu_native_ctest",
-      "commit": "7fb8c7a9",
-      "result": "5/5: operator_loader (52 checks), detector_s2 (47), serial_runtime, double_buffer_runtime, model_bundle_gate_b (158)",
-      "raw_evidence": "results/549_s2_2_n03_phase2/ctest_gpu_7fb8c7a9.log",
-      "sha256": "6543e5bbfdd4ed5e5b6ea85a97956d74fa9621dfbdc85a6d130cd2203f3da423"
+      "commit": "0e09a85d",
+      "result": "5/5: operator_loader (53 checks), detector_s2 (47), serial_runtime, double_buffer_runtime, model_bundle_gate_b (158)",
+      "raw_evidence": "results/549_s2_2_n03_phase2/ctest_gpu_0e09a85d.log",
+      "sha256": "d7bf4c01e449dfc9ac6d61d801ac401f67c76cdfdd1b45b223f9625914b70e24"
     },
     {
       "id": "n03_auditor_real_loader_suite",
-      "commit": "7fb8c7a9",
-      "result": "36/36 (included in cli_suites); its first 20 cases against main's auditor: 13 fail (every bypass/forgery/post-hash/FD/alias case), 7 pass (positives, host refusals, path-mode cases main also handles)",
+      "commit": "0e09a85d",
+      "result": "37/37 (included in cli_suites); its first 20 cases against main's auditor: 13 fail (every bypass/forgery/post-hash/FD/alias case), 7 pass (positives, host refusals, path-mode cases main also handles)",
       "main_auditor_raw_evidence": "results/549_s2_2_n03_phase2/auditor_suite_against_main_auditor.log",
       "main_auditor_sha256": "79ebd8a743e2ea6393e4fb51057b3716685b5955c71824405545bd0dec36f231"
     },
     {
       "id": "cli_suites",
-      "commit": "7fb8c7a9",
-      "result": "516 passed, 0 skipped under the gpu0 lease",
-      "raw_evidence": "results/549_s2_2_n03_phase2/cli_suites_7fb8c7a9.log",
-      "sha256": "ff11286a3e2a7f0e0f71163d86e8d70fb2687a5be948b44f8a534708f8c5cc2c"
+      "commit": "0e09a85d",
+      "result": "517 passed, 0 skipped under the gpu0 lease (includes the 37-case N03 auditor suite)",
+      "raw_evidence": "results/549_s2_2_n03_phase2/cli_suites_0e09a85d.log",
+      "sha256": "fb4879b9eeadab4686bd04b148e93338d5dd7adc430d5db632ac3133d4f8d63a"
     },
     {
       "id": "gpu_replay",
-      "directory": "results/549_s2_2_n03_phase2/gpu_85086d596c2d",
-      "summary_sha256": "f3a8aae9d5ea1240573231b840f1a7f4f1d824f0bd8fd17a1bca04e330848731",
-      "sha256sums_digest": "1a59a310c63ba6ec978f441295ce0f3fe8bd95201859076f706b85fcf64041fd",
+      "directory": "results/549_s2_2_n03_phase2/gpu_c5510fdd8e41",
+      "summary_sha256": "4a23196f9e90da9bb23735405aa980bae13aef531a4491706b188942f3f7408f",
+      "sha256sums_digest": "bfc2cc504cdc7251abc903b364fc6807eaf312bedaee0c4a2908fe4ae71c74fe",
       "runner_sha256": "c04121b713c8e3c9f73d5e85d7fef1ad69c0f9bfed0021dc2e4ceffc185816f1",
+      "chain": "results/549_s2_2_n03_phase2/verify_chain.sh",
+      "chain_output": "results/549_s2_2_n03_phase2/verify_chain_0e09a85d.out",
       "qualification": {
         "formal_verdict": "UNRESOLVED",
         "problem": "V5: driver/runtime: NVIDIA driver '617.42' != '616.92'"
@@ -189,9 +198,9 @@
           ],
           "memfd_device": "00:01",
           "memfd_mapped_inodes": [
-            539933
+            600925
           ],
-          "memfd_inode": 539933,
+          "memfd_inode": 600925,
           "memfd_seals": 47,
           "memfd_sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
           "operator_path_mapped": []
@@ -205,9 +214,9 @@
           ],
           "memfd_device": "00:01",
           "memfd_mapped_inodes": [
-            568835
+            666769
           ],
-          "memfd_inode": 568835,
+          "memfd_inode": 666769,
           "memfd_seals": 47,
           "memfd_sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
           "operator_path_mapped": []
@@ -225,27 +234,33 @@
         },
         "prefix": {
           "auditor_sha256": "57161128d29b67c4643e19fed65870ffea4fca43a0c1b38753e6e885b963e2a8",
-          "entrypoint_sha256": "e25b7e0c9d27b1313116accf4e7e41c1b8111ade29d4b9ece239e9c90941e4d4",
+          "entrypoint_sha256": "887ebbf32b1c48900328ab8507a5f2ab0b6eb689f0bbd63e711808d57f3e4e4e",
           "operator_sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4"
         }
       },
       "launcher_foreign_model_root": {
-        "run_id": "6bb4a0ddb5a68f0dbd453acadbe7670a",
+        "run_id": "9a49320e1dc4b4570d90d7a2a8b2031d",
         "state": "failed",
         "load_verification": {
           "status": "failed",
           "byte_scope": null
         },
         "identity_level": "checksum_matched",
-        "message": "shipping detector load: operator library /home/ray/developer/ai/saccade/build/libsaccade_scan_torchop.so is not the runtime package's /home/ray/developer/ai/saccade/results/549_s2_2_n03_phase2/gpu_85086d596c2d/install/saccade/share/saccade/build/libsaccade_scan_torchop.so (D-N03-5)"
+        "message": "shipping detector load: operator library /home/ray/developer/ai/saccade/build/libsaccade_scan_torchop.so is not the runtime package's /home/ray/developer/ai/saccade/results/549_s2_2_n03_phase2/gpu_c5510fdd8e41/install/saccade/share/saccade/build/libsaccade_scan_torchop.so (D-N03-5)"
       },
       "auditor_other_prefix": {
-        "run_id": "7c2001ddbb109f1d27a44d66d023a6d3",
+        "run_id": "1540f9917f8447d7e6d2bb4eb83038f6",
         "state": "running",
         "load_verification": null,
         "identity_level": "checksum_matched",
-        "auditor_line": "saccade_track: loader provenance check failed: operator library mapped from another path: /home/ray/developer/ai/saccade/results/549_s2_2_n03_phase2/gpu_85086d596c2d/install/saccade/share/saccade/build/libsaccade_scan_torchop.so"
+        "auditor_line": "saccade_track: loader provenance check failed: operator library mapped from another path: /home/ray/developer/ai/saccade/results/549_s2_2_n03_phase2/gpu_c5510fdd8e41/install/saccade/share/saccade/build/libsaccade_scan_torchop.so"
       }
+    },
+    {
+      "id": "gpu_replay_round2",
+      "directory": "results/549_s2_2_n03_phase2/gpu_85086d596c2d",
+      "summary_sha256": "f3a8aae9d5ea1240573231b840f1a7f4f1d824f0bd8fd17a1bca04e330848731",
+      "note": "source 85086d59 (code 7fb8c7a9), before review round 3; superseded; same results"
     },
     {
       "id": "gpu_replay_round1",
@@ -261,17 +276,17 @@
     },
     {
       "id": "runtime_identity_republication",
-      "candidate": "results/549_s2_2_n03_phase2/identity_7fb8c7a9/runtime_identity.candidate.json",
-      "candidate_sha256": "a78c7ad3547b41a62dffc4eb49470e93e9eb20240b2304c2a4f80f4931f58f05",
+      "candidate": "results/549_s2_2_n03_phase2/identity_0e09a85d/runtime_identity.candidate.json",
+      "candidate_sha256": "9cceaf3b44e7650616e7427968c89ff8595fa32ad839bbaac66f4381f86d7674",
       "outgoing_archive": "docs/reference/runtime_identity/archive/runtime_identity.2026-10-11.bc378f688f9cd71b.json",
       "outgoing_sha256": "63f7ebebb38c758a54ef58a86d75c76b1c845758217a0d0f9d1ab0adc13d0c74",
       "implementation": {
         "from": "bc378f688f9cd71b7a72b567f0718ac3d87d153fd8b246a15e6c17c927e24e5c",
-        "to": "8cf46e38e1f836abc4f5db2d4613dcbfa32d263ae6d72086218329ea10f796ae",
+        "to": "671bc0a935dc20ca08390967cb9ee2fcffe7a7f262729e6d562876e24156459a",
         "files": "303 -> 305"
       },
-      "attested_check": "results/549_s2_2_n03_phase2/identity_7fb8c7a9/attested_check.log",
-      "result": "only the implementation axis changed; probe digest equal but freshly computed; equivalence unproven; attested staleness check exit 0; the intermediate 91a0037c coordinate was reverted before push"
+      "attested_check": "results/549_s2_2_n03_phase2/identity_0e09a85d/attested_check.log",
+      "result": "only the implementation axis changed; probe digest equal but freshly computed; equivalence unproven; attested staleness check exit 0; intermediate republications 91a0037c and 001ecec4 were reverted before push"
     },
     {
       "id": "codex_review_p2_r1",
@@ -286,11 +301,18 @@
       "output": "results/549_s2_2_n03_phase2/review/codex_review_p2_r2.md",
       "output_sha256": "1063e5bbe7ba42033aa82a95f3b645674bde96b00b3e57cea8f1971e5c3577f7",
       "result": "no blocker; 1 major (ELF dynamic table file vs memory view), 2 minor; coordinate republication: no findings; resolved in 7fb8c7a9"
+    },
+    {
+      "id": "codex_review_p2_r3",
+      "reviewed_commit": "8a7307fc",
+      "output": "results/549_s2_2_n03_phase2/review/codex_review_p2_r3.md",
+      "output_sha256": "a25640098494e1084406810622592cc507e397e843cb8c8c7c3c0bde16d04287",
+      "result": "no blocker; 1 major (overlapping PT_LOAD), 1 minor (closure overstated); coordinate republication: no findings; resolved in 0e09a85d"
     }
   ],
   "raw_evidence": {
     "directory": "results/549_s2_2_n03_phase2/",
-    "sha256sums_digest": "7abf7b2b34d97627dfc43cce847c00aa3d44fc4fd24b915d9a11fe9352cb7213",
+    "sha256sums_digest": "f6157bc93492a43f0df3ae009e14e2adecb89591d5f7069b90c391cdafad80b1",
     "excluded": "assembled prefixes and bundles (hard links / copies of frozen inputs) and the runtime_identity build log"
   },
   "residuals": [
