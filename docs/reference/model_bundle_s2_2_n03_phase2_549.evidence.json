@@ -1,0 +1,239 @@
+{
+  "schema": "saccade.s2_2_n03_phase2_evidence/v1",
+  "scope": "Local evidence for the #549 S2-2 N03 Phase 2 implementation candidate (P-N03 rev 3c, D-N03-5 strict in both modes). Draft, unmerged.",
+  "status": {
+    "n03_mb41": "OPEN until merge and main CI",
+    "s2_2": "PARTIAL",
+    "aggregate_byte_scope": "hashed_before_load",
+    "n03_object_byte_scope": "loaded_buffer (D-N03-2; reports and probe)",
+    "qualified_v5": "UNRESOLVED"
+  },
+  "distribution": {
+    "status": "local-only",
+    "owner_confirmation": null
+  },
+  "authorization": "owner in-session decision: P-N03 rev 3c ACCEPT, D-N03-5 SELECTED, D-N03-6 NOT SELECTED, Phase 2 implementation authorized, merge not authorized; owner chose strict D-N03-5 in both modes with the kernel-mapping root derivation",
+  "coordinates": {
+    "base_sha": "74f2f5cb1a3db8a1f42da48d533e3322f243d138",
+    "replay_source_head": "e598d2f6b07af20b5b5c1cee8d6a76468b8a7203",
+    "replay_source_tree": "5f3a519b95d1f8cd7e1104e38a30baffd6abeb14",
+    "binaries": [
+      {
+        "path": "build/runtime_identity/shipping/saccade_track",
+        "bytes": 3784704,
+        "sha256": "602ccbbc23d8c8540f72e694fba410169f4027773a9020848c12596f76e46a9a"
+      },
+      {
+        "path": "build/runtime_identity/shipping/saccade_track_measurement",
+        "bytes": 3791968,
+        "sha256": "b8cb802d72d34be4f79384d80b46197079f64b226a4a9ca1030277c645675d4e"
+      },
+      {
+        "path": "build/runtime_identity/shipping/saccade_loader_audit.so",
+        "bytes": 21656,
+        "sha256": "99517fa29d5df5e7b6cb9a81bd6afa427d66b5cd26cbbfb703daef23ca3cb403"
+      }
+    ],
+    "attested_n03_sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+    "host": {
+      "kernel": "6.18.33.1-microsoft-standard-WSL2",
+      "glibc": "2.44",
+      "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU, sm_120",
+      "driver": "617.42",
+      "vm_memfd_noexec": 0
+    }
+  },
+  "runs": [
+    {
+      "id": "cpu_operator_loader_test",
+      "result": "36 checks, 0 failures (fork-isolated cases); 30/30 repeated runs pass",
+      "raw_evidence": "results/549_s2_2_n03_phase2/ctest_gpu_r1.log"
+    },
+    {
+      "id": "gpu_native_ctest",
+      "commit": "450f3d11",
+      "result": "5/5: operator_loader, detector_s2 (47 checks), serial_runtime, double_buffer_runtime, model_bundle_gate_b (158 checks)",
+      "raw_evidence": "results/549_s2_2_n03_phase2/ctest_gpu_r1.log",
+      "sha256": "6e145fa0767918808b9e0233b47002065631c69335bc4cf0011d57c1b7548d4d"
+    },
+    {
+      "id": "n03_auditor_real_loader_suite",
+      "result": "20/20 with the Phase 2 auditor; against main's auditor 13 fail (every bypass/forgery/post-hash/FD/alias case), 7 pass (positives, host refusals, path-mode cases main also handles)",
+      "raw_evidence": "results/549_s2_2_n03_phase2/auditor_suite_against_main_auditor.log",
+      "sha256": "79ebd8a743e2ea6393e4fb51057b3716685b5955c71824405545bd0dec36f231"
+    },
+    {
+      "id": "cli_suites",
+      "commit": "e598d2f6",
+      "result": "500 passed, 0 skipped under the gpu0 lease",
+      "raw_evidence": "results/549_s2_2_n03_phase2/cli_suites_e598d2f6.log",
+      "sha256": "31631dd7ae3fef10a672b1b9f7c76affb046d14f16d6004d3d951e56c70a0d80"
+    },
+    {
+      "id": "gpu_replay",
+      "directory": "results/549_s2_2_n03_phase2/gpu_e598d2f6b07a",
+      "summary_sha256": "b19e4d78de5b17c6c5aaa13aafbf6d1e3e72c26ae3227fc2ae04cd5807a8f20c",
+      "sha256sums_digest": "f53b2145e532399ddf54a6f7e2b57059cab4e41c5bae382d86a542ed2833bf71",
+      "runner_sha256": "6c0436fd5e349509d268c917ca5889bef272d1516b03e91ea5b278fca668dee5",
+      "qualification": {
+        "formal_verdict": "UNRESOLVED",
+        "problem": "V5: driver/runtime: NVIDIA driver '617.42' != '616.92'"
+      },
+      "positives": {
+        "shipping_trace": {
+          "frames": 5316,
+          "sequences": 7,
+          "raw_sections": {
+            "detector": "EXACT",
+            "mot_txt": "EXACT",
+            "graph_captures": "EXACT"
+          },
+          "artifact_byte_scopes": {
+            "op_library": "loaded_buffer",
+            "head_artifact": "loaded_buffer",
+            "backbone_engine": "loaded_buffer"
+          }
+        },
+        "shipping_no_trace": {
+          "frames": 5316,
+          "sequences": 7,
+          "raw_sections": {
+            "detector": "NOT_RUN",
+            "mot_txt": "EXACT",
+            "graph_captures": "EXACT"
+          },
+          "artifact_byte_scopes": {
+            "op_library": "loaded_buffer",
+            "head_artifact": "loaded_buffer",
+            "backbone_engine": "loaded_buffer"
+          }
+        },
+        "measurement_none": {
+          "frames": 5316,
+          "sequences": 7,
+          "raw_sections": {
+            "detector": "EXACT",
+            "mot_txt": "EXACT",
+            "graph_captures": "EXACT"
+          },
+          "artifact_byte_scopes": {
+            "op_library": "loaded_buffer",
+            "head_artifact": "loaded_buffer",
+            "backbone_engine": "loaded_buffer"
+          }
+        },
+        "measurement_serial": {
+          "frames": 5316,
+          "sequences": 7,
+          "raw_sections": {
+            "detector": "EXACT",
+            "mot_txt": "EXACT"
+          },
+          "artifact_byte_scopes": {
+            "op_library": "loaded_buffer",
+            "head_artifact": "loaded_buffer",
+            "backbone_engine": "loaded_buffer"
+          }
+        }
+      },
+      "outputs_equal_to_582_replay": {
+        "shipping_trace": true,
+        "shipping_no_trace": true,
+        "measurement_none": true,
+        "measurement_serial": true
+      },
+      "negative_controls": {
+        "negctl_gmc_previous_frame": "DIFFERS",
+        "negctl_ref_edit": "DIFFERS",
+        "negctl_shared_post_host": "DIFFERS",
+        "negctl_stale_detector_input": "DIFFERS",
+        "negctl_stale_gmc_input": "DIFFERS",
+        "negctl_stale_image_dims": "DIFFERS",
+        "negctl_swapped_detection_parity": "DIFFERS"
+      },
+      "manifest_mode": {
+        "mot_txt_equal_to_legacy": true,
+        "load_verification": {
+          "status": "verified",
+          "byte_scope": "hashed_before_load"
+        },
+        "artifact_byte_scopes": {
+          "op_library": "loaded_buffer",
+          "head_artifact": "loaded_buffer",
+          "backbone_engine": "loaded_buffer"
+        }
+      },
+      "load_observation": {
+        "manifest_mode": {
+          "memfd_names": [
+            "/memfd:saccade-n03:src-fd=20 (deleted)"
+          ],
+          "memfd_mapped_inodes": [
+            220637
+          ],
+          "memfd_inode": 220637,
+          "memfd_seals": 47,
+          "memfd_sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+          "operator_path_mapped": []
+        },
+        "launcher_legacy": {
+          "memfd_names": [
+            "/memfd:saccade-n03:src-fd=20 (deleted)"
+          ],
+          "memfd_mapped_inodes": [
+            231011
+          ],
+          "memfd_inode": 231011,
+          "memfd_seals": 47,
+          "memfd_sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+          "operator_path_mapped": []
+        }
+      },
+      "launcher_legacy": {
+        "load_verification": {
+          "status": "verified",
+          "byte_scope": "hashed_before_load"
+        },
+        "artifact_byte_scopes": {
+          "op_library": "loaded_buffer",
+          "head_artifact": "loaded_buffer",
+          "backbone_engine": "loaded_buffer"
+        },
+        "prefix": {
+          "auditor_sha256": "57161128d29b67c4643e19fed65870ffea4fca43a0c1b38753e6e885b963e2a8",
+          "entrypoint_sha256": "602ccbbc23d8c8540f72e694fba410169f4027773a9020848c12596f76e46a9a",
+          "operator_sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4"
+        }
+      },
+      "launcher_foreign_model_root": {
+        "run_id": "d78f820458043cd715e76feb6753bc95",
+        "state": "failed",
+        "load_verification": {
+          "status": "failed",
+          "byte_scope": null
+        },
+        "identity_level": "checksum_matched",
+        "message": "shipping detector load: operator library /home/ray/developer/ai/saccade/build/libsaccade_scan_torchop.so is not the runtime package's /home/ray/developer/ai/saccade/results/549_s2_2_n03_phase2/gpu_e598d2f6b07a/install/saccade/share/saccade/build/libsaccade_scan_torchop.so (D-N03-5)"
+      },
+      "auditor_other_prefix": {
+        "run_id": "752a52448855bcdcec4bee528867bb15",
+        "state": "running",
+        "load_verification": null,
+        "identity_level": "checksum_matched",
+        "auditor_line": "saccade_track: loader provenance check failed: operator library mapped from another path: /home/ray/developer/ai/saccade/results/549_s2_2_n03_phase2/gpu_e598d2f6b07a/install/saccade/share/saccade/build/libsaccade_scan_torchop.so"
+      }
+    }
+  ],
+  "raw_evidence": {
+    "directory": "results/549_s2_2_n03_phase2/",
+    "sha256sums_digest": "1c368a5a3dd219a5076074fd74f15bd72f0ff060ea9db6f03b7dc48825ae682d",
+    "excluded": "assembled prefixes and bundles (hard links / copies of frozen inputs) and the runtime_identity build log"
+  },
+  "residuals": [
+    "check_shipping_bundle.py sources (LD_DEBUG calling-init path) and strace parsers (open/openat, not openat2) do not understand the memfd load; a package re-pin must adapt them (outside this authorization)",
+    "hosts without openat2, memfd_create, /proc or executable memfd mappings are refused and UNVERIFIED",
+    "auditor compatibility restrictions: files named '... (deleted)', non-file-backed l_ld, mapped paths >= PATH_MAX",
+    "runtime identity implementation axis moved; coordinate republication pending with the final delivery",
+    "installed package / launcher acceptance, manifest mode under the launcher (Gate A /proc/self/exe), alternate GPU/driver, V5 qualification: not covered"
+  ]
+}
