@@ -143,7 +143,7 @@ flowchart TB
 
 ## 4. 接口契約卡（accepted target）
 
-以下三張卡依[設計決策](#decision-536-first-slice)批准為目標設計。CC-536-08-02 與 CC-536-01-01 已實作（狀態見各卡內），CC-536-01-02 只實作了 Gate A（N-T2），identity level 還沒有實作。欄位依 #536 B1。
+以下三張卡依[設計決策](#decision-536-first-slice)批准為目標設計。CC-536-08-02 與 CC-536-01-01 已實作（狀態見各卡內），CC-536-01-02 已實作 Gate A（N-T2）與 legacy N-T3 `checksum_matched`（皆 source-level，見[實作狀態](#cc-536-01-02-status)），`expected_source_verified`、認可 expected 來源與強制 policy 仍未實作，整張卡尚未完成。欄位依 #536 B1。
 
 ### <a id="cc-536-01-01"></a>CC-536-01-01：completion／diagnostic
 
@@ -288,7 +288,7 @@ Owner 欄寫的是 ledger 的 CAP accountable owner，以及語義的去向。ev
 - **實作切法**（一次一個 PR；第 1、2、3 項已完成，第 4 項仍是候選，需自己的授權）：
   1. Export safety：F1、frozen stem 保護、staging 與 publication commit、失敗注入測試（[#559](https://github.com/raylei50653/saccade/pull/559) merged，見 [CC-536-08-02 實作狀態](#cc-536-08-02-status)）；
   2. Completion：`run_id`、lock、journal、逐檔 temp→rename 的 txt、report 新 format，MOT 位元組不變，並檢查 `saccade_track_measurement`；狀態轉換的細節由 #537 擁有（[#562](https://github.com/raylei50653/saccade/pull/562) merged，見 [CC-536-01-01 實作狀態](#cc-536-01-01-status)；package re-pin 為[另行授權並驗證的切片](../reference/native_runtime_package_repin_536.md)）；
-  3. Preflight：sha256 與輸入檢查移到 GPU 初始化之前，並用負控制證明不碰 CUDA（[#565](https://github.com/raylei50653/saccade/pull/565) merged，只含 Gate A，`identity.level` 維持 null，見 [CC-536-01-02 實作狀態](#cc-536-01-02-status)；package re-pin 見[本機 package 驗證](../reference/native_runtime_package_repin_536.md)）；
+  3. Preflight：sha256 與輸入檢查移到 GPU 初始化之前，並用負控制證明不碰 CUDA（[#565](https://github.com/raylei50653/saccade/pull/565) merged；#565 本身只含 Gate A，該切片的 `identity.level` 維持 null，legacy N-T3 由 #572 加上（見第 4 項），見 [CC-536-01-02 實作狀態](#cc-536-01-02-status)；package re-pin 見[本機 package 驗證](../reference/native_runtime_package_repin_536.md)）；
   4. Identity integration：等 #549 S1 決定可信來源後，才加上 `expected_source_verified` 與強制 policy。legacy `checksum_matched` 觀測已由 #549 S2-1a 先行（[#572](https://github.com/raylei50653/saccade/pull/572) merged，source-level，見 [N-T3 實作狀態](#cc-536-01-02-status-n-t3)）；本項其餘部分仍需自己的授權。
 - 除了第 4 項，這一批不需要等其餘 19 項 REQ，也不需要先完成 #549 S1。
 - 其他 profile（public-library、eval、online-service）、B2 設定與控制面、C／D／E 的視圖，之後沿用同一份圖源與 ID 規則擴充，不另開一份總圖。
