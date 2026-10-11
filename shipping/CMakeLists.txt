@@ -283,6 +283,55 @@ if(TARGET saccade_tracking)
     # (saccade_perception) -> the PR-1L LibTorch head -> S2. LibTorch only
     # (TORCH_LIBRARIES has no libtorch_python); the head's scan operator is
     # dlopen'ed at load time after its hash is checked.
+    # The qualifier below belongs to the Python package that supplied Torch.
+    # Same base-version headers from a different Torch_DIR/CMAKE_PREFIX_PATH
+    # do not prove that package's CUDA build. Bind the selected CMake config,
+    # headers and actual core imported libraries to that same package tree.
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c
+        "import pathlib, torch; print(pathlib.Path(torch.__file__).resolve().parent)"
+        OUTPUT_VARIABLE _saccade_torch_package_root
+        OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE _saccade_torch_root_rc)
+    if(NOT _saccade_torch_root_rc EQUAL 0 OR NOT IS_DIRECTORY "${_saccade_torch_package_root}")
+        message(FATAL_ERROR "Cannot prove LibTorch package origin")
+    endif()
+    get_filename_component(_saccade_expected_torch_config "${_saccade_torch_package_root}/share/cmake/Torch" REALPATH)
+    get_filename_component(_saccade_selected_torch_config "${Torch_DIR}" REALPATH)
+    if(NOT _saccade_selected_torch_config STREQUAL _saccade_expected_torch_config)
+        message(FATAL_ERROR "LibTorch build origin mismatch: Torch_DIR '${Torch_DIR}' differs from the versioned Python package")
+    endif()
+    foreach(_torch_include IN LISTS TORCH_INCLUDE_DIRS)
+        get_filename_component(_torch_include_real "${_torch_include}" REALPATH)
+        string(FIND "${_torch_include_real}/" "${_saccade_torch_package_root}/include/" _torch_include_prefix)
+        if(NOT _torch_include_prefix EQUAL 0)
+            message(FATAL_ERROR "LibTorch headers escaped the versioned Python package: ${_torch_include}")
+        endif()
+    endforeach()
+    foreach(_torch_target torch torch_cpu torch_cuda c10 c10_cuda)
+        if(NOT TARGET ${_torch_target})
+            message(FATAL_ERROR "Cannot prove LibTorch core library origin: missing ${_torch_target}")
+        endif()
+        get_target_property(_torch_configs ${_torch_target} IMPORTED_CONFIGURATIONS)
+        set(_torch_location_properties IMPORTED_LOCATION)
+        foreach(_torch_config IN LISTS _torch_configs)
+            string(TOUPPER "${_torch_config}" _torch_config_upper)
+            list(APPEND _torch_location_properties "IMPORTED_LOCATION_${_torch_config_upper}")
+        endforeach()
+        set(_torch_location_found FALSE)
+        foreach(_torch_property IN LISTS _torch_location_properties)
+            get_target_property(_torch_location ${_torch_target} ${_torch_property})
+            if(_torch_location)
+                set(_torch_location_found TRUE)
+                get_filename_component(_torch_location_real "${_torch_location}" REALPATH)
+                get_filename_component(_torch_location_parent "${_torch_location_real}" DIRECTORY)
+                if(NOT _torch_location_parent STREQUAL "${_saccade_torch_package_root}/lib")
+                    message(FATAL_ERROR "LibTorch core library escaped the versioned Python package: ${_torch_target}=${_torch_location}")
+                endif()
+            endif()
+        endforeach()
+        if(NOT _torch_location_found)
+            message(FATAL_ERROR "Cannot prove LibTorch core library origin: ${_torch_target} has no imported location")
+        endif()
+    endforeach()
     execute_process(COMMAND ${Python3_EXECUTABLE} -c "import torch; print(torch.__version__)"
         OUTPUT_VARIABLE SACCADE_LIBTORCH_BUILD_VERSION
         OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE _saccade_torch_version_rc)
