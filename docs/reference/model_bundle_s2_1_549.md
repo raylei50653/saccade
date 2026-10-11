@@ -60,7 +60,20 @@ schema／semantic 的 25 列由 [C++ reader ctest](../../tests/native/test_shipp
 
 以下每一列獨立驗收。pending 不是 PASS，也不能由另一列的成功代替。
 
-<!-- S2-1-EVIDENCE-TABLE -->
+| 層 | 本候選的實際結果 | 狀態 | 證據（local-only，gitignored） |
+|:--|:--|:--|:--|
+| CPU ctest（CI `shipping-config-loader` 同一組） | standalone `-DCMAKE_COMPILE_WARNING_AS_ERROR=ON` CTest 10/10：reader 101 checks（matrix 的 23 列 schema／semantic 全數拒絕於正確 path＋keyword 或 rule）、manifest Gate A 39 cases／5310 checks、legacy Gate A 4024 checks（含 MB-57）、completion 314 checks（含 load_verification、SIGKILL during load）；0 failures | local verified；CI 以 PR checks 為準 | `results/549_s2_1/`（本機 build log） |
+| 真實 frozen N01–N06（manifest Gate A） | example manifest 原樣、真實 members：`checksum_matched`，`allowlist_entry=example`（example 不是批准） | local verified | `test_shipping_preflight_manifest --frozen-model-root` |
+| 真 binary CLI | 4 支 suite 58 passed／0 skipped（manifest 新增 29）：MB-54 在 run id 前拒絕；manifest 拒絕控制皆無 `cuInit`；stand-in bundle Gate B dlopen 失敗寫 `load_verification=failed`；真 bundle 兩 root 完整執行 `verified/hashed_before_load`；SIGKILL during load 留 `running`＋`null` | local verified（CI 不 build binary，這些測試在 CI 會 skip） | `tests/unit/test_saccade_track_*_cli.py` |
+| Native GPU ctest | `build/shipping` CTest 17/17（serial、double buffer、detector S2、post-detector、ingest、native build 無退化）；新 Gate B ctest 16 checks：cross-root load 映射的是 runtime root 的 operator 副本、MB-55 置換在 dlopen 前拒絕、帶 model root 與 bindings 不符皆拒絕 | local verified | `test_shipping_model_bundle_gate_b.cpp` |
+| GPU 七序列（V5） | 新 release binary（`saccade_track` `e36b133f…`、measurement `a58096e9…`）4 個正向模式與 7 個負控制皆實際重播 7 序列／5316 frames。qualified parity **UNRESOLVED**（V5 driver `617.42 != 616.92`），負控制標準 `caught=false`。raw：正向 detector／MOT／graph 比較 EXACT（無 trace 為 NOT_RUN），7 個負控制在預期 section 為 DIFFERS；正向 journal v3／report v5 為 `checksum_matched`＋`verified` | **UNRESOLVED**（qualification）；raw 為 local diagnostic | `results/549_s2_1/gpu_0d78e59720ca/`，SHA256SUMS 的 SHA256 `3399a14a5794817b9e97e902a87d63bc77d772a58b21f8df02a536a1a8c529b5`，source manifest `157a54c5…` before／after 相同 |
+| Manifest mode 七序列 | 同一 release `saccade_track` 以 `--model-bundle`（operator 在 runtime root，其他在 bundle root）跑 7 序列／5316 frames：complete、`verified`，MOT 文字逐序列與 legacy shipping run 相同；`--require-identity expected_source_verified` 在 `checksum_matched` 被拒 | local diagnostic（不是 parity 宣稱） | 同上 `manifest_mode/` |
+| Surface／link | shipping measurement surface 與 link surface 通過；measurement binary 如預期被拒 | local verified | 同上 |
+| 本機 pre_push | PASS（exit 0）：pytest 5636 passed、52 skipped、105 deselected、5 xfailed；S2-1 相關 suites 另跑 464 passed／0 skipped | local verified | `results/549_s2_1/pre_push.log` |
+| Runtime coordinate | fresh 完整候選，只有 implementation 軸移動（294→297 檔，`0fcbdb09…`→`a1959ff2…`）；probe 重跑 digest 等於封存值（fixture change detector，`equivalence=unproven`）；attested 通過；舊 canonical 原樣封存。獨立審查面為 stacked [#575](https://github.com/raylei50653/saccade/pull/575) | stacked review 待審 | `results/549_s2_1/runtime_identity_capture.log`、`coordinate_attested.log` |
+| PR CI／C++ build | 以 Draft PR 指定 head 的 checks 為準 | pending | — |
+| 獨立 Codex review | read-only review 結果記在 PR；不是 GitHub APPROVED review | pending | — |
+| Installed package | 未 re-pin、未驗證（包含 auditor `_exit(127)` 路徑） | **UNVERIFIED** | — |
 
 ## 4. Deferred／known limits
 
