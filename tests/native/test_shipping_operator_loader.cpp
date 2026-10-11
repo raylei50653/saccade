@@ -26,10 +26,14 @@
 //     number K; load() refuses it, and the process is poisoned;
 //   * seals: F_SEAL_FUTURE_WRITE without F_SEAL_WRITE does not count;
 //   * search paths: $ORIGIN in DT_RUNPATH or DT_RPATH, or a non-ELF object, is
-//     refused before any memfd; an absolute DT_RUNPATH is accepted;
+//     refused before any memfd; an absolute DT_RUNPATH is accepted; malformed
+//     dynamic tables are refused, among them a PT_DYNAMIC whose file offset
+//     names an empty table while the mapped one (what the loader reads)
+//     carries $ORIGIN;
 //   * refusals: wrong SHA-256 or size, a symlink (final or directory
 //     component), a directory, a FIFO, a relative or missing path.
 #include <dlfcn.h>
+#include <elf.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -92,6 +96,56 @@ std::string refusal(const std::function<void()>& f) {
 }
 
 bool has(const std::string& s, const std::string& part) { return s.find(part) != std::string::npos; }
+
+// Malformed variants of an ELF object (program header / dynamic table edits).
+Elf64_Phdr* phdrs(std::string& elf, int& count) {
+    Elf64_Ehdr eh;
+    std::memcpy(&eh, elf.data(), sizeof eh);
+    count = eh.e_phnum;
+    return reinterpret_cast<Elf64_Phdr*>(elf.data() + eh.e_phoff);
+}
+
+Elf64_Phdr* dynamic_phdr(std::string& elf) {
+    int count = 0;
+    Elf64_Phdr* ph = phdrs(elf, count);
+    for (int i = 0; i < count; ++i) {
+        if (ph[i].p_type == PT_DYNAMIC) return &ph[i];
+    }
+    return nullptr;
+}
+
+std::string dynamic_offset_elsewhere(std::string elf) {  // file offset -> appended zeros
+    const std::size_t zeros = elf.size();
+    elf.append(4096, '\0');
+    dynamic_phdr(elf)->p_offset = zeros;
+    return elf;
+}
+
+std::string dynamic_unterminated(std::string elf) {
+    dynamic_phdr(elf)->p_filesz = sizeof(Elf64_Dyn);  // one non-null entry, no DT_NULL
+    return elf;
+}
+
+std::string strsz_oversized(std::string elf) {
+    const Elf64_Phdr* d = dynamic_phdr(elf);
+    for (std::uint64_t at = d->p_offset; at + sizeof(Elf64_Dyn) <= d->p_offset + d->p_filesz; at += sizeof(Elf64_Dyn)) {
+        auto* e = reinterpret_cast<Elf64_Dyn*>(elf.data() + at);
+        if (e->d_tag == DT_STRSZ) e->d_un.d_val = 0x7fffffff;
+    }
+    return elf;
+}
+
+std::string two_dynamic(std::string elf) {
+    int count = 0;
+    Elf64_Phdr* ph = phdrs(elf, count);
+    for (int i = 0; i < count; ++i) {
+        if (ph[i].p_type == PT_NOTE) {
+            ph[i].p_type = PT_DYNAMIC;
+            break;
+        }
+    }
+    return elf;
+}
 
 int value_of(void* handle) {
     using Fn = int (*)();
@@ -299,6 +353,18 @@ int main(int argc, char** argv) {
         CHECK(has(refusal([&] { sh::require_no_origin_search_path("not an elf object at all, padded out to the header "
                                                                   "size of an ELF64 file", "text"); }),
                   "text is not a 64-bit little-endian ELF object"));
+        {
+            const std::string origin = read_file(argv[3]);
+            const std::string elsewhere = dynamic_offset_elsewhere(origin);
+            CHECK(has(refusal([&] { sh::require_no_origin_search_path(elsewhere, "split"); }),
+                      "split has a dynamic section whose file and memory locations disagree"));
+            CHECK(has(refusal([&] { sh::require_no_origin_search_path(dynamic_unterminated(origin), "short"); }),
+                      "short has an unterminated dynamic section"));
+            CHECK(has(refusal([&] { sh::require_no_origin_search_path(strsz_oversized(origin), "strsz"); }),
+                      "strsz has a string table outside its file-backed segment"));
+            CHECK(has(refusal([&] { sh::require_no_origin_search_path(two_dynamic(origin), "twice"); }),
+                      "twice has more than one dynamic segment"));
+        }
         {
             const fs::path origin = dir / "origin" / "libsaccade_scan_torchop.so";
             fs::create_directories(origin.parent_path());

@@ -239,56 +239,77 @@ bool sealed_against_writes(int fd) {
     return seals >= 0 && (seals & kSeals) == kSeals;
 }
 
+namespace {
+
+// The file offset of [vaddr, vaddr + size) when one PT_LOAD maps all of it
+// from the file (within p_filesz), overflow-safe; nullopt otherwise.
+std::optional<std::uint64_t> file_range(const std::vector<Elf64_Phdr>& ph, std::uint64_t file_size,
+                                        std::uint64_t vaddr, std::uint64_t size) {
+    for (const Elf64_Phdr& h : ph) {
+        if (h.p_type != PT_LOAD || vaddr < h.p_vaddr) continue;
+        const std::uint64_t rel = vaddr - h.p_vaddr;
+        if (rel > h.p_filesz || size > h.p_filesz - rel) continue;
+        if (h.p_offset > file_size || h.p_filesz > file_size - h.p_offset) return std::nullopt;
+        return h.p_offset + rel;
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
 void require_no_origin_search_path(const std::string& elf, const std::string& what) {
     const auto bad = [&](const std::string& why) { fail(what + " " + why); };
-    if (elf.size() < sizeof(Elf64_Ehdr) || std::memcmp(elf.data(), ELFMAG, SELFMAG) != 0 ||
+    const std::uint64_t n = elf.size();
+    if (n < sizeof(Elf64_Ehdr) || std::memcmp(elf.data(), ELFMAG, SELFMAG) != 0 ||
         static_cast<unsigned char>(elf[EI_CLASS]) != ELFCLASS64 || static_cast<unsigned char>(elf[EI_DATA]) != ELFDATA2LSB) {
         bad("is not a 64-bit little-endian ELF object");
     }
     Elf64_Ehdr eh;
     std::memcpy(&eh, elf.data(), sizeof eh);
-    if (eh.e_phentsize != sizeof(Elf64_Phdr) || eh.e_phoff > elf.size() ||
-        eh.e_phnum > (elf.size() - eh.e_phoff) / sizeof(Elf64_Phdr)) {
+    if (eh.e_phentsize != sizeof(Elf64_Phdr) || eh.e_phoff > n || eh.e_phnum > (n - eh.e_phoff) / sizeof(Elf64_Phdr)) {
         bad("has malformed program headers");
     }
     std::vector<Elf64_Phdr> ph(eh.e_phnum);
     if (eh.e_phnum != 0) std::memcpy(ph.data(), elf.data() + eh.e_phoff, eh.e_phnum * sizeof(Elf64_Phdr));
     const Elf64_Phdr* dyn = nullptr;
     for (const Elf64_Phdr& h : ph) {
-        if (h.p_type == PT_DYNAMIC) dyn = &h;
+        if (h.p_type != PT_DYNAMIC) continue;
+        if (dyn != nullptr) bad("has more than one dynamic segment");
+        dyn = &h;
     }
     if (dyn == nullptr) bad("has no dynamic section");
-    if (dyn->p_offset > elf.size() || dyn->p_filesz > elf.size() - dyn->p_offset) bad("has a malformed dynamic section");
+    // The loader reads the dynamic table where it is mapped (p_vaddr). That
+    // table, read from the file where a PT_LOAD maps it, is what is checked,
+    // and its file location must be the one PT_DYNAMIC states.
+    const std::optional<std::uint64_t> dyn_off = file_range(ph, n, dyn->p_vaddr, dyn->p_filesz);
+    if (!dyn_off || *dyn_off != dyn->p_offset || dyn->p_filesz % sizeof(Elf64_Dyn) != 0) {
+        bad("has a dynamic section whose file and memory locations disagree");
+    }
     std::uint64_t strtab = 0, strsz = 0;
-    bool have_strtab = false;
+    bool have_strtab = false, have_strsz = false, terminated = false;
     std::vector<std::pair<std::int64_t, std::uint64_t>> paths;  // (tag, string offset)
-    for (std::uint64_t at = dyn->p_offset; at + sizeof(Elf64_Dyn) <= dyn->p_offset + dyn->p_filesz;
-         at += sizeof(Elf64_Dyn)) {
+    for (std::uint64_t at = *dyn_off; at < *dyn_off + dyn->p_filesz; at += sizeof(Elf64_Dyn)) {
         Elf64_Dyn d;
         std::memcpy(&d, elf.data() + at, sizeof d);
-        if (d.d_tag == DT_NULL) break;
-        if (d.d_tag == DT_STRTAB) strtab = d.d_un.d_ptr, have_strtab = true;
-        if (d.d_tag == DT_STRSZ) strsz = d.d_un.d_val;
-        if (d.d_tag == DT_RPATH || d.d_tag == DT_RUNPATH) paths.emplace_back(d.d_tag, d.d_un.d_val);
-    }
-    if (paths.empty()) return;
-    if (!have_strtab) bad("has a search path but no string table");
-    std::uint64_t str_off = 0;
-    bool found = false;
-    for (const Elf64_Phdr& h : ph) {  // the string table's file offset (a PT_LOAD maps it)
-        if (h.p_type == PT_LOAD && strtab >= h.p_vaddr && strtab - h.p_vaddr < h.p_filesz) {
-            str_off = h.p_offset + (strtab - h.p_vaddr);
-            found = true;
+        if (d.d_tag == DT_NULL) {
+            terminated = true;
             break;
         }
+        if (d.d_tag == DT_STRTAB) strtab = d.d_un.d_ptr, have_strtab = true;
+        if (d.d_tag == DT_STRSZ) strsz = d.d_un.d_val, have_strsz = true;
+        if (d.d_tag == DT_RPATH || d.d_tag == DT_RUNPATH) paths.emplace_back(d.d_tag, d.d_un.d_val);
     }
-    if (!found || str_off > elf.size() || strsz > elf.size() - str_off) bad("has a malformed string table");
+    if (!terminated) bad("has an unterminated dynamic section");
+    if (paths.empty()) return;
+    if (!have_strtab || !have_strsz) bad("has a search path but no string table");
+    const std::optional<std::uint64_t> str_off = file_range(ph, n, strtab, strsz);
+    if (!str_off) bad("has a string table outside its file-backed segment");
     for (const auto& [tag, off] : paths) {
         if (off >= strsz) bad("has a malformed search path");
-        const char* begin = elf.data() + str_off + off;
-        const void* end = std::memchr(begin, '\0', strsz - off);
-        if (end == nullptr) bad("has an unterminated search path");
-        const std::string entry(begin, static_cast<const char*>(end));
+        const char* begin = elf.data() + *str_off + off;
+        const void* stop = std::memchr(begin, '\0', strsz - off);
+        if (stop == nullptr) bad("has an unterminated search path");
+        const std::string entry(begin, static_cast<const char*>(stop));
         if (entry.find("$ORIGIN") != std::string::npos || entry.find("${ORIGIN}") != std::string::npos) {
             bad(std::string(tag == DT_RPATH ? "DT_RPATH" : "DT_RUNPATH") + " " + entry +
                 " uses $ORIGIN, which a load from its memfd would expand under /proc/self/fd");
@@ -372,10 +393,12 @@ void* VerifiedOperator::load() {
     // From here an object may be mapped: any failure poisons the registry and
     // keeps the memfd open, so its number is never reused by a later load.
     std::optional<MappedObject> checked;
+    MappedObject request_copy;
     std::string sha, source;
     try {
         checked = memfd_mapping(handle, memfd_);
         if (checked) {
+            request_copy = *checked;
             sha = sha256_;
             source = source_;
         }
@@ -395,7 +418,7 @@ void* VerifiedOperator::load() {
     r.memfd = memfd_;  // kept open: its number is never reused for another operator
     r.handle = handle;
     memfd_ = -1;
-    mapped_ = r.mapped;
+    mapped_ = std::move(request_copy);
     close_fd(source_fd_);
     loaded_ = true;
     return handle;

@@ -40,17 +40,21 @@ legal operator library:
   and refuses a plan that names none. Legacy mode under the launcher therefore needs
   `--model-root <prefix>/share/saccade`, as in the installed usage. Any other model root is a
   catchable refusal; main's auditor refused a foreign model root with exit 127.
-- One deliberate tightening: a model root reached through a symlink (or a `..` spelling) that
-  resolves to the package's own `share/saccade` passed main's `realpath`-based auditor. It is now
-  refused, because the comparison is lexical and the open refuses symlinks.
+- One deliberate tightening: a model root reached through a symlink that resolves to the
+  package's own `share/saccade` passed main's `realpath`-based auditor. It is now refused,
+  because the comparison is lexical and the open refuses symlinks. A spelling that normalizes
+  lexically to the legal path (for example `<prefix>/share/saccade/../saccade`) is accepted;
+  every other alias is refused.
 
 **Load sequence (`operator_loader.hpp`):**
 
 1. Open the legal path once with `openat2`, allowing no symlink or magic link in any component.
 2. Require a regular file and Gate A's size when known, read the whole file, and require the
    plan's SHA-256. Require a 64-bit ELF whose `DT_RPATH`/`DT_RUNPATH` do not use `$ORIGIN`
-   (it would expand under `/proc/self/fd` when loaded from the memfd); a non-ELF object is
-   refused here, before anything is sealed or `dlopen`'ed.
+   (it would expand under `/proc/self/fd` when loaded from the memfd). The dynamic table is read
+   where the loader reads it (through `p_vaddr`, within a file-backed `PT_LOAD`); its file
+   location must agree, it must be terminated, and the string table must lie within its segment.
+   A non-ELF or malformed object is refused here, before anything is sealed or `dlopen`'ed.
 3. Write the buffer into a memfd labeled `saccade-n03:src-fd=<S>` (`MFD_NOEXEC_SEAL`, with a
    retry only on `EINVAL`).
 4. Add `F_SEAL_WRITE | GROW | SHRINK | SEAL` and read the seals back. `F_SEAL_WRITE` itself
@@ -135,6 +139,15 @@ Round 1 (`85eeb2af`) found no blocker. Its findings and their resolution in `492
 | minor | replay observer joined the memfd to the maps by inode only | device and inode |
 | minor | "successful runs unchanged" ignored a symlinked legacy model root | stated as a deliberate tightening |
 | nit | the 30/30 repetition claim had no recorded log | recorded (`cpu_operator_loader_repeat30_492bb3d3.log`) |
+
+Round 2 (`94329dcf`) found no blocker. Its review of the coordinate republication found nothing.
+Its findings and their resolution:
+
+| Severity | Finding | Resolution |
+|:--|:--|:--|
+| major | the ELF check read the dynamic table at `p_offset` while the loader reads it at `p_vaddr` (a split table could hide `$ORIGIN`); no terminator or segment bounds | read through `p_vaddr` with agreement, terminator and segment bounds (overflow-safe); CPU controls for a split, an unterminated table, an oversized `DT_STRSZ` and two `PT_DYNAMIC`; the split is accepted by the round 1 parser and refused now (`elf_split_attack_old_vs_new.log`) |
+| minor | a throwing copy after registry publication bypassed poisoning | staged before publication |
+| minor | `..` spellings described as refused | corrected |
 
 ## Known limits and residuals
 
