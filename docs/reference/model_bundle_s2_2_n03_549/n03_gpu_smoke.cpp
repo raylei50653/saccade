@@ -114,7 +114,13 @@ int main(int argc, char** argv) {
         if (lm != nullptr && fstat(m, &ms) == 0) {
             FILE* f = std::fopen("/proc/self/maps", "r");
             char line[8192];
+            bool continuation = false;
             while (f && std::fgets(line, sizeof line, f)) {
+                // complete records only; overlong records are discarded through '\n'
+                const bool complete = std::strchr(line, '\n') != nullptr || std::feof(f);
+                const bool skip = continuation || !complete;
+                continuation = !complete;
+                if (skip) continue;
                 unsigned long lo, hi, off, ino;
                 unsigned maj, mnr;
                 char perm[8];

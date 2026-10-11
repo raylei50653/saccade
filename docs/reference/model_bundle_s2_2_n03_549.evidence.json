@@ -1,6 +1,6 @@
 {
   "schema": "saccade.s2_2_n03_research_evidence/v1",
-  "scope": "Phase 1 research evidence (revision 3, after independent reviews r1 and r2) for the #549 S2-2 N03 TOCTOU proposal. Prototype auditor and probes only; no production source, installed package, N03 bytes, allowlist or pin is changed.",
+  "scope": "Phase 1 research evidence (revision 3a, after independent reviews r1-r3) for the #549 S2-2 N03 TOCTOU proposal. Prototype auditor and probes only; no production source, installed package, N03 bytes, allowlist or pin is changed.",
   "status": {
     "n03_mb41": "OPEN",
     "s2_2": "PARTIAL",
@@ -64,9 +64,9 @@
       }
     },
     "host_probe": {
-      "revision": 3,
+      "revision": "3a",
       "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/n03_host_probe.c",
-      "source_sha256": "4f0f5063db48f85762aeb0f779e01a83bd1c4120181d42b02b311f2b2a3d4f31",
+      "source_sha256": "36502426edf87a7acd1e90b4828e9dad55eaeab43415cb72bfc2866a99d62fdc",
       "revision_1": {
         "source": "results/549_s2_2_n03/prototype/n03_host_probe_r1.c",
         "binary_sha256_r3": "fdbdbad3fe712a0662d6e3edd0d3392330dc41370d3b57c8a3f4d4c87021df67"
@@ -76,13 +76,18 @@
         "source_sha256": "40e65b667a1967b9348445c6eec462c629f1bbf454cd666a6d4161709a0c60da",
         "binary_sha256_r6": "f5345ed4ecbe84e44d51d64948d3d778abf0f410576f1c28ef3785577316c46f"
       },
-      "binary_sha256_r7": "36dec9c5d0ccacf4be3c7c256407ae1fe2eaf37d647a6290acd5a24ea6aaf555"
+      "revision_3": {
+        "source": "results/549_s2_2_n03/prototype/n03_host_probe_r3.c",
+        "source_sha256": "4f0f5063db48f85762aeb0f779e01a83bd1c4120181d42b02b311f2b2a3d4f31",
+        "binary_sha256_r7": "36dec9c5d0ccacf4be3c7c256407ae1fe2eaf37d647a6290acd5a24ea6aaf555"
+      },
+      "binary_sha256_r8": "d8abc0d3fd9fb6dcfa8c533e7a164f43833b82c0c027456f80ee3e1b8c462c98"
     },
     "gpu_smoke": {
-      "revision": 3,
+      "revision": "3a",
       "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/n03_gpu_smoke.cpp",
-      "source_sha256": "8f537f4391f4df7e64b2789ebdbc25150e80de7bc6a3e78fbe69d4f45da6b4cb",
-      "binary_sha256": "737fe380db871feecc2bf4fbe19409f1f360a5f1fe75a8e153a619e342392829",
+      "source_sha256": "14d0a23a5f6783f9a352a1477ca2d32c101f013c8f9fed52ce9859489ee8f48c",
+      "binary_sha256": "9aca45eacb6452dba4155ca52590b5dadf9cacb7ed0c8b66869b7056d06d20ec",
       "revision_1": {
         "source": "results/549_s2_2_n03/prototype/n03_gpu_smoke_r1.cpp",
         "source_sha256": "394477f1225b69822643595075d8630c6b2f5b18f7a4a77219110debe036b1b8",
@@ -92,6 +97,11 @@
         "source": "results/549_s2_2_n03/prototype/n03_gpu_smoke_r2.cpp",
         "source_sha256": "0bb4e6de03b5e17925e2aa30bc52250a82e2063b63fc4fbd3651c07b796262ea",
         "binary_sha256": "909b9ebb3e29959c878a0711413322b332f26c3ec1464c86ff57a1e985c8da22"
+      },
+      "revision_3": {
+        "source": "results/549_s2_2_n03/prototype/n03_gpu_smoke_r3.cpp",
+        "source_sha256": "8f537f4391f4df7e64b2789ebdbc25150e80de7bc6a3e78fbe69d4f45da6b4cb",
+        "binary_sha256": "737fe380db871feecc2bf4fbe19409f1f360a5f1fe75a8e153a619e342392829"
       }
     },
     "runners": {
@@ -186,19 +196,39 @@
     {
       "id": "matrix_r7",
       "summary_sha256": "27bec29cfa19ea4e18aadb6d376c48a9097eca60b95d772c936919c770ecc7d1",
-      "result": "45/45 with revision 3 auditor/probe; F4 refuses a foreign second source path, F6 reuses the same SHA and path; E8 records the '(deleted)'-name compatibility restriction (E7: main accepts); inputs unchanged in every case"
+      "result": "45/45 with revision 3 auditor/probe; F4 refuses a foreign second source path, F6 reuses the same SHA and path; E8 records the '(deleted)'-name compatibility restriction (E7: main accepts); inputs unchanged in every case",
+      "note": "revision 3 probe; superseded by matrix_r8 (same auditor)"
     },
     {
       "id": "gpu_smoke_r3",
       "summary_sha256": "17a03257da423915c984182983c6a7b45213b139930aaecb1875ce3e664f2802",
       "result": "6/6; device+inode post-check passes; eager float32/float16 outputs identical across load modes; graph capture + 3 replays equal eager; foreign same-byte source refused 127. Output hashes only, no mapped-memory comparison",
+      "serialization": "tools/resctl.py run --wait gpu0",
+      "note": "revision 3 smoke; superseded by gpu_smoke_r4"
+    },
+    {
+      "id": "codex_review_r3",
+      "reviewed_commit": "1d8d9abe6d14a010d66dc2cef22c15b24ad63468",
+      "output": "results/549_s2_2_n03/review/codex_review_r3.md",
+      "output_sha256": "cfa993eff0aa11e71a32ae14815ed21ecf2ae26108a6e3ffe28628fd4e80e752",
+      "result": "no blocker or major; would accept revision 3 as the Phase 2 design conditional on complete-record parsing in all three identity parsers with tests, owner acceptance of residuals (or D-N03-5), and acceptance of compatibility restrictions; 2 minor (host parser continuation, PATH_MAX overclaim) addressed in revision 3a"
+    },
+    {
+      "id": "matrix_r8",
+      "summary_sha256": "ed72703f20bde19ea20baddb7687659b162fffb3d523b177ce1dbac5920dc31a",
+      "result": "45/45 with revision 3 auditor and revision 3a probe (complete-record post-check parser); inputs unchanged in every case"
+    },
+    {
+      "id": "gpu_smoke_r4",
+      "summary_sha256": "08eb5d3fc61f1671385a146b464ad3d16af8ebe034aab29a74f35eb97a529183",
+      "result": "6/6 with revision 3a smoke (complete-record post-check parser); eager outputs identical across load modes; graph replays equal eager; foreign same-byte source refused 127. Output hashes only",
       "serialization": "tools/resctl.py run --wait gpu0"
     }
   ],
   "raw_evidence": {
     "directory": "results/549_s2_2_n03/",
     "sha256sums": "results/549_s2_2_n03/SHA256SUMS",
-    "sha256sums_digest": "f90889e98ad77b5affd70a68c167460315e5db98ede1f89a9386c5bbdcb70b55",
+    "sha256sums_digest": "1a142a1ed86cd0fa8d8e5bb02fcaee63b2f252ec408362b73b28da5d8e28c14e",
     "excluded": "prefix_installed/, prefix_proto_r1/ and prefix_proto/ (lib/vendor hard links to the #536 evidence tree; per-case N03 copies are re-created from the frozen source)"
   },
   "unverified": [
@@ -208,13 +238,14 @@
     "a host with vm.memfd_noexec=2, seccomp-blocked memfd_create or an SELinux/AppArmor execute policy on memfd",
     "SIGKILL during the proposed load",
     "qualified V5 (driver 616.92 required; host is 617.42)",
-    "independent review of revision 3"
+    "independent review of revision 3a changes (host parser, wording)",
+    "owner acceptance (D-N03-1..6)"
   ],
   "residuals": [
     "P2/I2 is an audit-time observation, as on main: neither establishes the path through which the source was originally opened (review r1 finding 2, r2 finding A); a writer to the fixed directory can rename a foreign-opened inode onto the fixed path. Requires owner acceptance (D-N03-6) or host-side binding (D-N03-5)",
     "I2 chunked comparison is not a single-instant snapshot of a mutable file (review r1 finding 4); I1 does not depend on it",
     "direct mapped-memory comparison covers 170,457 bytes of non-writable PT_LOAD segments outside PT_GNU_RELRO",
     "compatibility restrictions: ordinary files named '... (deleted)' (E8) and objects whose l_ld is not file-backed (untested) are refused; ordinary objects are identified by path+inode without device (overlayfs)",
-    "overlong /proc/self/maps record handling is not exercised (kernel paths are bounded by PATH_MAX)"
+    "oversized /proc/self/maps record handling is untested in all three parsers (auditor, host post-check, GPU smoke); Phase 2 must test an oversized earlier and target record"
   ]
 }

@@ -5,7 +5,7 @@
 
 # #549 S2-2 N03 TOCTOU: threat model and loading proposal
 
-**Status: PROPOSAL (Phase 1, revision 3).** N03 MB-41 remains **OPEN**, S2-2 remains **PARTIAL**,
+**Status: PROPOSAL (Phase 1, revision 3a).** N03 MB-41 remains **OPEN**, S2-2 remains **PARTIAL**,
 aggregate `load_verification.byte_scope` remains `hashed_before_load`, and qualified V5 remains
 **UNRESOLVED**. No production loader, auditor, launcher, N03 bytes, allowlist, installed package or
 pin is changed. This document asks for independent review and owner acceptance of one design.
@@ -26,7 +26,7 @@ sources (revision 3): [prototype auditor](model_bundle_s2_2_n03_549/loader_audit
 Revision 3 keeps the auditor's N03 path and source refusals at the strength main has (an
 audit-time observation, see P2), closes the descriptor bypasses found so far, and makes the file
 the loader maps for N03 byte-identical to the verified buffer. Each claim below is a real-loader
-control in matrix r7 (45/45) or GPU smoke r3 (6/6):
+control in matrix r8 (45/45) or GPU smoke r4 (6/6):
 
 - Same N03 bytes from a foreign path: still exit 127 (C02; GPU G4).
 - Hardlink under a foreign name: exit 127 (C03).
@@ -70,9 +70,19 @@ wording:
 | # | Severity | Finding | Revision 3 |
 |:--|:--|:--|:--|
 | A | major | P2 promised historical provenance that I2 cannot establish; registry reuse accepted a foreign subsequent binding (F4) | P2 restated as the audit-time observation; registry keyed by SHA-256 **and** source path (F4 refuses, F6 reuses); residual needs explicit owner acceptance (D-N03-6) |
-| B | minor | `/proc/self/maps` parser could parse an overlong line's continuation as a record | overlong records discarded through their newline (kernel paths ≤ `PATH_MAX` keep real lines far below 64 KiB; not exercised) |
+| B | minor | `/proc/self/maps` parser could parse an overlong line's continuation as a record | auditor discards overlong records through their newline (not exercised) |
 | C | minor | ordinary files named `… (deleted)` and objects whose `l_ld` is not file-backed are refused | stated as compatibility restrictions; E8 control; frozen N03's `PT_DYNAMIC` is file-backed |
 | D | minor | written and GPU post-check compared only the inode | device and inode for the memfd (auditor, host, GPU smoke r3) |
+
+Round 3 (revision 3, commit `1d8d9abe`) found no blocker or major issue and would accept revision 3
+as the Phase 2 design if: complete-record parsing in all three identity parsers becomes a Phase 2
+requirement with tests; the residuals below are accepted, or D-N03-5 is selected; and the
+compatibility restrictions are accepted. Its two minor findings:
+
+| # | Finding | Revision 3a |
+|:--|:--|:--|
+| R3-1 | host post-check parsers (`fgets`, 8 KiB) parse an overlong line's continuation as a record | probe and GPU smoke parse complete records only (matrix r8 45/45, GPU smoke r4 6/6); oversized-record tests required in Phase 2 |
+| R3-2 | the claim that `PATH_MAX` bounds kernel-rendered paths is unfounded | removed; oversized-record handling is untested |
 
 ## Current path and observed gaps
 
@@ -147,8 +157,9 @@ Out of scope and unchanged:
    F_SEAL_SEAL`.
 4. Read `M` back completely and require its size and SHA-256 to equal the plan's.
 5. Call `dlopen("/proc/self/fd/<M>", RTLD_NOW | RTLD_LOCAL)` while `S` and `M` are open, then:
-   - require that the `/proc/self/maps` entry containing the returned object's `l_ld` has `M`'s
-     device and inode;
+   - require that the `/proc/self/maps` record (parsed as a complete record; an overlong record
+     is discarded through its newline) containing the returned object's `l_ld` has `M`'s device
+     and inode;
    - close `S`, keep `M` open for the process lifetime, and record the SHA-256 and handle.
 6. There is no fallback to pathname loading. Every step that returns an error is a
    `DetectorLoadError`.
@@ -249,7 +260,7 @@ Gate A identity retained):
 | N03 RUNPATH exception and dependencies | RUNPATH absolute, no `$ORIGIN` | D1/D2: same search-path entries and same 30 mapped object paths (11 vendor); only the RUNPATH attribution label and init name change to `/proc/self/fd/<M>` | required refusal of an N03 with `$ORIGIN`; entrypoint closure |
 | Catchable vs uncatchable | split as above | C07, C09, C10, F3–F5 (exit 2); C- and E-series 127 | native CLI MB-58 controls, SIGKILL |
 | Gate A identity | unchanged; N03 stays in the runtime package | not touched | identity unchanged in journal |
-| Real GPU operator | registered op runs; float32/float16 outputs bit-equal across load modes; graph capture + 3 replays = eager | GPU smoke r3 G1–G3, G5, G6 (output hashes, no memory comparison) | full detector/graph/serial/double-buffer replays |
+| Real GPU operator | registered op runs; float32/float16 outputs bit-equal across load modes; graph capture + 3 replays = eager | GPU smoke r4 G1–G3, G5, G6 (output hashes, no memory comparison) | full detector/graph/serial/double-buffer replays |
 | Report scope | aggregate stays `hashed_before_load` | — | per-object N03 label per owner decision D-N03-2 |
 
 ## Experiments
@@ -268,7 +279,8 @@ run uses `/lib64/ld-linux-x86-64.so.2 --library-path <prefix>/lib/vendor --audit
 `PATH=/usr/bin:/bin`, as the launcher does. A shell hook at a fixed stage (`after_open`,
 `after_hash`, `after_load`) places mutations inside the race window deterministically.
 
-**Matrix r7** (45/45; inputs unchanged in every case). Revision 3 rows:
+**Matrix r8** (45/45; inputs unchanged in every case; r7 with the revision 3 probe also 45/45).
+Revision 3a rows:
 
 | Case | Exit | Auditor or host message |
 |:--|--:|:--|
@@ -298,7 +310,7 @@ run uses `/lib64/ld-linux-x86-64.so.2 --library-path <prefix>/lib/vendor --audit
 | F6 second load, same SHA, same path, registry | 0 | verified operator reused |
 | E8 ordinary file named `libplugin.so (deleted)`, path mode | 127 | compatibility restriction (E7: main accepts) |
 
-**GPU smoke r3** (6/6) runs under `tools/resctl.py run --wait gpu0` on an RTX 5070 Ti Laptop,
+**GPU smoke r4** (6/6; r3 also 6/6) runs under `tools/resctl.py run --wait gpu0` on an RTX 5070 Ti Laptop,
 sm_120, driver 617.42. G1 (installed, path), G2 (revision 3, path), G3 (revision 3, proposed,
 device+inode post-check), G5 (installed, proposed) and G6 (revision 1, proposed) all produce:
 
@@ -318,7 +330,7 @@ MOT or qualified parity.
 - **r5 F2.** The prediction was a host post-check refusal; the auditor refused first, because a
   kept-open `M` makes the second load genuine. F5 isolates the post-check.
 
-r6/GPU r2 (revision 2) passed 42/42 and 6/6 and are retained. Runner and probe bytes of
+r6/GPU r2 (revision 2) passed 42/42 and 6/6 and are retained, as are r7/GPU r3 (revision 3). Runner and probe bytes of
 r1/r2/r4/r5 are partly not retained; their summaries record the probe and auditor hashes.
 
 ## Known limits
@@ -354,7 +366,8 @@ r1/r2/r4/r5 are partly not retained; their summaries record the probe and audito
   change its expansion).
 - Tests:
   - auditor pytest real-loader cases mirroring C02–C17, E3, E6, E8 and the vDSO/overlay positives;
-  - a unit test of the maps parser, including an overlong record;
+  - unit tests of all three `/proc/self/maps` identity parsers (auditor, host post-check, any
+    report reader), each with an oversized earlier record and an oversized target record;
   - native Gate B tests for host refusals, the registry (F3/F4/F6) and the post-check (F5);
   - native CLI controls for catchable exit 2/failed and uncatchable 127/SIGKILL running/null;
   - a GPU manifest and legacy positive;

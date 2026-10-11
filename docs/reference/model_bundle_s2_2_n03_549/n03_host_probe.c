@@ -149,8 +149,14 @@ static int mapped_is(void *h, int m) {
     if (dlinfo(h, RTLD_DI_LINKMAP, &lm) != 0 || lm == NULL || fstat(m, &ms) != 0) return 0;
     FILE *f = fopen("/proc/self/maps", "r");
     char line[8192];
-    int ok = 0;
+    int ok = 0, continuation = 0;
     while (f && fgets(line, sizeof line, f)) {
+        /* review r3: parse complete records only; a chunk without '\n' is part of
+         * an overlong record, discarded through its newline. */
+        int complete = strchr(line, '\n') != NULL || feof(f);
+        int skip = continuation || !complete;
+        continuation = !complete;
+        if (skip) continue;
         unsigned long lo, hi, off, ino;
         unsigned maj, mnr;
         char perm[8];
