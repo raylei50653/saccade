@@ -11,6 +11,16 @@
  *                    hook(after_hash); dlopen("/proc/self/fd/<M>"); close S, M.
  *   proposed-exec    proposed with MFD_EXEC in place of MFD_NOEXEC_SEAL (r2
  *                    showed both load; MFD_EXEC fails where vm.memfd_noexec=2).
+ *   alias-relative   unlabeled sealed memfd M; <aux_dir>/alias.so -> /proc/self/fd/M;
+ *                    chdir(aux_dir); dlopen("./alias.so")  (review r1 finding 1).
+ *   alias-spoof      S = open(aux) then unlink(aux); plant a file at "<aux> (deleted)";
+ *                    <dir>/alias.so -> /proc/self/fd/S; dlopen(<dir>/alias.so).
+ *   twice            proposed load of op_path, then a second proposed load in the
+ *                    same process of aux with env N03_SECOND_SHA (review finding 3).
+ *                    env N03_TWICE: legacy (r1 host: close M, no checks), postcheck
+ *                    (M kept open, mapping identity check, no registry), closecheck
+ *                    (post-check, then M closed so its number is reused), registry (default: one
+ *                    verified operator per process, plus the postcheck).
  *   forge-unlabeled  #582 candidate: sealed memfd without label from op_path.
  *   forge-unsealed   labeled memfd (S = op_path) without F_SEAL_WRITE.
  *   forge-content    label S = op_path, bytes from aux_path (expected = aux sha).
@@ -41,6 +51,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -128,6 +139,35 @@ static void verify_memfd(int m, const char *expected) {
     free(b);
 }
 
+/* Host post-check (review finding 3): the mapping holding the returned
+ * object's dynamic section is the memfd just verified (glibc returns an
+ * already-loaded object by name, without mapping or auditing anything). */
+static int mapped_is(void *h, int m) {
+    struct link_map *lm = NULL;
+    struct stat ms;
+    if (dlinfo(h, RTLD_DI_LINKMAP, &lm) != 0 || lm == NULL || fstat(m, &ms) != 0) return 0;
+    FILE *f = fopen("/proc/self/maps", "r");
+    char line[8192];
+    int ok = 0;
+    while (f && fgets(line, sizeof line, f)) {
+        unsigned long lo, hi, off, ino;
+        unsigned maj, mnr;
+        char perm[8];
+        if (sscanf(line, "%lx-%lx %7s %lx %x:%x %lu", &lo, &hi, perm, &off, &maj, &mnr, &ino) == 7 &&
+            (uintptr_t)lm->l_ld >= lo && (uintptr_t)lm->l_ld < hi) {
+            ok = major(ms.st_dev) == maj && minor(ms.st_dev) == mnr && ms.st_ino == ino;
+            break;
+        }
+    }
+    if (f) fclose(f);
+    printf("postcheck mapped_is_verified_memfd=%d\n", ok);
+    return ok;
+}
+
+/* Process-wide: one verified operator (SHA-256, handle, memfd kept open). */
+static char g_loaded_sha[65];
+static void *g_loaded_handle;
+
 static int load_verified(const char *path, const char *expected, int *src_out) {
     int s = open(path, O_RDONLY | O_CLOEXEC);
     if (s < 0) refuse("open");
@@ -182,6 +222,54 @@ static int compare_loaded(void *h) {
     return segments > 0 && compared > 0 && equal;
 }
 
+/* Mapped vendor/system objects (dependency evidence). */
+static void print_objects(void) {
+    FILE *f = fopen("/proc/self/maps", "r");
+    char line[8192];
+    while (f && fgets(line, sizeof line, f)) {
+        char *p = strchr(line, '/');
+        if (p && strstr(line, " r--p 00000000 ")) printf("object %s", p);
+    }
+    if (f) fclose(f);
+}
+
+/* The proposal's host sequence. legacy=1 reproduces the r1 host (closes M,
+ * no post-check); registry=1 refuses a second, different operator. */
+static void *proposed_load(const char *op, const char *expected, int legacy, int registry) {
+    if (registry && g_loaded_handle) {
+        if (strcmp(g_loaded_sha, expected) != 0) refuse("operator already loaded with different bytes");
+        printf("registry: reuse verified operator %s\n", g_loaded_sha);
+        return g_loaded_handle;
+    }
+    int s = -1;
+    char label[64], load[64];
+    free(g_buf);
+    load_verified(op, expected, &s);
+    snprintf(label, sizeof label, "saccade-n03:src-fd=%d", s);
+    int m = make_memfd(label, g_buf, g_len, F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL);
+    verify_memfd(m, expected);
+    hook("after_hash");
+    snprintf(load, sizeof load, "/proc/self/fd/%d", m);
+    printf("dlopen %s\n", load);
+    fflush(stdout);
+    void *h = dlopen(load, RTLD_NOW | RTLD_LOCAL);
+    if (!h) refuse(dlerror());
+    close(s);
+    if (legacy) {
+        close(m);
+        return h;
+    }
+    if (!mapped_is(h, m)) refuse("loaded object is not the verified memfd");
+    if (getenv("N03_TWICE") && strcmp(getenv("N03_TWICE"), "closecheck") == 0) {
+        close(m); /* isolate the post-check: let the next memfd reuse this number */
+        return h;
+    }
+    /* M stays open: its number is never reused for another operator. */
+    snprintf(g_loaded_sha, sizeof g_loaded_sha, "%s", expected);
+    g_loaded_handle = h;
+    return h;
+}
+
 int main(int argc, char **argv) {
     if (argc < 4) return 64;
     const char *mode = argv[1], *op = argv[2], *expected = argv[3], *aux = argc > 4 ? argv[4] : NULL;
@@ -192,6 +280,58 @@ int main(int argc, char **argv) {
     int all = F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL;
     char label[64];
 
+    if (strcmp(mode, "twice") == 0) {
+        const char *how = getenv("N03_TWICE") ? getenv("N03_TWICE") : "registry";
+        const char *second = getenv("N03_SECOND_SHA");
+        if (!aux || !second) return 64;
+        int legacy = strcmp(how, "legacy") == 0, registry = strcmp(how, "registry") == 0;
+        void *h1 = proposed_load(op, expected, legacy, registry);
+        printf("first load equals verified=%d\n", compare_loaded(h1));
+        void *h2 = proposed_load(aux, second, legacy, registry);
+        printf("second handle %s first\n", h2 == h1 ? "==" : "!=");
+        int eq = compare_loaded(h2);
+        printf("second load equals verified=%d\n", eq);
+        fflush(stdout);
+        _exit(eq ? 0 : 3);
+    }
+    if (strcmp(mode, "alias-relative") == 0 || strcmp(mode, "alias-spoof") == 0) {
+        if (!aux) return 64;
+        char target[64], alias[4096];
+        if (strcmp(mode, "alias-relative") == 0) {
+            load_verified(op, expected, &s);
+            m = make_memfd("saccade_operator_candidate", g_buf, g_len, all);
+            snprintf(target, sizeof target, "/proc/self/fd/%d", m);
+            snprintf(alias, sizeof alias, "%s/alias.so", aux);
+            if (symlink(target, alias) != 0 || chdir(aux) != 0) refuse("alias setup");
+            load_path = "./alias.so";
+        } else {
+            load_verified(aux, expected, &s);
+            char planted[4096];
+            snprintf(planted, sizeof planted, "%s (deleted)", aux);
+            if (unlink(aux) != 0) refuse("unlink");
+            int pf = open(planted, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+            if (pf < 0 || write(pf, "planted\n", 8) != 8) refuse("plant");
+            close(pf);
+            snprintf(target, sizeof target, "/proc/self/fd/%d", s);
+            snprintf(alias, sizeof alias, "%s.alias.so", aux);
+            if (symlink(target, alias) != 0) refuse("alias setup");
+            char real[4096];
+            printf("planted %s; realpath(alias)=%s\n", planted, realpath(alias, real) ? real : "UNRESOLVED");
+            snprintf(load, sizeof load, "%s", "");
+            load_path = alias;
+        }
+        printf("dlopen %s\n", load_path);
+        fflush(stdout);
+        void *h = dlopen(load_path, RTLD_NOW | RTLD_LOCAL);
+        if (!h) {
+            printf("dlopen failed: %s\n", dlerror());
+            fflush(stdout);
+            _exit(2);
+        }
+        printf("dlopen succeeded\n");
+        fflush(stdout);
+        _exit(0);
+    }
     if (strcmp(mode, "current") == 0) {
         int fd = open(op, O_RDONLY | O_CLOEXEC);
         char hex[65];
@@ -202,11 +342,20 @@ int main(int argc, char **argv) {
         printf("source sha256=%s bytes=%zu (path, fd closed)\n", hex, g_len);
     } else if (strcmp(mode, "proposed") == 0 || strcmp(mode, "proposed-exec") == 0) {
         if (strcmp(mode, "proposed-exec") == 0) g_mfd_exec = MFD_EXEC;
-        load_verified(op, expected, &s);
-        snprintf(label, sizeof label, "saccade-n03:src-fd=%d", s);
-        m = make_memfd(label, g_buf, g_len, all);
-        verify_memfd(m, expected);
-        needle = "memfd:saccade-n03";
+        void *h = proposed_load(op, expected, 0, 1);
+        printf("dlopen succeeded\n");
+        print_maps("memfd:saccade-n03");
+        int eq = compare_loaded(h);
+        printf("loaded_equals_verified=%d\n", eq);
+        hook("after_load");
+        if (getenv("N03_HOOK_STAGE") && strcmp(getenv("N03_HOOK_STAGE"), "after_load") == 0) {
+            int after = compare_loaded(h);
+            printf("after_load_mutation loaded_equals_verified=%d\n", after);
+            eq = eq && after;
+        }
+        print_objects();
+        fflush(stdout);
+        _exit(eq ? 0 : 3);
     } else if (strcmp(mode, "forge-unlabeled") == 0) {
         load_verified(op, expected, &s);
         m = make_memfd("saccade_operator_candidate", g_buf, g_len, all);
@@ -268,14 +417,7 @@ int main(int argc, char **argv) {
         printf("after_load_mutation loaded_equals_verified=%d\n", after);
         before = before && after;
     }
-    /* Mapped vendor/system objects (dependency evidence). */
-    FILE *f = fopen("/proc/self/maps", "r");
-    char line[8192];
-    while (f && fgets(line, sizeof line, f)) {
-        char *p = strchr(line, '/');
-        if (p && strstr(line, " r--p 00000000 ")) printf("object %s", p);
-    }
-    if (f) fclose(f);
+    print_objects();
     fflush(stdout);
     _exit(before ? 0 : 3);  // no destructors: a mutated text page may be mapped
 }

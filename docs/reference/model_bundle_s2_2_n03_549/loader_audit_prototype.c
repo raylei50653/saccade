@@ -205,27 +205,100 @@ static int read_full(int fd, unsigned char *b, size_t n, off_t off) {
     return 1;
 }
 
+/* PROTOTYPE r2: the kernel's record of the mapping that contains `addr`
+ * (/proc/self/maps: device, inode, path). This identifies the object the
+ * loader actually mapped; a name and its realpath are only claims about it. */
+struct mapped_id {
+    unsigned int maj, mnr; /* recorded, not compared (overlayfs) */
+    unsigned long ino;
+    char path[PATH_MAX];
+};
+static char g_maps[1 << 16];
+
+static int mapping_of(uintptr_t addr, struct mapped_id *out) {
+    int fd = open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return 0;
+    size_t have = 0;
+    int found = 0, eof = 0, bad = 0;
+    for (;;) {
+        char *nl = memchr(g_maps, '\n', have);
+        if (nl == NULL && !eof && have < sizeof g_maps - 1) {
+            ssize_t k = read(fd, g_maps + have, sizeof g_maps - 1 - have);
+            if (k < 0 && errno == EINTR) continue;
+            if (k < 0) {
+                bad = 1;
+                break;
+            }
+            if (k == 0) eof = 1;
+            have += (size_t)k;
+            continue;
+        }
+        if (have == 0) break;           /* end of file */
+        if (nl == NULL) nl = g_maps + have; /* last line, or a line longer than the buffer */
+        size_t used = (size_t)(nl - g_maps) + (nl < g_maps + have ? 1 : 0);
+        *nl = '\0';
+        unsigned long lo, hi, off, ino;
+        unsigned int maj, mnr;
+        char perm[8];
+        int pos = 0;
+        if (sscanf(g_maps, "%lx-%lx %7s %lx %x:%x %lu %n", &lo, &hi, perm, &off, &maj, &mnr, &ino, &pos) >= 7 &&
+            addr >= lo && addr < hi) {
+            const char *p = g_maps + pos;
+            while (*p == ' ') ++p;
+            if (strlen(p) < sizeof out->path) {
+                out->maj = maj, out->mnr = mnr, out->ino = ino;
+                strcpy(out->path, p);
+                found = 1;
+            }
+            break;
+        }
+        memmove(g_maps, g_maps + used, have - used);
+        have -= used;
+    }
+    close(fd);
+    return found && !bad;
+}
+
+/* The mapped object is the file `real` names: the kernel's mapped path is that
+ * path (not a deleted entry: the kernel appends " (deleted)") and the inode
+ * matches. The device is not compared: on overlayfs /proc/self/maps reports
+ * the lower device while stat reports the overlay's (WSL /usr/lib/wsl/lib). */
+static int is_deleted_name(const char *p) {
+    static const char kDel[] = " (deleted)";
+    size_t n = strlen(p), d = sizeof kDel - 1;
+    return n >= d && strcmp(p + n - d, kDel) == 0;
+}
+
+static int names_mapped_object(const char *real, const struct mapped_id *id) {
+    struct stat st;
+    return !is_deleted_name(id->path) && strcmp(real, id->path) == 0 && stat(real, &st) == 0 &&
+           (unsigned long)st.st_ino == id->ino;
+}
+
 /* PROTOTYPE: an object mapped from /proc/self/fd/M passes only as N03 loaded
  * from the host's sealed memfd, and only if (1) M is a memfd carrying the
  * N03 label and all four seals, (2) the label's source descriptor S was opened
  * as <prefix>/share/saccade/build/libsaccade_scan_torchop.so (kernel d_path,
  * the realpath analogue of the path rule) and is the regular file now at that
  * path (dev/ino, final component not a symlink), and (3) M's bytes equal the
- * bytes of that file, read now. Anything else is refused. */
-static void check_op_memfd(const char *path) {
+ * bytes of that file, read now, and (4, r2) M is the object actually mapped.
+ * Anything else is refused. */
+static void check_op_memfd(const char *path, const struct mapped_id *id) {
     size_t pl = sizeof kProcFd - 1;
-    if (strncmp(path, kProcFd, pl) != 0) fail("unresolvable mapped object", path);
+    if (strncmp(path, kProcFd, pl) != 0) fail("mapped object is not the object its name resolves to", path);
     int m = parse_fd(path + pl, path + strlen(path));
-    if (m < 0) fail("unresolvable mapped object", path);
+    if (m < 0) fail("mapped object is not the object its name resolves to", path);
     char link[PATH_MAX], want[PATH_MAX];
     ssize_t n = readlink(path, link, sizeof link - 1);
-    if (n <= 0) fail("unresolvable mapped object", path);
+    if (n <= 0) fail("mapped object is not the object its name resolves to", path);
     link[n] = '\0';
     size_t ll = sizeof kOpMemfdLabel - 1;
     static const char kDeleted[] = " (deleted)";
     size_t dl = sizeof kDeleted - 1;
     if ((size_t)n <= ll + dl || strncmp(link, kOpMemfdLabel, ll) != 0 || strcmp(link + n - dl, kDeleted) != 0)
         fail("descriptor-backed object is not the operator memfd", link);
+    char memfd_link[PATH_MAX];
+    strcpy(memfd_link, link);
     int s = parse_fd(link + ll, link + n - dl);
     if (s < 0 || s == m) fail("operator memfd names no source descriptor", link);
     int seals = fcntl(m, F_GET_SEALS);
@@ -243,6 +316,8 @@ static void check_op_memfd(const char *path) {
     if (fstat(s, &ss) != 0 || fstat(f, &fs) != 0 || fstat(m, &ms) != 0 || !S_ISREG(ss.st_mode) ||
         !S_ISREG(fs.st_mode) || ss.st_dev != fs.st_dev || ss.st_ino != fs.st_ino)
         fail("operator source descriptor is not the operator library", g_op_library);
+    if (strcmp(id->path, memfd_link) != 0 || (unsigned long)ms.st_ino != id->ino)
+        fail("mapped object is not the operator memfd", id->path);
     /* (3) byte equality: sealed memfd == operator library */
     if (ms.st_size != fs.st_size) fail("operator memfd differs from the operator library", g_op_library);
     for (off_t off = 0; off < fs.st_size;) {
@@ -260,25 +335,35 @@ unsigned int la_objopen(struct link_map *map, Lmid_t lmid, uintptr_t *cookie) {
     const char *path = map->l_name;
     if (path == NULL || path[0] == '\0') return 0;
     const char *base = base_name(path);
-    char real[PATH_MAX];
-    int resolved = realpath(path, real) != NULL;
-    /* PROTOTYPE: a descriptor name (/proc/..., /dev/fd/...) or an absolute name
-     * that does not resolve (a memfd, a deleted or O_TMPFILE file) has no path
-     * to classify; realpath of a descriptor name is not trusted (a file planted
-     * at its readlink text would resolve). Such an object is refused unless
-     * it is the verified operator memfd. */
-    if (strncmp(path, "/proc/", 6) == 0 || strncmp(path, "/dev/fd/", 8) == 0 || (!resolved && path[0] == '/')) {
-        check_op_memfd(path);
+    const char *op_base = base_name(g_op_library);
+    /* PROTOTYPE r2: identify what was mapped (the mapping holding the dynamic
+     * section) before trusting any name. The vDSO is the kernel's [vdso]. */
+    struct mapped_id id;
+    if (!mapping_of((uintptr_t)map->l_ld, &id)) fail("cannot identify a mapped object", path);
+    if (strcmp(id.path, "[vdso]") == 0) {
+        if (is_python(base) || is_bundled_family(base) || strcmp(base, op_base) == 0 || same_family(base, op_base))
+            fail("cannot resolve a mapped object", path);
         return 0;
     }
-    const char *real_base = resolved ? base_name(real) : base;
+    char real[PATH_MAX];
+    int resolved = realpath(path, real) != NULL;
+    /* A descriptor name (/proc/..., /dev/fd/...), a name that does not resolve
+     * (relative or absolute: a memfd, a deleted or O_TMPFILE file, an alias to
+     * one), or a name whose real path is not the mapped object (a file planted
+     * at a "... (deleted)" readlink text, a path swapped after mapping) has no
+     * path to classify. Such an object is refused unless it is the verified
+     * operator memfd. */
+    int descriptor = strncmp(path, "/proc/", 6) == 0 || strncmp(path, "/dev/fd/", 8) == 0;
+    if (descriptor || !resolved || !names_mapped_object(real, &id)) {
+        check_op_memfd(path, &id);
+        return 0;
+    }
+    const char *real_base = base_name(real);
     if (is_python(base) || is_python(real_base)) fail("Python library mapped", path);
-    const char *op_base = base_name(g_op_library);
     int bundled = is_bundled_family(base) || is_bundled_family(real_base);
     int op = strcmp(base, op_base) == 0 || strcmp(real_base, op_base) == 0 || same_family(base, op_base) ||
              same_family(real_base, op_base);
     if (!bundled && !op) return 0;
-    if (!resolved) fail("cannot resolve a mapped object", path);
     if (bundled && !in_vendor(real)) fail("bundled library mapped from outside lib/vendor", path);
     if (op && strcmp(real, g_op_library) != 0) fail("operator library mapped from another path", path);
     return 0;

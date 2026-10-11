@@ -105,9 +105,29 @@ int main(int argc, char** argv) {
     void* h = dlopen(load.c_str(), RTLD_NOW | RTLD_LOCAL);
     if (h == nullptr) refuse(std::string("dlopen: ") + dlerror());
     if (s >= 0) close(s);
-    if (m >= 0) close(m);
     struct link_map* lm = nullptr;
     dlinfo(h, RTLD_DI_LINKMAP, &lm);
+    if (m >= 0) {  // r2 host: the mapping holding l_ld is this memfd; M stays open
+        struct stat ms{};
+        bool ok = false;
+        if (lm != nullptr && fstat(m, &ms) == 0) {
+            FILE* f = std::fopen("/proc/self/maps", "r");
+            char line[8192];
+            while (f && std::fgets(line, sizeof line, f)) {
+                unsigned long lo, hi, off, ino;
+                unsigned maj, mnr;
+                char perm[8];
+                if (std::sscanf(line, "%lx-%lx %7s %lx %x:%x %lu", &lo, &hi, perm, &off, &maj, &mnr, &ino) == 7 &&
+                    reinterpret_cast<uintptr_t>(lm->l_ld) >= lo && reinterpret_cast<uintptr_t>(lm->l_ld) < hi) {
+                    ok = ino == static_cast<unsigned long>(ms.st_ino);
+                    break;
+                }
+            }
+            if (f) std::fclose(f);
+        }
+        std::printf("postcheck mapped_is_verified_memfd=%d\n", ok);
+        if (!ok) refuse("loaded object is not the verified memfd");
+    }
     std::printf("mode=%s loaded l_name=%s\n", mode.c_str(), lm ? lm->l_name : "?");
 
     auto op_handle = c10::Dispatcher::singleton()

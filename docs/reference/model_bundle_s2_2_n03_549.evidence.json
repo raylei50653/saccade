@@ -1,6 +1,6 @@
 {
   "schema": "saccade.s2_2_n03_research_evidence/v1",
-  "scope": "Phase 1 research evidence for the #549 S2-2 N03 TOCTOU proposal. Prototype auditor and probes only; no production source, installed package, N03 bytes, allowlist or pin is changed.",
+  "scope": "Phase 1 research evidence (revision 2, after independent review r1) for the #549 S2-2 N03 TOCTOU proposal. Prototype auditor and probes only; no production source, installed package, N03 bytes, allowlist or pin is changed.",
   "status": {
     "n03_mb41": "OPEN",
     "s2_2": "PARTIAL",
@@ -40,26 +40,50 @@
       "source_sha256": "f51b81c7f6208840552e8f862bd0d194f705a573bddfc4caf35ae64e99c512bf"
     },
     "prototype_auditor": {
+      "revision": 2,
       "source": "results/549_s2_2_n03/prototype/loader_audit_proto.c",
-      "source_sha256": "724386b1fb44a9bdc78590cafc69df5a68bc7256776c7015098f64ff010c4800",
       "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/loader_audit_prototype.c",
-      "binary_sha256": "b967b13fcad998346bff6e2f0ac1a6c463ef00adc545f9a78591082efb523aaa",
-      "build": "cc -std=c11 -O3 -DNDEBUG -fPIC -shared -Wall -Wextra -Werror -Igen (generated name list sha256 5c70b555cd0b76fa55fdbd0569635c0b26999145a8fbec11d02aa1578f42fe99)"
+      "source_sha256": "16643ecc3503ea8af9e4201effbdb580b065cd2070811244467f84cd641bce6d",
+      "binary_sha256": "22c5d0de377171deb6d710353bd15b81ccee9f10e6cac3e9d8e8755c8357f717",
+      "build": "cc -std=c11 -O3 -DNDEBUG -fPIC -shared -Wall -Wextra -Werror -Igen (generated name list sha256 5c70b555cd0b76fa55fdbd0569635c0b26999145a8fbec11d02aa1578f42fe99)",
+      "superseded": {
+        "revision_1": {
+          "source": "results/549_s2_2_n03/prototype/loader_audit_proto_r1.c",
+          "source_sha256": "724386b1fb44a9bdc78590cafc69df5a68bc7256776c7015098f64ff010c4800",
+          "binary_sha256": "b967b13fcad998346bff6e2f0ac1a6c463ef00adc545f9a78591082efb523aaa"
+        },
+        "revision_2a_device_compare": {
+          "source": "results/549_s2_2_n03/prototype/loader_audit_proto_r2a.c",
+          "binary_sha256": "d2e28cc064355e2f5b44533a365c02eebdc68a79b4e2c33f722f78d71392c233"
+        }
+      }
     },
     "host_probe": {
+      "revision": 2,
       "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/n03_host_probe.c",
-      "source_sha256": "98a2901d431c22c22e45d0021cae06a9d82e4f544bdb28dbff2d6fabd1e4a483",
-      "binary_sha256_r3": "fdbdbad3fe712a0662d6e3edd0d3392330dc41370d3b57c8a3f4d4c87021df67"
+      "source_sha256": "40e65b667a1967b9348445c6eec462c629f1bbf454cd666a6d4161709a0c60da",
+      "binary_sha256_r6": "f5345ed4ecbe84e44d51d64948d3d778abf0f410576f1c28ef3785577316c46f",
+      "revision_1": {
+        "source": "results/549_s2_2_n03/prototype/n03_host_probe_r1.c",
+        "binary_sha256_r3": "fdbdbad3fe712a0662d6e3edd0d3392330dc41370d3b57c8a3f4d4c87021df67"
+      }
     },
     "gpu_smoke": {
+      "revision": 2,
       "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/n03_gpu_smoke.cpp",
-      "source_sha256": "394477f1225b69822643595075d8630c6b2f5b18f7a4a77219110debe036b1b8",
-      "binary_sha256": "a58566eeca05cc7c0a739e00a5842ee7783b13a841f5a52a99ac92f2e5fa98a5"
+      "source_sha256": "0bb4e6de03b5e17925e2aa30bc52250a82e2063b63fc4fbd3651c07b796262ea",
+      "binary_sha256": "909b9ebb3e29959c878a0711413322b332f26c3ec1464c86ff57a1e985c8da22",
+      "revision_1": {
+        "source": "results/549_s2_2_n03/prototype/n03_gpu_smoke_r1.cpp",
+        "source_sha256": "394477f1225b69822643595075d8630c6b2f5b18f7a4a77219110debe036b1b8",
+        "binary_sha256": "a58566eeca05cc7c0a739e00a5842ee7783b13a841f5a52a99ac92f2e5fa98a5"
+      }
     },
     "runners": {
       "results/549_s2_2_n03/reproduce/run_reproduce.py": "9dfa3e586ce240c5b2391cd03be22f039823412c886b5dd280df0cf977ad19c4",
-      "results/549_s2_2_n03/run_matrix.py": "a0b2110c2bb09d52cf2f3ce2f49cfc1252f53a585b958cdff380b4fd2be7cdb2",
-      "results/549_s2_2_n03/run_gpu_smoke.py": "21ac9af82507358e84da98ace42bd7a32ed7028e006e3e4b0117834dfb87610a"
+      "results/549_s2_2_n03/run_matrix.py": "ffd09bb916ed515ad9fd03c41c1aeb671e67c13c809ee33592eefa6046274eea",
+      "results/549_s2_2_n03/run_matrix_r1r3.py (runner of r3)": "a0b2110c2bb09d52cf2f3ce2f49cfc1252f53a585b958cdff380b4fd2be7cdb2",
+      "results/549_s2_2_n03/run_gpu_smoke.py": "1527df8a06a5ba466b4f9989f8f5deebde1181c08819685ca3f4dcd05dae8c33"
     }
   },
   "runs": [
@@ -84,26 +108,62 @@
     {
       "id": "matrix_r3",
       "summary_sha256": "64a1d51037624422e69f034b0fa26f3216d6f578e4f0fa55a6cba24c9a51e58e",
-      "result": "31/31 with the final runner, probe and prototype auditor; inputs unchanged in every case"
+      "result": "31/31 with the final runner, probe and prototype auditor; inputs unchanged in every case",
+      "note": "revision 1 auditor and host; superseded by matrix_r6"
     },
     {
       "id": "gpu_smoke_r1",
       "summary_sha256": "8266ee512f08c19e18a550eece94eb0643cb6b45c32516ca4cd320ef5d7a97a8",
       "result": "5/5; eager float32/float16 outputs identical across path and memfd loads; graph capture + 3 replays equal eager; foreign same-byte source refused 127",
+      "serialization": "tools/resctl.py run --wait gpu0",
+      "note": "revision 1 host (memfd closed, no post-check) and revision 1 auditor; superseded by gpu_smoke_r2"
+    },
+    {
+      "id": "codex_review_r1",
+      "reviewed_commit": "cdf86953d1203bd89045230e7b93886f3b70e625",
+      "output": "results/549_s2_2_n03/review/codex_review_r1.md",
+      "output_sha256": "bff8612d26aed8d66481c927f8c3ddf0ecf2a4086bbd98f2b97314c71ccb761d",
+      "result": "blocked acceptance: 1 blocker, 3 major, 3 minor; dispositions in the proposal's review table"
+    },
+    {
+      "id": "matrix_r4",
+      "summary_sha256": "a40332003685d292999bf98f16dcdec02cdd22638db47ec8f8bbbf104fac776a",
+      "result": "30/41; revision 2a auditor compared devices and refused WSL overlayfs /usr/lib/wsl/lib/libcuda.so.1 (maps device 00:39, stat device 0:60, same inode)"
+    },
+    {
+      "id": "matrix_r5",
+      "summary_sha256": "025e55ebd1f8262b3f8c38fa4864becc1e312e0bb91edc060ece24c2ed623f8c",
+      "result": "40/41; F2 predicted host post-check exit 2, observed auditor refusal 127 of the genuine second load"
+    },
+    {
+      "id": "matrix_r6",
+      "summary_sha256": "d7ea3fbd451219940d4b914a62990ce9c20c7f797ec2ac886cf2ebd8568d4eb3",
+      "result": "42/42 with revision 2 auditor/probe; E3/E6 alias bypasses refused, E1/E2/E4/E5 show main and revision 1 accept them; F1-F5 second-load controls; inputs unchanged in every case"
+    },
+    {
+      "id": "gpu_smoke_r2",
+      "summary_sha256": "e323b2da91526cb820e257d60b7d211d88ac7993a43324fcc573aeb6755e66d7",
+      "result": "6/6; eager float32/float16 outputs identical across path and memfd loads under installed, revision 1 and revision 2 auditors; graph capture + 3 replays equal eager; post-check passes; foreign same-byte source refused 127. Output hashes only, no mapped-memory comparison",
       "serialization": "tools/resctl.py run --wait gpu0"
     },
     {
       "id": "auditor_regressions",
       "command": "pytest tests/unit/test_shipping_bundle_checks.py -k 'auditor or launcher'",
       "main": "14 passed (results/549_s2_2_n03/main_auditor_pytest.log, sha256 d4be4faebbb5520abc2eb3f12907afdcdcdab6ae20509af987bbd3efea327a78)",
-      "prototype": "14 passed with the prototype as shipping/src/loader_audit.c in a scratch worktree (results/549_s2_2_n03/proto_auditor_pytest.log, sha256 b1c490639115277310301c6400dd22ac8d16d9c96fbc6406aac68ef37e8ab1ed)"
+      "revision_1": "14 passed (results/549_s2_2_n03/proto_auditor_pytest.log, sha256 b1c490639115277310301c6400dd22ac8d16d9c96fbc6406aac68ef37e8ab1ed)",
+      "revision_2": "14 passed with the revision 2 prototype as shipping/src/loader_audit.c in a scratch worktree (results/549_s2_2_n03/proto_r2_auditor_pytest.log, sha256 6a7490fb6d5a3dd67fe9e28368bd27fc8076d5e90bd3e6e0fdc1a8eb2d070277)"
+    },
+    {
+      "id": "pre_push_r1",
+      "commit": "cdf86953d1203bd89045230e7b93886f3b70e625",
+      "result": "scripts/pre_push.sh exit 0 (results/549_s2_2_n03/review/pre_push_cdf86953.log)"
     }
   ],
   "raw_evidence": {
     "directory": "results/549_s2_2_n03/",
     "sha256sums": "results/549_s2_2_n03/SHA256SUMS",
-    "sha256sums_digest": "c36d83e3c8329e019331f87b5c6b1b9ece6ddfb50fed95482316d5b294a608ce",
-    "excluded": "prefix_installed/ and prefix_proto/ (lib/vendor hard links to the #536 evidence tree; per-case N03 copies are re-created from the frozen source)"
+    "sha256sums_digest": "db092fa0b07156a467f80d5562b5aa2b851923e0897b289fb8ffd9b4dcde9ba1",
+    "excluded": "prefix_installed/, prefix_proto_r1/ and prefix_proto/ (lib/vendor hard links to the #536 evidence tree; per-case N03 copies are re-created from the frozen source)"
   },
   "unverified": [
     "production DetectorHost/auditor implementation (not written)",
@@ -111,6 +171,12 @@
     "installed package / launcher acceptance and re-pin",
     "a host with vm.memfd_noexec=2, seccomp-blocked memfd_create or an SELinux/AppArmor execute policy on memfd",
     "SIGKILL during the proposed load",
+    "independent review of revision 2",
     "qualified V5 (driver 616.92 required; host is 617.42)"
+  ],
+  "residuals": [
+    "I2 does not establish the path used when the source descriptor was opened (review finding 2); a writer to the fixed directory can rename a foreign-opened inode onto the fixed path",
+    "I2 chunked comparison is not a single-instant snapshot of a mutable file (review finding 4); I1 does not depend on it",
+    "direct mapped-memory comparison covers 170,457 bytes of non-writable PT_LOAD segments outside PT_GNU_RELRO"
   ]
 }
