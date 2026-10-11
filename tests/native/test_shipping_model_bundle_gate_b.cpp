@@ -20,6 +20,7 @@
 //   * not_the_plan: resolved bindings whose sha256 is not the plan's are refused.
 // Skips (exit 0, "SKIP") when a model file is missing.
 #include <cuda_runtime.h>
+#include <torch/script.h>
 #include <ftw.h>
 #include <unistd.h>
 
@@ -33,11 +34,14 @@
 #include <vector>
 
 #include "saccade_shipping/detector_host.hpp"
+#include "perception/trt_engine.hpp"
 #include "saccade_shipping/model_bundle.hpp"
+#include "saccade_shipping/native_runtime_build.hpp"
 #include "saccade_shipping/preflight.hpp"
 #include "saccade_shipping/run_completion.hpp"
 #include "saccade_shipping/sha256.hpp"
 #include "saccade_shipping/strict_json.hpp"
+#include "saccade_shipping/verified_model_bytes.hpp"
 
 namespace fs = std::filesystem;
 namespace sh = saccade::shipping;
@@ -48,6 +52,9 @@ namespace {
 int g_failures = 0;
 int g_checks = 0;
 
+#ifdef CHECK
+#undef CHECK
+#endif
 #define CHECK(cond)                                                                       \
     do {                                                                                  \
         ++g_checks;                                                                       \
@@ -117,6 +124,7 @@ sh::DetectorPlan gate_a(const Layout& l) {
     in.model_bundle = l.bundle.string();
     in.runtime_root = l.runtime.string();
     in.allowlist_sha256 = l.pin;
+    in.runtime_build = sh::native_runtime_build();
     sh::PreflightResult r = sh::run_preflight(in, completion);
     CHECK(r.detector.resolved != nullptr);
     return r.detector;
@@ -188,6 +196,20 @@ int main(int argc, char** argv) {
             CHECK(!mapped(plan.resolved->op_library.absolute_path));  // refused before dlopen
         }
         {
+            const Layout l = make_layout(repo, base / "unsupported_sm");
+            sh::DetectorPlan plan = gate_a(l);
+            auto contract = std::make_shared<sh::ManifestLoadContract>(*plan.manifest_contract);
+            for (auto& target : contract->targets) target.gpu_sm = {"sm_999"};
+            plan.manifest_contract = contract;
+            // Even an unreadable engine path cannot cause deserialization:
+            // the actual device's unsupported SM must be refused first.
+            fs::remove(plan.resolved->backbone_engine.absolute_path);
+            const std::string e = load_error(plan, "", stream);
+            std::fprintf(stderr, "unsupported_sm: %s\n", e.c_str());
+            CHECK(e.find("GPU SM") != std::string::npos);
+            CHECK(!mapped(plan.resolved->op_library.absolute_path));
+        }
+        {
             const Layout l = make_layout(repo, base / "model_root");
             const std::string e = load_error(gate_a(l), repo.string(), stream);
             std::fprintf(stderr, "model_root: %s\n", e.c_str());
@@ -215,9 +237,55 @@ int main(int argc, char** argv) {
             CHECK(rep.op_library_sha256 == r.op_library.sha256);
             CHECK(rep.head_artifact_sha256 == r.head_artifact.sha256);
             CHECK(rep.backbone_engine_sha256 == r.backbone_engine.sha256);
+            CHECK(rep.head_artifact_byte_scope == "loaded_buffer");
+            CHECK(rep.backbone_engine_byte_scope == "loaded_buffer");
+            CHECK(rep.op_library_byte_scope == "hashed_before_load");
+            CHECK(!rep.gpu_sm.empty());
             CHECK(mapped(r.op_library.absolute_path));
             CHECK(!mapped(fs::canonical(repo / "build/libsaccade_scan_torchop.so").string()));
             std::fprintf(stderr, "cross_root: loaded %s\n", r.op_library.absolute_path.c_str());
+
+            // MB-41/MB-58: actual LibTorch and TensorRT deserialization after
+            // deterministic post-hash replacement loads the original buffers.
+            // The operator is already registered by the real DetectorHost.
+            const sh::VerifiedModelBytes head_bytes = sh::VerifiedModelBytes::read(
+                "head artifact", r.head_artifact.absolute_path, r.head_artifact.sha256, r.head_artifact.bytes);
+            const sh::VerifiedModelBytes engine_bytes = sh::VerifiedModelBytes::read(
+                "backbone engine", r.backbone_engine.absolute_path, r.backbone_engine.sha256, r.backbone_engine.bytes);
+            write_file(r.head_artifact.absolute_path, std::string(head_bytes.size(), '\0'));
+            write_file(r.backbone_engine.absolute_path, std::string(engine_bytes.size(), '\0'));
+            CHECK(sh::sha256_file_hex(r.head_artifact.absolute_path) != head_bytes.sha256());
+            CHECK(sh::sha256_file_hex(r.backbone_engine.absolute_path) != engine_bytes.sha256());
+            {
+                sh::VerifiedModelStream verified_stream(head_bytes);
+                torch::jit::Module verified_head = torch::jit::load(verified_stream);
+                for (const auto& parameter : verified_head.parameters()) CHECK(parameter.device().str() == "cuda:0");
+                saccade::TRTEngine verified_engine(engine_bytes.data(), engine_bytes.size());
+                CHECK(verified_engine.get_nb_tensors() == 4);
+                CHECK(std::string(verified_engine.get_tensor_name(0)) == "images");
+            }
+            std::fprintf(stderr, "post_hash_replaced: actual head/engine loaded original verified buffers\n");
+            write_file(r.head_artifact.absolute_path, std::string(head_bytes.data(), head_bytes.size()));
+            write_file(r.backbone_engine.absolute_path, std::string(engine_bytes.data(), engine_bytes.size()));
+
+            // These contracts came through Gate A, then deliberately change a
+            // single handoff field. The real engine readback must refuse them.
+            for (const char* kind : {"dtype", "shape", "name", "order", "head_dtype"}) {
+                sh::DetectorPlan mismatch = plan;
+                auto contract = std::make_shared<sh::ManifestLoadContract>(*plan.manifest_contract);
+                const std::string mutation = kind;
+                if (mutation == "dtype") contract->backbone.inputs[0].dtype = "float16";
+                if (mutation == "shape") contract->backbone.inputs[0].shape[2] = 641;
+                if (mutation == "name") contract->backbone.inputs[0].name = "unexpected";
+                if (mutation == "order") std::swap(contract->backbone.outputs[0], contract->backbone.outputs[1]);
+                if (mutation == "head_dtype") contract->head.inputs[0].dtype = "float16";
+                mismatch.manifest_contract = contract;
+                const std::string e = load_error(mismatch, "", stream);
+                std::fprintf(stderr, "%s: %s\n", kind, e.c_str());
+                CHECK(!e.empty());
+                CHECK(e.find("not a DetectorLoadError") == std::string::npos);
+                CHECK(e.find(mutation == "head_dtype" ? "head supported contract" : "backbone engine") != std::string::npos);
+            }
         }
     } catch (const std::exception& e) {
         std::fprintf(stderr, "error: %s\n", e.what());

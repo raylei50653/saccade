@@ -64,6 +64,7 @@
 #include <vector>
 
 #include "saccade_shipping/detector_plan.hpp"
+#include "saccade_shipping/native_runtime_build.hpp"
 #include "saccade_shipping/preflight.hpp"
 #include "saccade_shipping/run_completion.hpp"
 #include "saccade_shipping/serial_runtime.hpp"
@@ -182,6 +183,7 @@ inline PreflightResult preflight(const Options& o, const char* entrypoint, RunCo
         in.model_bundle = o.model_bundle;
         in.runtime_root = runtime_package_root();
         in.allowlist_sha256 = kTrustedModelBundlesSha256;
+        in.runtime_build = native_runtime_build();
     } else {
         in.config = o.config;
         in.lineage = o.lineage;
@@ -298,6 +300,12 @@ JsonValue load_json(const Runtime& rt) {
     load.set("op_library_sha256", JsonValue::make_string(r.op_library_sha256));
     load.set("head_artifact_sha256", JsonValue::make_string(r.head_artifact_sha256));
     load.set("backbone_engine_sha256", JsonValue::make_string(r.backbone_engine_sha256));
+    JsonValue scopes = JsonValue::make_object();
+    scopes.set("op_library", JsonValue::make_string(r.op_library_byte_scope));
+    scopes.set("head_artifact", JsonValue::make_string(r.head_artifact_byte_scope));
+    scopes.set("backbone_engine", JsonValue::make_string(r.backbone_engine_byte_scope));
+    load.set("artifact_byte_scopes", std::move(scopes));
+    load.set("gpu_sm", r.gpu_sm.empty() ? JsonValue::make_null() : JsonValue::make_string(r.gpu_sm));
     load.set("param_devices", strings(r.param_devices));
     load.set("constant_devices", strings(r.constant_devices));
     load.set("native_scan_calls", JsonValue::make_int(r.native_scan_calls));

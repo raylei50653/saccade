@@ -126,6 +126,12 @@ JsonValue load_json(const sh::HeadLoadReport& r) {
     o.set("op_library_sha256", JsonValue::make_string(r.op_library_sha256));
     o.set("head_artifact_sha256", JsonValue::make_string(r.head_artifact_sha256));
     o.set("backbone_engine_sha256", JsonValue::make_string(r.backbone_engine_sha256));
+    JsonValue scopes = JsonValue::make_object();
+    scopes.set("op_library", JsonValue::make_string(r.op_library_byte_scope));
+    scopes.set("head_artifact", JsonValue::make_string(r.head_artifact_byte_scope));
+    scopes.set("backbone_engine", JsonValue::make_string(r.backbone_engine_byte_scope));
+    o.set("artifact_byte_scopes", std::move(scopes));
+    o.set("gpu_sm", r.gpu_sm.empty() ? JsonValue::make_null() : JsonValue::make_string(r.gpu_sm));
     o.set("param_devices", strings(r.param_devices));
     o.set("constant_devices", strings(r.constant_devices));
     o.set("native_scan_calls", JsonValue::make_int(r.native_scan_calls));

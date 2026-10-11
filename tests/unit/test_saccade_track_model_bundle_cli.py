@@ -397,6 +397,51 @@ def test_standin_bundle_passes_gate_a_and_gate_b_records_the_failed_load(
 # ── refusals without CUDA ─────────────────────────────────────────────────────
 
 
+@pytest.mark.parametrize("binary", BINARIES)
+@pytest.mark.parametrize(
+    ("field", "unsupported"),
+    [("tensorrt", "0.0.0.0"), ("libtorch", "0.0.0+cu130"), ("cuda_runtime", "0.0")],
+)
+def test_manifest_build_versions_refused_before_cuda(
+    tmp_path: Path, binary: str, field: str, unsupported: str
+) -> None:
+    """MB-43: the actual binary's build tuple must match one full target."""
+    prefix, bundle, manifest = _standin_bundle(tmp_path, binary)
+    manifest["compatibility"]["targets"][0][field] = unsupported
+    _write_manifest(bundle, prefix, manifest)
+    r, cuda = _run(
+        tmp_path,
+        prefix / "libexec" / binary,
+        ["--model-bundle", str(bundle), *map(str, _sequences(tmp_path))],
+    )
+    j = _assert_refused_in_gate_a(tmp_path, binary, r, cuda, "compatibility")
+    assert j["identity"]["level"] is None
+
+
+@pytest.mark.parametrize("binary", BINARIES)
+@pytest.mark.skipif(not _has_cuda_driver(), reason="CUDA driver unavailable")
+def test_manifest_sm_refused_before_deserialization(
+    tmp_path: Path, binary: str
+) -> None:
+    """MB-44/58: unsupported SM wins over invalid stand-in loader bytes."""
+    prefix, bundle, manifest = _standin_bundle(tmp_path, binary)
+    manifest["compatibility"]["targets"][0]["gpu_sm"] = ["sm_999"]
+    _write_manifest(bundle, prefix, manifest)
+    r, cuda = _run(
+        tmp_path,
+        prefix / "libexec" / binary,
+        ["--model-bundle", str(bundle), *map(str, _sequences(tmp_path))],
+    )
+    assert r.returncode == 2, r.stderr
+    assert cuda and f"{binary}: preflight passed" in r.stderr
+    j = _journal(tmp_path)
+    assert j["state"] == "failed" and j["load_verification"] == LOAD_FAILED
+    assert j["identity"]["level"] == "checksum_matched"
+    assert "SM" in j["failure"]["message"], j["failure"]
+    assert "dlopen" not in j["failure"]["message"]
+    assert all(s["state"] == "pending" for s in j["sequences"])
+
+
 def _replace_head(
     tmp_path: Path, prefix: Path, bundle: Path, m: dict[str, Any]
 ) -> None:
@@ -547,6 +592,43 @@ def test_legacy_mode_cannot_meet_expected_source_verified(
 
 
 # ── real bundle (GPU) ─────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("binary", BINARIES)
+@pytest.mark.parametrize("mismatch", ["dtype", "shape", "name"])
+def test_real_engine_io_refusal_keeps_gate_a_identity(
+    tmp_path: Path, binary: str, mismatch: str
+) -> None:
+    """MB-45/58: hash-valid artifacts must satisfy the exact manifest I/O."""
+    prefix, bundle, manifest = _real_bundle(tmp_path, binary)
+    backbone = manifest["io"]["backbone_engine"]["outputs"]
+    if mismatch == "dtype":
+        manifest["io"]["backbone_engine"]["inputs"][0]["dtype"] = "float16"
+    elif mismatch == "shape":
+        manifest["io"]["backbone_engine"]["inputs"][0]["shape"][1] = 4
+    else:
+        backbone[0]["name"], backbone[1]["name"] = (
+            backbone[1]["name"],
+            backbone[0]["name"],
+        )
+    _write_manifest(bundle, prefix, manifest)
+    r, cuda = _run(
+        tmp_path,
+        prefix / "libexec" / binary,
+        ["--model-bundle", str(bundle), *map(str, _sequences(tmp_path))],
+    )
+    assert r.returncode == 2, r.stderr
+    assert cuda and f"{binary}: preflight passed" in r.stderr
+    j = _journal(tmp_path)
+    assert j["state"] == "failed" and j["load_verification"] == LOAD_FAILED
+    assert j["identity"]["level"] == "checksum_matched"
+    bindings = j["identity"]["bindings"]
+    assert all(
+        bindings[name]["status"] == "matched"
+        for name in ("config", "lineage", "attestation", "op_library", "head", "engine")
+    )
+    assert mismatch in j["failure"]["message"], j["failure"]
+    assert all(s["state"] == "pending" for s in j["sequences"])
 
 
 @pytest.mark.parametrize("binary", BINARIES)

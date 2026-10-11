@@ -40,6 +40,9 @@ public:
 class SACCADE_PERCEPTION_API TRTEngine : public IPerceptionEngine, public BaseDetector {
 public:
     TRTEngine(const std::string& model_path);
+    // Deserialize the supplied bytes directly. The caller keeps them alive
+    // through construction; no model path is opened by this overload.
+    TRTEngine(const void* model_data, std::size_t size);
     ~TRTEngine() override;
 
     // IPerceptionEngine interface
@@ -56,6 +59,11 @@ public:
     const char* get_tensor_name(int index) const override;
     bool is_input(const char* name) const override;
     bool set_input_shape(const char* name, const std::vector<int64_t>& shape) override;
+    nvinfer1::DataType get_tensor_data_type(const char* name) const;
+    nvinfer1::TensorLocation get_tensor_location(const char* name) const;
+    nvinfer1::TensorFormat get_tensor_format(const char* name) const;
+    // Concrete execution-context dimensions after set_input_shape().
+    nvinfer1::Dims get_context_tensor_dims(const char* name);
 
     // Context factory for concurrent evaluation
     /**

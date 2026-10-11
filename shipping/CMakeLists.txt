@@ -53,7 +53,8 @@ set_target_properties(saccade_shipping_mot PROPERTIES POSITION_INDEPENDENT_CODE 
 # tracking headers (tracker_params.hpp, perception_params.hpp).
 add_library(saccade_shipping_native_config STATIC
     src/native_config.cpp src/post_detector_plan.cpp src/sequence_output.cpp src/ingest_plan.cpp
-    src/sha256.cpp src/detector_plan.cpp src/schedule_plan.cpp)
+    src/sha256.cpp src/detector_plan.cpp src/schedule_plan.cpp src/model_compatibility.cpp
+    src/verified_model_bytes.cpp)
 target_link_libraries(saccade_shipping_native_config PUBLIC
     saccade_shipping_config saccade_tracker_params saccade_shipping_mot)
 target_compile_options(saccade_shipping_native_config PRIVATE -Wall -Wextra -Wpedantic)
@@ -189,6 +190,20 @@ add_test(NAME saccade_shipping_model_bundle_test
             ${SACCADE_REPO_ROOT}/docs/architecture/model_bundle_549/verification_matrix.json
             ${SACCADE_REPO_ROOT} ${SACCADE_TRUSTED_MODEL_BUNDLES})
 
+add_executable(saccade_shipping_model_compatibility_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_model_compatibility.cpp)
+target_link_libraries(saccade_shipping_model_compatibility_test PRIVATE saccade_shipping_model_bundle)
+target_compile_options(saccade_shipping_model_compatibility_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_model_compatibility_test
+    COMMAND saccade_shipping_model_compatibility_test
+            ${SACCADE_REPO_ROOT}/docs/architecture/model_bundle_549/examples/headline_s_n01_n06.model_bundle.example.json)
+
+add_executable(saccade_shipping_verified_model_bytes_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_verified_model_bytes.cpp)
+target_link_libraries(saccade_shipping_verified_model_bytes_test PRIVATE saccade_shipping_native_config)
+target_compile_options(saccade_shipping_verified_model_bytes_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_verified_model_bytes_test COMMAND saccade_shipping_verified_model_bytes_test)
+
 if(TARGET saccade_tracking)
     # Measurement boundary (#465 Phase C PR-C2). Each runtime library below is
     # built twice from the same sources: <name>, the shipping objects, and
@@ -268,13 +283,93 @@ if(TARGET saccade_tracking)
     # (saccade_perception) -> the PR-1L LibTorch head -> S2. LibTorch only
     # (TORCH_LIBRARIES has no libtorch_python); the head's scan operator is
     # dlopen'ed at load time after its hash is checked.
-    saccade_shipping_variants(saccade_shipping_detector src/detector_host.cpp src/detector_s2.cu)
+    # The qualifier below belongs to the Python package that supplied Torch.
+    # Same base-version headers from a different Torch_DIR/CMAKE_PREFIX_PATH
+    # do not prove that package's CUDA build. Bind the selected CMake config,
+    # headers and actual core imported libraries to that same package tree.
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c
+        "import pathlib, torch; print(pathlib.Path(torch.__file__).resolve().parent)"
+        OUTPUT_VARIABLE _saccade_torch_package_root
+        OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE _saccade_torch_root_rc)
+    if(NOT _saccade_torch_root_rc EQUAL 0 OR NOT IS_DIRECTORY "${_saccade_torch_package_root}")
+        message(FATAL_ERROR "Cannot prove LibTorch package origin")
+    endif()
+    get_filename_component(_saccade_expected_torch_config "${_saccade_torch_package_root}/share/cmake/Torch" REALPATH)
+    get_filename_component(_saccade_selected_torch_config "${Torch_DIR}" REALPATH)
+    if(NOT _saccade_selected_torch_config STREQUAL _saccade_expected_torch_config)
+        message(FATAL_ERROR "LibTorch build origin mismatch: Torch_DIR '${Torch_DIR}' differs from the versioned Python package")
+    endif()
+    foreach(_torch_include IN LISTS TORCH_INCLUDE_DIRS)
+        get_filename_component(_torch_include_real "${_torch_include}" REALPATH)
+        string(FIND "${_torch_include_real}/" "${_saccade_torch_package_root}/include/" _torch_include_prefix)
+        if(NOT _torch_include_prefix EQUAL 0)
+            message(FATAL_ERROR "LibTorch headers escaped the versioned Python package: ${_torch_include}")
+        endif()
+    endforeach()
+    foreach(_torch_target torch torch_cpu torch_cuda c10 c10_cuda)
+        if(NOT TARGET ${_torch_target})
+            message(FATAL_ERROR "Cannot prove LibTorch core library origin: missing ${_torch_target}")
+        endif()
+        get_target_property(_torch_configs ${_torch_target} IMPORTED_CONFIGURATIONS)
+        set(_torch_location_properties IMPORTED_LOCATION)
+        foreach(_torch_config IN LISTS _torch_configs)
+            string(TOUPPER "${_torch_config}" _torch_config_upper)
+            list(APPEND _torch_location_properties "IMPORTED_LOCATION_${_torch_config_upper}")
+        endforeach()
+        set(_torch_location_found FALSE)
+        foreach(_torch_property IN LISTS _torch_location_properties)
+            get_target_property(_torch_location ${_torch_target} ${_torch_property})
+            if(_torch_location)
+                set(_torch_location_found TRUE)
+                get_filename_component(_torch_location_real "${_torch_location}" REALPATH)
+                get_filename_component(_torch_location_parent "${_torch_location_real}" DIRECTORY)
+                if(NOT _torch_location_parent STREQUAL "${_saccade_torch_package_root}/lib")
+                    message(FATAL_ERROR "LibTorch core library escaped the versioned Python package: ${_torch_target}=${_torch_location}")
+                endif()
+            endif()
+        endforeach()
+        if(NOT _torch_location_found)
+            message(FATAL_ERROR "Cannot prove LibTorch core library origin: ${_torch_target} has no imported location")
+        endif()
+    endforeach()
+    # TorchConfig also appends literal find_library results alongside its
+    # imported targets. Cache overrides of those paths need the same check.
+    set(_torch_literal_core_libraries "${TORCH_LIBRARY}" "${c10_LIBRARY}" "${C10_CUDA_LIBRARY}")
+    foreach(_torch_link IN LISTS TORCH_LIBRARIES)
+        if(IS_ABSOLUTE "${_torch_link}")
+            get_filename_component(_torch_link_name "${_torch_link}" NAME)
+            if(_torch_link_name MATCHES "^(libtorch|libc10)")
+                list(APPEND _torch_literal_core_libraries "${_torch_link}")
+            endif()
+        endif()
+    endforeach()
+    foreach(_torch_link IN LISTS _torch_literal_core_libraries)
+        if(NOT IS_ABSOLUTE "${_torch_link}" OR NOT EXISTS "${_torch_link}")
+            message(FATAL_ERROR "Cannot prove LibTorch literal core library origin: ${_torch_link}")
+        endif()
+        get_filename_component(_torch_link_real "${_torch_link}" REALPATH)
+        get_filename_component(_torch_link_parent "${_torch_link_real}" DIRECTORY)
+        if(NOT _torch_link_parent STREQUAL "${_saccade_torch_package_root}/lib")
+            message(FATAL_ERROR "LibTorch literal core library escaped the versioned Python package: ${_torch_link}")
+        endif()
+    endforeach()
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import torch; print(torch.__version__)"
+        OUTPUT_VARIABLE SACCADE_LIBTORCH_BUILD_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE _saccade_torch_version_rc)
+    if(NOT _saccade_torch_version_rc EQUAL 0 OR
+       NOT SACCADE_LIBTORCH_BUILD_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+\\+cu[0-9]+$")
+        message(FATAL_ERROR "Cannot prove LibTorch CUDA build version: '${SACCADE_LIBTORCH_BUILD_VERSION}'")
+    endif()
+    saccade_shipping_variants(saccade_shipping_detector
+        src/detector_host.cpp src/detector_s2.cu src/native_runtime_build.cpp)
     foreach(_v "" "_measurement")
         target_link_libraries(saccade_shipping_detector${_v} PUBLIC
             saccade_shipping_native_config saccade_perception ${TORCH_LIBRARIES} CUDA::cudart
             ${CMAKE_DL_LIBS})
         target_include_directories(saccade_shipping_detector${_v} PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${SACCADE_REPO_ROOT}/include)
+        target_compile_definitions(saccade_shipping_detector${_v} PRIVATE
+            SACCADE_LIBTORCH_BUILD_VERSION="${SACCADE_LIBTORCH_BUILD_VERSION}")
     endforeach()
 
     # Developer tool (#465 PR-8): stream the native ingest + detector of one
