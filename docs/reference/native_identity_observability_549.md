@@ -1,6 +1,6 @@
 <!-- doc-status: active -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-10-10 -->
+<!-- doc-date: 2026-10-11 -->
 <!-- doc-module: cross -->
 
 # #549 S2-1a：Legacy Native Identity Observability
@@ -13,11 +13,10 @@ nullable binding／expected source／status 與 journal v2／report v4 的釐清
 接受，版本控制的裁決在 [CC-536-01-02](../architecture/ship_export_contracts_536.md#decision-536-s2-1a-legacy-binding)。
 設計依據是 [ADR 028](../decisions/028-model-bundle-runtime-separation.md)。
 
-**狀態：unmerged implementation candidate。** 實作 PR 是 [#572](https://github.com/raylei50653/saccade/pull/572)，
-runtime coordinate 的獨立兩檔 review surface 是 [#573](https://github.com/raylei50653/saccade/pull/573)。
-下方逐列記錄實際證據；GPU 的 frozen V5 qualification 仍為 unresolved，package 未驗證。
-最終 PR CI／獨立 Codex review 的指定 head 結果另保留於 #572 描述；merge 授權尚未取得。本頁不回寫
-#536／#549 的實作 checkpoint 或 #550 排程，也不代表 CC-536-01-02 整體完成。
+**狀態：已由 [#572](https://github.com/raylei50653/saccade/pull/572) merged（merge `56540bf93a8988b546535f480e5123d8f8e97c52`，source-level）。**
+runtime coordinate 的獨立兩檔 review surface 是 [#573](https://github.com/raylei50653/saccade/pull/573)（#572 祖先，未單獨 merge）。
+實作狀態與 PR／main CI 結果的唯一寫入處是 [CC-536-01-02 N-T3 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-n-t3)；
+本頁只保留下方逐列證據。GPU 的 frozen V5 qualification 仍為 unresolved，package 未驗證，不代表 CC-536-01-02 整體完成。
 
 ## 1. Implemented：候選分支的 legacy 觀測
 
