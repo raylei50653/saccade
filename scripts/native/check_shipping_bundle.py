@@ -105,6 +105,10 @@ MODEL_ROOT_FILES = (
     "models/yolo/yolo26s_backbone_640_best.engine",
     "build/libsaccade_scan_torchop.so",
 )
+# Runtime-package data next to the operator library (#549 S2-1, TR-1b): the
+# model-bundle allowlist whose sha256 the entrypoint is built with. Not a
+# model-root file: no lineage or attestation binds it.
+RUNTIME_DATA_FILES = ("trusted_model_bundles.json",)
 # Search-path entries that do not expand inside the tree, each bound to the
 # bytes that carry it.
 _CUSPARSELT = "libcusparseLt.so.0"
@@ -142,6 +146,7 @@ def expected_files(
     files = {LAUNCHER, ENTRYPOINT, AUDITOR, README}
     files |= {t["file"] for t in supplied_texts(audit)}
     files |= {f"{g2.MODEL_ROOT}/{f}" for f in MODEL_ROOT_FILES}
+    files |= {f"{g2.MODEL_ROOT}/{f}" for f in RUNTIME_DATA_FILES}
     files |= {f"{VENDOR}/{e['soname']}" for e in set_["entries"]}
     files |= {
         "licenses/THIRD_PARTY.md",

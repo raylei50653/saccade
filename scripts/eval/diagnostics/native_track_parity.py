@@ -65,12 +65,18 @@ elsewhere with the same arguments (the clean container:
 ``DIR/trace`` and ``DIR/track_report.json``.
 #536 CC-536-01-01 (docs/architecture/ship_export_contracts_536.md): the run
 counts only when its completion record does. The report is
-``saccade.native_track_report/v4`` with Gate A's immutable legacy checksum
-identity. Its six bindings describe observed bytes and caller metadata
-comparisons, not source authentication or successful loading. Historical
-journal v1 / report v3 retains exactly ``{"level": null}``, without deriving
-identity from its other fields. Each report must have its journal's version
-pair, run id and identical identity. The run id ``saccade_track`` printed (the first line of
+``saccade.native_track_report/v5`` / journal v3 (#549 S2-1): Gate A's
+immutable identity in legacy mode (the CLI this harness runs) -- mode
+``legacy``, the requested ``required`` policy, no allowlist or bundle
+manifest, the six bindings -- and Gate B's ``load_verification``, which a
+complete run has as ``verified`` with ``byte_scope`` ``hashed_before_load``
+(never ``loaded_buffer``). A manifest-mode identity is not a parity run here.
+Historical report v4 / journal v2 (S2-1a) keeps its legacy checksum identity
+with no mode / policy fields and no load verification; journal v1 / report v3
+retains exactly ``{"level": null}``. Neither is reinterpreted or upgraded. The
+bindings describe observed bytes and caller metadata comparisons, not source
+authentication or successful loading. Each report must have its journal's
+version pair, run id and identical identity (and, v5, load verification). The run id ``saccade_track`` printed (the first line of
 ``saccade_track.log``, and its only ``run_id`` line) must be the report's and
 the journal's (``DIR/native/saccade_track.journal.json``), the journal must be
 a readable JSON object whose ``sequences`` is a list of objects and be
@@ -119,15 +125,32 @@ from typing import Any
 project_root = Path(__file__).resolve().parents[3]
 
 SCHEMA = "saccade.native_track_parity/v1"
-TRACK_REPORT_FORMAT = "saccade.native_track_report/v4"
+TRACK_REPORT_FORMAT = "saccade.native_track_report/v5"
+# S2-1a (#572): legacy checksum identity, no mode / policy / load verification.
+S2_1A_TRACK_REPORT_FORMAT = "saccade.native_track_report/v4"
 LEGACY_TRACK_REPORT_FORMAT = "saccade.native_track_report/v3"
 # saccade_track's run completion (#536 CC-536-01-01, run_completion.hpp).
-JOURNAL_FORMAT = "saccade.native_track_journal/v2"
+JOURNAL_FORMAT = "saccade.native_track_journal/v3"
+S2_1A_JOURNAL_FORMAT = "saccade.native_track_journal/v2"
 LEGACY_JOURNAL_FORMAT = "saccade.native_track_journal/v1"
 REPORT_FOR_JOURNAL = {
     JOURNAL_FORMAT: TRACK_REPORT_FORMAT,
+    S2_1A_JOURNAL_FORMAT: S2_1A_TRACK_REPORT_FORMAT,
     LEGACY_JOURNAL_FORMAT: LEGACY_TRACK_REPORT_FORMAT,
 }
+# Identity fields journal v3 / report v5 add (#549 S2-1).
+S2_1_IDENTITY_FIELDS = (
+    "mode",
+    "required",
+    "allowlist_sha256",
+    "allowlist_entry",
+    "bundle_manifest_sha256",
+)
+IDENTITY_LEVELS = ("none", "checksum_matched", "expected_source_verified")
+# Gate B's record of a complete S2-1 run: the files were rehashed before they
+# were loaded by path; nothing proves the loaded bytes are the hashed ones.
+LOAD_VERIFIED = {"status": "verified", "byte_scope": "hashed_before_load"}
+LOAD_FAILED = {"status": "failed", "byte_scope": None}
 JOURNAL_NAME = "saccade_track.journal.json"
 _RUN_ID = re.compile(r"[0-9a-f]{32}")
 _RUN_ID_LINE = re.compile(
@@ -380,23 +403,40 @@ def expected_measurement(
 
 
 def identity_problems(
-    identity: Any, *, legacy: bool = False, complete: bool = True
+    identity: Any, *, legacy: bool = False, complete: bool = True, s2_1: bool = False
 ) -> list[str]:
-    """Validate recorded Gate A evidence without reopening historical sources."""
+    """Validate recorded Gate A evidence without reopening historical sources.
+
+    ``legacy``: journal v1 / report v3 (``{level: null}`` only). Otherwise the
+    legacy-mode checksum record of journal v2 / report v4, plus, with
+    ``s2_1`` (journal v3 / report v5), its mode / policy / allowlist fields."""
     if legacy:
         return (
             []
             if identity == UNVERIFIED_IDENTITY
             else ["historical identity differs from {level: null}"]
         )
-    if not isinstance(identity, dict) or set(identity) != {
-        "level",
-        "expected_source",
-        "publisher_authentication",
-        "bindings",
-    }:
+    keys = {"level", "expected_source", "publisher_authentication", "bindings"}
+    if s2_1:
+        keys |= set(S2_1_IDENTITY_FIELDS)
+    if not isinstance(identity, dict) or set(identity) != keys:
         return ["identity is not the legacy Gate A record"]
     problems = []
+    if s2_1:
+        if identity["mode"] != "legacy":
+            problems.append(
+                f"identity mode {identity['mode']!r} is not the legacy CLI's"
+            )
+        required = identity["required"]
+        if required not in IDENTITY_LEVELS:
+            problems.append(f"identity required {required!r}")
+        elif complete and required == "expected_source_verified":
+            problems.append(
+                "a complete legacy run cannot meet expected_source_verified"
+            )
+        for key in ("allowlist_sha256", "allowlist_entry", "bundle_manifest_sha256"):
+            if identity[key] is not None:
+                problems.append(f"identity {key} must be null in legacy mode")
     level = identity["level"]
     if level not in (None, "checksum_matched") or (
         complete and level != "checksum_matched"
@@ -672,7 +712,12 @@ def report_problems(
         return ["track report is not an object"]
     problems = []
     if (
-        rep.get("format") not in (TRACK_REPORT_FORMAT, LEGACY_TRACK_REPORT_FORMAT)
+        rep.get("format")
+        not in (
+            TRACK_REPORT_FORMAT,
+            S2_1A_TRACK_REPORT_FORMAT,
+            LEGACY_TRACK_REPORT_FORMAT,
+        )
         or rep.get("schedule") != schedule
     ):
         problems.append(
@@ -680,12 +725,30 @@ def report_problems(
         )
     if not isinstance(rep.get("run_id"), str) or not _RUN_ID.fullmatch(rep["run_id"]):
         problems.append(f"report run_id {rep.get('run_id')!r}")
+    s2_1 = rep.get("format") == TRACK_REPORT_FORMAT
     problems += [
         f"report {p}"
         for p in identity_problems(
-            rep.get("identity"), legacy=rep.get("format") == LEGACY_TRACK_REPORT_FORMAT
+            rep.get("identity"),
+            legacy=rep.get("format") == LEGACY_TRACK_REPORT_FORMAT,
+            s2_1=s2_1,
         )
     ]
+    if s2_1:
+        # This harness runs the legacy CLI; the report says so, and its load
+        # verification is the complete run's.
+        if rep.get("mode") != "legacy" or rep.get("model_bundle") is not None:
+            problems.append(
+                f"report mode {rep.get('mode')!r} / model_bundle "
+                f"{rep.get('model_bundle')!r} is not the legacy CLI's"
+            )
+        if rep.get("load_verification") != LOAD_VERIFIED:
+            problems.append(
+                f"report load_verification {rep.get('load_verification')!r} is not "
+                "verified / hashed_before_load"
+            )
+    elif "load_verification" in rep or "mode" in rep:
+        problems.append("a historical report carries S2-1 fields")
     name = ENTRYPOINTS[entrypoint][0]
     if rep.get("entrypoint") != name:
         problems.append(f"report entrypoint {rep.get('entrypoint')!r} != {name!r}")
@@ -735,7 +798,11 @@ def report_problems(
         problems.append(
             "saccade_track head placement is not parameters cuda:0 / constants cpu"
         )
-    if rep.get("format") == TRACK_REPORT_FORMAT:
+    if s2_1:
+        resolved = plan.get("resolved", "absent")
+        if resolved is not None:
+            problems.append("a legacy-mode plan has resolved bindings")
+    if rep.get("format") in (TRACK_REPORT_FORMAT, S2_1A_TRACK_REPORT_FORMAT):
         identity = rep.get("identity")
         bindings = identity.get("bindings", {}) if isinstance(identity, dict) else {}
         bindings = bindings if isinstance(bindings, dict) else {}
@@ -889,14 +956,28 @@ def journal_problems(
         problems.append(
             f"journal state {j.get('state')!r} (failure {j.get('failure')!r})"
         )
+    s2_1 = j.get("format") == JOURNAL_FORMAT
     problems += [
         f"journal {p}"
         for p in identity_problems(
             j.get("identity"),
             legacy=j.get("format") == LEGACY_JOURNAL_FORMAT,
             complete=j.get("state") == "complete",
+            s2_1=s2_1,
         )
     ]
+    if s2_1:
+        load = j.get("load_verification", "absent")
+        if j.get("state") == "complete":
+            if load != LOAD_VERIFIED:
+                problems.append(
+                    f"journal load_verification {load!r} is not verified / "
+                    "hashed_before_load"
+                )
+        elif load not in (None, LOAD_VERIFIED, LOAD_FAILED):
+            problems.append(f"journal load_verification {load!r}")
+    elif "load_verification" in j:
+        problems.append("a historical journal carries load_verification")
     if [s.get("name") for s in entries] != sequences:
         problems.append("journal sequences differ from the request")
     committed = committed_sequences(j, out_dir, run_id)
@@ -937,6 +1018,8 @@ def journal_problems(
                 problems.append("report/journal run_id differs")
             if report.get("identity") != j.get("identity"):
                 problems.append("report/journal identity differs")
+            if s2_1 and report.get("load_verification") != j.get("load_verification"):
+                problems.append("report/journal load_verification differs")
     return problems
 
 
