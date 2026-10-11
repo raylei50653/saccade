@@ -15,18 +15,18 @@
   "authorization": "owner in-session decision: P-N03 rev 3c ACCEPT, D-N03-5 SELECTED, D-N03-6 NOT SELECTED, Phase 2 implementation authorized, merge not authorized; owner chose strict D-N03-5 in both modes with the kernel-mapping root derivation",
   "coordinates": {
     "base_sha": "74f2f5cb1a3db8a1f42da48d533e3322f243d138",
-    "replay_source_head": "492bb3d3dafdf82e5736270d95cece10ef76f3f1",
-    "replay_source_tree": "890f585307a56be457896d77f16d7f6f9aa50f71",
+    "replay_source_head": "85086d596c2d9213e3932d82cda8cfdbe5c3841b",
+    "replay_source_tree": "3e0a85da1b5ffb1cc7423b1dc5ffab73e23054fc",
     "binaries": [
       {
         "path": "build/runtime_identity/shipping/saccade_track",
-        "bytes": 3793880,
-        "sha256": "dbffbca82dbe30b3d187b5ef439456eeb5912f6313063a3612f557c0dbe2bfed"
+        "bytes": 3793872,
+        "sha256": "e25b7e0c9d27b1313116accf4e7e41c1b8111ade29d4b9ece239e9c90941e4d4"
       },
       {
         "path": "build/runtime_identity/shipping/saccade_track_measurement",
-        "bytes": 3805264,
-        "sha256": "c1215a58e0455b01f7c59901de6c8c45c3223673dd7a16488c593233c950b957"
+        "bytes": 3809352,
+        "sha256": "e0d3a91351a8be31e1b484f8526839752fddc87885a443e55a0da4b6c203055b"
       },
       {
         "path": "build/runtime_identity/shipping/saccade_loader_audit.so",
@@ -46,10 +46,10 @@
   "runs": [
     {
       "id": "cpu_operator_loader_test",
-      "commit": "492bb3d3",
-      "result": "48 checks, 0 failures per run; 30/30 repeated runs",
-      "raw_evidence": "results/549_s2_2_n03_phase2/cpu_operator_loader_repeat30_492bb3d3.log",
-      "sha256": "bccef1f3527511b2a11e6bfa09c9d78b40930d68fa3ee163b07a033d1bbf5f46"
+      "commit": "7fb8c7a9",
+      "result": "52 checks, 0 failures per run; 30/30 repeated runs",
+      "raw_evidence": "results/549_s2_2_n03_phase2/cpu_operator_loader_repeat30_7fb8c7a9.log",
+      "sha256": "28ded5fcc5c85ee9a5d4d46a0839fabd546b730ed1afa4e31ca3c87f2368fa88"
     },
     {
       "id": "mutation_postcheck_removed",
@@ -58,31 +58,38 @@
       "sha256": "d1a3982e97ec3507da60edf232a5cb28ebf378a8661b876bdbc2b63f3b36596a"
     },
     {
+      "id": "elf_split_attack",
+      "result": "a PT_DYNAMIC whose file offset names appended zeros while p_vaddr keeps the $ORIGIN table: accepted by the 492bb3d3 parser, refused by 7fb8c7a9 ('file and memory locations disagree')",
+      "raw_evidence": "results/549_s2_2_n03_phase2/elf_split_attack_old_vs_new.log",
+      "sha256": "ce22c8558563bb0821a800d0e05257c02bc0fa2b22fcdebedf4d0b274033132d",
+      "program": "results/549_s2_2_n03_phase2/elf_split_attack.cpp"
+    },
+    {
       "id": "gpu_native_ctest",
-      "commit": "492bb3d3",
-      "result": "5/5: operator_loader (48 checks), detector_s2 (47), serial_runtime, double_buffer_runtime, model_bundle_gate_b (158)",
-      "raw_evidence": "results/549_s2_2_n03_phase2/ctest_gpu_492bb3d3.log",
-      "sha256": "84b801f897014ac7200e260ff4ccb0d48b934a04a400bba752cb1fd45c852555"
+      "commit": "7fb8c7a9",
+      "result": "5/5: operator_loader (52 checks), detector_s2 (47), serial_runtime, double_buffer_runtime, model_bundle_gate_b (158)",
+      "raw_evidence": "results/549_s2_2_n03_phase2/ctest_gpu_7fb8c7a9.log",
+      "sha256": "6543e5bbfdd4ed5e5b6ea85a97956d74fa9621dfbdc85a6d130cd2203f3da423"
     },
     {
       "id": "n03_auditor_real_loader_suite",
-      "commit": "492bb3d3",
+      "commit": "7fb8c7a9",
       "result": "36/36 (included in cli_suites); its first 20 cases against main's auditor: 13 fail (every bypass/forgery/post-hash/FD/alias case), 7 pass (positives, host refusals, path-mode cases main also handles)",
       "main_auditor_raw_evidence": "results/549_s2_2_n03_phase2/auditor_suite_against_main_auditor.log",
       "main_auditor_sha256": "79ebd8a743e2ea6393e4fb51057b3716685b5955c71824405545bd0dec36f231"
     },
     {
       "id": "cli_suites",
-      "commit": "492bb3d3",
+      "commit": "7fb8c7a9",
       "result": "516 passed, 0 skipped under the gpu0 lease",
-      "raw_evidence": "results/549_s2_2_n03_phase2/cli_suites_492bb3d3.log",
-      "sha256": "84953dbf17876865f5ea6c6b1a8f61a23d799d40e12b508eb76a85815b4c7a82"
+      "raw_evidence": "results/549_s2_2_n03_phase2/cli_suites_7fb8c7a9.log",
+      "sha256": "ff11286a3e2a7f0e0f71163d86e8d70fb2687a5be948b44f8a534708f8c5cc2c"
     },
     {
       "id": "gpu_replay",
-      "directory": "results/549_s2_2_n03_phase2/gpu_492bb3d3dafd",
-      "summary_sha256": "4b8ab9e9bdf80d29c86fc3c68e429216af1804d9c9a017426b6e5dd10916ff1b",
-      "sha256sums_digest": "0aa4ffa097ede940ec6f42ac8af5e6cfcb8418c2b8166ed0f75b9b632b06256f",
+      "directory": "results/549_s2_2_n03_phase2/gpu_85086d596c2d",
+      "summary_sha256": "f3a8aae9d5ea1240573231b840f1a7f4f1d824f0bd8fd17a1bca04e330848731",
+      "sha256sums_digest": "1a59a310c63ba6ec978f441295ce0f3fe8bd95201859076f706b85fcf64041fd",
       "runner_sha256": "c04121b713c8e3c9f73d5e85d7fef1ad69c0f9bfed0021dc2e4ceffc185816f1",
       "qualification": {
         "formal_verdict": "UNRESOLVED",
@@ -182,9 +189,9 @@
           ],
           "memfd_device": "00:01",
           "memfd_mapped_inodes": [
-            393702
+            539933
           ],
-          "memfd_inode": 393702,
+          "memfd_inode": 539933,
           "memfd_seals": 47,
           "memfd_sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
           "operator_path_mapped": []
@@ -198,9 +205,9 @@
           ],
           "memfd_device": "00:01",
           "memfd_mapped_inodes": [
-            373081
+            568835
           ],
-          "memfd_inode": 373081,
+          "memfd_inode": 568835,
           "memfd_seals": 47,
           "memfd_sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
           "operator_path_mapped": []
@@ -218,47 +225,53 @@
         },
         "prefix": {
           "auditor_sha256": "57161128d29b67c4643e19fed65870ffea4fca43a0c1b38753e6e885b963e2a8",
-          "entrypoint_sha256": "dbffbca82dbe30b3d187b5ef439456eeb5912f6313063a3612f557c0dbe2bfed",
+          "entrypoint_sha256": "e25b7e0c9d27b1313116accf4e7e41c1b8111ade29d4b9ece239e9c90941e4d4",
           "operator_sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4"
         }
       },
       "launcher_foreign_model_root": {
-        "run_id": "25c6cdda0ca4087b82f8c82e7ae4fda2",
+        "run_id": "6bb4a0ddb5a68f0dbd453acadbe7670a",
         "state": "failed",
         "load_verification": {
           "status": "failed",
           "byte_scope": null
         },
         "identity_level": "checksum_matched",
-        "message": "shipping detector load: operator library /home/ray/developer/ai/saccade/build/libsaccade_scan_torchop.so is not the runtime package's /home/ray/developer/ai/saccade/results/549_s2_2_n03_phase2/gpu_492bb3d3dafd/install/saccade/share/saccade/build/libsaccade_scan_torchop.so (D-N03-5)"
+        "message": "shipping detector load: operator library /home/ray/developer/ai/saccade/build/libsaccade_scan_torchop.so is not the runtime package's /home/ray/developer/ai/saccade/results/549_s2_2_n03_phase2/gpu_85086d596c2d/install/saccade/share/saccade/build/libsaccade_scan_torchop.so (D-N03-5)"
       },
       "auditor_other_prefix": {
-        "run_id": "a31577df87971680b4d8411ed06eaa02",
+        "run_id": "7c2001ddbb109f1d27a44d66d023a6d3",
         "state": "running",
         "load_verification": null,
         "identity_level": "checksum_matched",
-        "auditor_line": "saccade_track: loader provenance check failed: operator library mapped from another path: /home/ray/developer/ai/saccade/results/549_s2_2_n03_phase2/gpu_492bb3d3dafd/install/saccade/share/saccade/build/libsaccade_scan_torchop.so"
+        "auditor_line": "saccade_track: loader provenance check failed: operator library mapped from another path: /home/ray/developer/ai/saccade/results/549_s2_2_n03_phase2/gpu_85086d596c2d/install/saccade/share/saccade/build/libsaccade_scan_torchop.so"
       }
+    },
+    {
+      "id": "gpu_replay_round1",
+      "directory": "results/549_s2_2_n03_phase2/gpu_492bb3d3dafd",
+      "summary_sha256": "4b8ab9e9bdf80d29c86fc3c68e429216af1804d9c9a017426b6e5dd10916ff1b",
+      "note": "source 492bb3d3, before review round 2; superseded by gpu_replay; same results"
     },
     {
       "id": "gpu_replay_pre_review",
       "directory": "results/549_s2_2_n03_phase2/gpu_e598d2f6b07a",
       "summary_sha256": "b19e4d78de5b17c6c5aaa13aafbf6d1e3e72c26ae3227fc2ae04cd5807a8f20c",
-      "note": "source e598d2f6, before the review round 1 fixes; superseded by gpu_replay; same results (inode-only observer join)"
+      "note": "source e598d2f6, before review rounds 1-2; superseded by gpu_replay"
     },
     {
       "id": "runtime_identity_republication",
-      "candidate": "results/549_s2_2_n03_phase2/identity_492bb3d3/runtime_identity.candidate.json",
-      "candidate_sha256": "1ed472d1e91c35dc3993e19bd9fea3cef24c9467ede3336fe723ec059e005a5a",
+      "candidate": "results/549_s2_2_n03_phase2/identity_7fb8c7a9/runtime_identity.candidate.json",
+      "candidate_sha256": "a78c7ad3547b41a62dffc4eb49470e93e9eb20240b2304c2a4f80f4931f58f05",
       "outgoing_archive": "docs/reference/runtime_identity/archive/runtime_identity.2026-10-11.bc378f688f9cd71b.json",
       "outgoing_sha256": "63f7ebebb38c758a54ef58a86d75c76b1c845758217a0d0f9d1ab0adc13d0c74",
       "implementation": {
         "from": "bc378f688f9cd71b7a72b567f0718ac3d87d153fd8b246a15e6c17c927e24e5c",
-        "to": "02f4dd970c4e6bfd9a2b8a2d80e89a9c8316e431ad0a33739241a4f26201ec95",
+        "to": "8cf46e38e1f836abc4f5db2d4613dcbfa32d263ae6d72086218329ea10f796ae",
         "files": "303 -> 305"
       },
-      "attested_check": "results/549_s2_2_n03_phase2/identity_492bb3d3/attested_check.log",
-      "result": "only the implementation axis changed; probe digest equal but freshly computed; equivalence unproven; attested staleness check exit 0"
+      "attested_check": "results/549_s2_2_n03_phase2/identity_7fb8c7a9/attested_check.log",
+      "result": "only the implementation axis changed; probe digest equal but freshly computed; equivalence unproven; attested staleness check exit 0; the intermediate 91a0037c coordinate was reverted before push"
     },
     {
       "id": "codex_review_p2_r1",
@@ -266,11 +279,18 @@
       "output": "results/549_s2_2_n03_phase2/review/codex_review_p2_r1.md",
       "output_sha256": "84b7355b236f3fadb01fb92e3edc920d1807727fd31c37b3d3530cd62a8f52a9",
       "result": "no blocker; 3 major, 3 minor, 1 nit; resolved in 492bb3d3 (see the doc's review table)"
+    },
+    {
+      "id": "codex_review_p2_r2",
+      "reviewed_commit": "94329dcf",
+      "output": "results/549_s2_2_n03_phase2/review/codex_review_p2_r2.md",
+      "output_sha256": "1063e5bbe7ba42033aa82a95f3b645674bde96b00b3e57cea8f1971e5c3577f7",
+      "result": "no blocker; 1 major (ELF dynamic table file vs memory view), 2 minor; coordinate republication: no findings; resolved in 7fb8c7a9"
     }
   ],
   "raw_evidence": {
     "directory": "results/549_s2_2_n03_phase2/",
-    "sha256sums_digest": "9b41209e045adbb7ced95749a2845b54f4b245754ab2c6b55d80f45cf3d1044b",
+    "sha256sums_digest": "7abf7b2b34d97627dfc43cce847c00aa3d44fc4fd24b915d9a11fe9352cb7213",
     "excluded": "assembled prefixes and bundles (hard links / copies of frozen inputs) and the runtime_identity build log"
   },
   "residuals": [

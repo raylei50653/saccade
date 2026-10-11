@@ -101,12 +101,12 @@ P-N03 rev 3c rule is applied verbatim apart from comments; see §17.9.
 ## Evidence
 
 Raw evidence is under `results/549_s2_2_n03_phase2/` (gitignored, local-only). The final runs are
-bound to clean source `492bb3d3`; the retained earlier run at `e598d2f6` predates the review round 1
-fixes. Hashes are in the evidence JSON.
+bound to clean head `85086d59` (code `7fb8c7a9`). The retained earlier runs at `e598d2f6` and
+`492bb3d3` predate the review fixes. Hashes are in the evidence JSON.
 
 | Acceptance condition | Control | Result |
 |:--|:--|:--|
-| 1. Fixed source, verified bytes, readback | CPU `saccade_shipping_operator_loader_test`, fork-isolated cases: load; registry reuse, overlapping identical requests and refusals; rename and in-place writes after prepare and after load; wrong SHA-256 or size; symlinked file or directory; directory, FIFO, relative and missing paths; `$ORIGIN` in `DT_RUNPATH`/`DT_RPATH` and non-ELF refused, absolute RUNPATH accepted; the D-N03-5 path function. GPU: `gate_b` `foreign_operator` and `detector_s2` refusals | 48 checks, 30/30 repeated runs; GPU native ctest 5/5 |
+| 1. Fixed source, verified bytes, readback | CPU `saccade_shipping_operator_loader_test`, fork-isolated cases: load; registry reuse, overlapping identical requests and refusals; rename and in-place writes after prepare and after load; wrong SHA-256 or size; symlinked file or directory; directory, FIFO, relative and missing paths; `$ORIGIN` in `DT_RUNPATH`/`DT_RPATH` and non-ELF refused, absolute RUNPATH accepted; the D-N03-5 path function. GPU: `gate_b` `foreign_operator` and `detector_s2` refusals | 52 checks, 30/30 repeated runs; GPU native ctest 5/5 |
 | 2. Seals and mapping identity | CPU: `F_SEAL_FUTURE_WRITE` without `F_SEAL_WRITE` fails the seal check; descriptor reuse through `load()` is refused and poisons the process; that control fails when the post-check is removed (mutation run). GPU replay observer: the live memfd read through `/proc/<pid>/fd` | seals `0x2f` (four seals plus the exec seal); mapped device and inode = the open memfd's; memfd SHA-256 = attested N03 `aa84cccd…` (manifest mode and launcher) |
 | 3. Auditor negative controls | `tests/unit/test_shipping_n03_auditor.py`: production host and auditor on a real loader (launcher and direct exec) and a forger, including a memfd sealed with `F_SEAL_FUTURE_WRITE` and a host `$ORIGIN` refusal; the production auditor's `mapping_from_fd` on boundary texts (65,535/8,191-byte records with and without newline, oversized earlier records with decoys at each continuation start, `PATH_MAX`) | 36/36. The first 20 cases against main's auditor: 13 fail (every bypass, source-forgery, post-hash race, FD and alias case) |
 | 3. Legitimate objects kept | existing auditor/launcher regressions; vDSO and vendor in every positive; WSL overlayfs `libcuda.so.1` in every GPU run | 14/14 and all GPU positives |
@@ -165,10 +165,11 @@ Its findings and their resolution:
   binding of where the source is opened. The chunked auditor comparison is not a single-instant
   snapshot; byte identity does not depend on it.
 - **Runtime identity.** The coordinate is republished in this delivery. Only the implementation
-  axis changed: `bc378f68…` → `02f4dd97…`, 303 → 305 files (the two new loader files and eight
-  modified shipping files). It was a fresh `--run-probe` capture of `492bb3d3`; the outgoing
+  axis changed: `bc378f68…` → `8cf46e38…`, 303 → 305 files (the two new loader files and eight
+  modified shipping files). It was a fresh `--run-probe` capture of `7fb8c7a9`; the outgoing
   canonical bytes are archived append-only, and the attested check passes. Probe equality does
-  not establish equivalence.
+  not establish equivalence. An intermediate republication (`91a0037c`, for `492bb3d3`) was
+  reverted before push and is not archived.
 - **Not covered:**
   - the installed package and launcher acceptance (no re-pin);
   - another GPU, driver 616.92 and V5 qualification;
