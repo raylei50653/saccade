@@ -5,7 +5,7 @@
 
 # #549 S2-2 N03 TOCTOU: threat model and loading proposal
 
-**Status: PROPOSAL (Phase 1, revision 3b).** N03 MB-41 remains **OPEN**, S2-2 remains **PARTIAL**,
+**Status: PROPOSAL (Phase 1, revision 3c).** N03 MB-41 remains **OPEN**, S2-2 remains **PARTIAL**,
 aggregate `load_verification.byte_scope` remains `hashed_before_load`, and qualified V5 remains
 **UNRESOLVED**. No production loader, auditor, launcher, N03 bytes, allowlist, installed package or
 pin is changed. This document asks for independent review and owner acceptance of one design.
@@ -27,7 +27,7 @@ sources (revision 3): [prototype auditor](model_bundle_s2_2_n03_549/loader_audit
 Revision 3 keeps the auditor's N03 path and source refusals at the strength main has (an
 audit-time observation, see P2), closes the descriptor bypasses found so far, and makes the file
 the loader maps for N03 byte-identical to the verified buffer. Each claim below is a real-loader
-control in matrix r9 (45/45), GPU smoke r5 (6/6) or the parser self-tests (3 × 12/12):
+control in matrix r10 (45/45), GPU smoke r6 (6/6) or the parser self-tests (3 × 14/14):
 
 - Same N03 bytes from a foreign path: still exit 127 (C02; GPU G4).
 - Hardlink under a foreign name: exit 127 (C03).
@@ -91,8 +91,16 @@ owner review, with two minor items:
 
 | # | Finding | Revision 3b |
 |:--|:--|:--|
-| R4-1 | the 3a host parsers falsely refuse a final record of exactly 8191 bytes without a newline | host and GPU smoke parsers use `getline` (no fixed-buffer boundary); the auditor parser reads from a descriptor so it can be tested; all three pass 12 synthetic boundary cases each |
+| R4-1 | the 3a host parsers falsely refuse a final record of exactly 8191 bytes without a newline | host and GPU smoke parsers use `getline` (no fixed-buffer boundary); the auditor parser reads from a descriptor so it can be tested; synthetic boundary self-tests for all three |
 | R4-2 | Phase 2 parser list differs between the proposal and the evidence JSON | unified: auditor, host post-check, GPU smoke (research), and any report reader |
+
+Round 5 (revision 3b, commit `99b0a86f`) found no blocker or major issue and cleared revision 3b for
+owner review, with two minor test-coverage items:
+
+| # | Finding | Revision 3c |
+|:--|:--|:--|
+| R5-1 | the oversized earlier-record decoy missed the auditor's 65,535-byte continuation boundary | decoy added at 65,535 (the continuation now starts with a header-shaped record) |
+| R5-2 | the JSON claimed newline and no-newline variants at 8192 and 65535 | both variants added at 8192 and 65535 (14 cases per parser) |
 
 The self-tests also exposed one restriction. The auditor refuses an object whose mapped path is at
 least `PATH_MAX` (4096) bytes: path length 4096 is refused, 4095 is accepted. It cannot identify
@@ -246,7 +254,7 @@ Out of scope and unchanged:
 | Host checks the source path against the fixed runtime path before opening | — | addresses finding 2 only for opens; needs the auditor's prefix in the host (explicit-loader root limitation, #582) | option for Phase 2 (D-N03-5) |
 | fs-verity, immutable attribute, read-only mount | yes, if the deployment provides it | path | later hardening; needs root or filesystem support |
 | Link N03 into the entrypoint | yes | ownership changes | out of scope (operator bytes change) |
-| **P-N03 revision 3b** | **I1** | **P2 as main (audit-time), I2, I3** | **proposed** |
+| **P-N03 revision 3c** | **I1** | **P2 as main (audit-time), I2, I3** | **proposed** |
 
 ## Failure semantics and contract matrix
 
@@ -274,7 +282,7 @@ Gate A identity retained):
 | N03 RUNPATH exception and dependencies | RUNPATH absolute, no `$ORIGIN` | D1/D2: same search-path entries and same 30 mapped object paths (11 vendor); only the RUNPATH attribution label and init name change to `/proc/self/fd/<M>` | required refusal of an N03 with `$ORIGIN`; entrypoint closure |
 | Catchable vs uncatchable | split as above | C07, C09, C10, F3–F5 (exit 2); C- and E-series 127 | native CLI MB-58 controls, SIGKILL |
 | Gate A identity | unchanged; N03 stays in the runtime package | not touched | identity unchanged in journal |
-| Real GPU operator | registered op runs; float32/float16 outputs bit-equal across load modes; graph capture + 3 replays = eager | GPU smoke r5 G1–G3, G5, G6 (output hashes, no memory comparison) | full detector/graph/serial/double-buffer replays |
+| Real GPU operator | registered op runs; float32/float16 outputs bit-equal across load modes; graph capture + 3 replays = eager | GPU smoke r6 G1–G3, G5, G6 (output hashes, no memory comparison) | full detector/graph/serial/double-buffer replays |
 | Report scope | aggregate stays `hashed_before_load` | — | per-object N03 label per owner decision D-N03-2 |
 
 ## Experiments
@@ -293,8 +301,8 @@ run uses `/lib64/ld-linux-x86-64.so.2 --library-path <prefix>/lib/vendor --audit
 `PATH=/usr/bin:/bin`, as the launcher does. A shell hook at a fixed stage (`after_open`,
 `after_hash`, `after_load`) places mutations inside the race window deterministically.
 
-**Matrix r9** (45/45; inputs unchanged in every case; r7 and r8 with earlier probes also 45/45).
-Revision 3b rows:
+**Matrix r10** (45/45; inputs unchanged in every case; r7–r9 with earlier probes also 45/45).
+Revision 3c rows:
 
 | Case | Exit | Auditor or host message |
 |:--|--:|:--|
@@ -324,7 +332,7 @@ Revision 3b rows:
 | F6 second load, same SHA, same path, registry | 0 | verified operator reused |
 | E8 ordinary file named `libplugin.so (deleted)`, path mode | 127 | compatibility restriction (E7: main accepts) |
 
-**GPU smoke r5** (6/6; r3 and r4 also 6/6) runs under `tools/resctl.py run --wait gpu0` on an RTX 5070 Ti Laptop,
+**GPU smoke r6** (6/6; r3–r5 also 6/6) runs under `tools/resctl.py run --wait gpu0` on an RTX 5070 Ti Laptop,
 sm_120, driver 617.42. G1 (installed, path), G2 (revision 3, path), G3 (revision 3, proposed,
 device+inode post-check), G5 (installed, proposed) and G6 (revision 1, proposed) all produce:
 
@@ -345,21 +353,24 @@ MOT or qualified parity.
   kept-open `M` makes the second load genuine. F5 isolates the post-check.
 
 r6/GPU r2 (revision 2) passed 42/42 and 6/6 and are retained, as are r7/r8 and GPU r3/r4
-(revisions 3 and 3a). The revision 3b auditor binary is byte-identical to revision 3
-(`6d0ded18…`).
+(revisions 3 and 3a), and r9/GPU r5 (revision 3b). The revision 3b/3c auditor binary is
+byte-identical to revision 3 (`6d0ded18…`).
 
-**Parser self-tests** (`results/549_s2_2_n03/parser_selftest_r1/`), 12 synthetic cases for each of
-the auditor, host post-check and GPU smoke parsers, all passing:
+**Parser self-tests** (`results/549_s2_2_n03/parser_selftest_r2/`; r1 had 12 cases), 14 synthetic
+cases for each of the auditor, host post-check and GPU smoke parsers, all passing:
 
-- short records with and without a final newline;
-- path lengths 4095 and 4096;
-- records of 8191, 8192 and 65535 bytes without a newline;
+- short target records with and without a final newline;
+- target path lengths 4095 and 4096;
+- target records of 8191, 8192 and 65535 bytes, each with and without a final newline;
 - a 70,000-byte target record;
-- 8191- and 70,000-byte earlier records with header-shaped decoy text at chunk boundaries;
+- 8191- and 70,000-byte earlier records carrying header-shaped decoys at 4 KiB boundaries, at
+  8191 (the former host buffer) and at 65,535 (the auditor's continuation start);
 - no target.
 
 The decoys are never parsed as records. The auditor identifies targets up to a path length of
-4095 and refuses longer ones; the `getline` parsers identify every length. Runner and probe bytes of
+4095 and refuses longer ones; the `getline` parsers identify every length. Every long target also
+exceeds `PATH_MAX`, so the auditor's refusals of long targets come from its `PATH_MAX` rule. Its
+buffer limit is exercised by the long earlier records. Runner and probe bytes of
 r1/r2/r4/r5 are partly not retained; their summaries record the probe and auditor hashes.
 
 ## Known limits
@@ -407,7 +418,7 @@ r1/r2/r4/r5 are partly not retained; their summaries record the probe and audito
 
 ## Owner decisions requested
 
-- **D-N03-1.** Accept P-N03 revision 3b (host sequence, registry, post-check and auditor rules) as
+- **D-N03-1.** Accept P-N03 revision 3c (host sequence, registry, post-check and auditor rules) as
   the Phase 2 design.
 - **D-N03-2.** Per-object N03 scope after Phase 2 evidence. Recommendation: `loaded_buffer` (the
   loader maps the sealed copy of the verified buffer). The aggregate stays `hashed_before_load`

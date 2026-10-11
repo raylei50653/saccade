@@ -1,6 +1,6 @@
 {
   "schema": "saccade.s2_2_n03_research_evidence/v1",
-  "scope": "Phase 1 research evidence (revision 3b, after independent reviews r1-r4) for the #549 S2-2 N03 TOCTOU proposal. Prototype auditor and probes only; no production source, installed package, N03 bytes, allowlist or pin is changed.",
+  "scope": "Phase 1 research evidence (revision 3c, after independent reviews r1-r5) for the #549 S2-2 N03 TOCTOU proposal. Prototype auditor and probes only; no production source, installed package, N03 bytes, allowlist or pin is changed.",
   "status": {
     "n03_mb41": "OPEN",
     "s2_2": "PARTIAL",
@@ -69,7 +69,7 @@
       "note": "mapping_from_fd refactor for testability; the binary is byte-identical to revision 3"
     },
     "host_probe": {
-      "revision": "3b",
+      "revision": "3c",
       "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/n03_host_probe.c",
       "source_sha256": "3e44f716e8c5d4d45d04249a3c9d85c093aedf172c2a7b26a4401982aea4d974",
       "revision_1": {
@@ -91,13 +91,13 @@
         "source_sha256": "36502426edf87a7acd1e90b4828e9dad55eaeab43415cb72bfc2866a99d62fdc",
         "binary_sha256_r8": "d8abc0d3fd9fb6dcfa8c533e7a164f43833b82c0c027456f80ee3e1b8c462c98"
       },
-      "binary_sha256_r9": "88275d05ebdea98f5e327ec0f31f649684ab5d635501f8fcd3334e6599ad8a37"
+      "binary_sha256_r10": "b11d552c2474176444b563424245bc466fc9a2573e8e74aa17c326e371f2593c"
     },
     "gpu_smoke": {
-      "revision": "3b",
+      "revision": "3c",
       "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/n03_gpu_smoke.cpp",
       "source_sha256": "923785aae83f06ae0a2cd7a3a1d0cc53d8e02cda47cc072a23bc0110c928f735",
-      "binary_sha256": "fcdcebc8e4f53d91b99d0d3cf9d6db51282639830aaf7555cdd3c6f2d6b22b13",
+      "binary_sha256": "0f07b22b51b4899a0e94e41089eabc8d61dd75cad1596d2c778adb3477345e41",
       "revision_1": {
         "source": "results/549_s2_2_n03/prototype/n03_gpu_smoke_r1.cpp",
         "source_sha256": "394477f1225b69822643595075d8630c6b2f5b18f7a4a77219110debe036b1b8",
@@ -128,12 +128,16 @@
     "parser_selftests": {
       "cases": {
         "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/parser_cases.h",
-        "source_sha256": "2ce69742c9dcfcfc1b679c07be0c4a435c849ce312e75821b025d68d14837b03"
+        "source_sha256": "8ce9ec4864fd7cb8529fa529dd29b1c2baeb3eaad533c7c9003c0545a5a2e4a6",
+        "revision_1": {
+          "source": "results/549_s2_2_n03/prototype/parser_cases_r1.h",
+          "source_sha256": "2ce69742c9dcfcfc1b679c07be0c4a435c849ce312e75821b025d68d14837b03"
+        }
       },
       "auditor_test": {
         "tracked_source": "docs/reference/model_bundle_s2_2_n03_549/auditor_parser_selftest.c (include comment added)",
         "source_sha256_as_built": "135f67c502e6d80e031b7de3a73a2a0ebec2fbea33073453f38e0119c8c1d3e6",
-        "binary_sha256": "9b87186c4bfbdab7c505cfe87239e825ce5e598f9b27ca8b7b87ec97dbe2ca67"
+        "binary_sha256": "06114cea3f3d19082f8487fed1d1c07bd02b7c96358e176cd5daafa490a22d6f"
       }
     }
   },
@@ -264,18 +268,20 @@
     {
       "id": "parser_selftest_r1",
       "directory": "results/549_s2_2_n03/parser_selftest_r1/",
-      "result": "auditor, host post-check and GPU smoke parsers each 12/12: 8191/8192/65535-byte boundaries with and without newline, oversized earlier records with header-shaped decoys, oversized target, PATH_MAX boundary (auditor refuses path length >= 4096 by design)"
+      "result": "auditor, host post-check and GPU smoke parsers each 12/12 (superseded by parser_selftest_r2): 8191 with and without newline, 8192/65535 without newline, oversized earlier records with decoys at 4 KiB and 8191, oversized target, PATH_MAX boundary"
     },
     {
       "id": "matrix_r9",
       "summary_sha256": "742d2f0d858effb6b2fa00cb929c8fb179e44c9a3c7177f3207d76c87646a53a",
-      "result": "45/45 with revision 3b auditor (binary identical to revision 3) and probe; inputs unchanged in every case"
+      "result": "45/45 with revision 3b auditor (binary identical to revision 3) and probe; inputs unchanged in every case",
+      "note": "revision 3b probe; superseded by matrix_r10"
     },
     {
       "id": "gpu_smoke_r5",
       "summary_sha256": "885a83a121a5f67640c83d2c6d1de9c5f52d4c845e0b6eead7604816217b505c",
       "result": "6/6 with revision 3b smoke; eager outputs identical across load modes; graph replays equal eager; foreign same-byte source refused 127. Output hashes only",
-      "serialization": "tools/resctl.py run --wait gpu0"
+      "serialization": "tools/resctl.py run --wait gpu0",
+      "note": "revision 3b smoke; superseded by gpu_smoke_r6"
     },
     {
       "id": "pre_push_r3",
@@ -286,12 +292,35 @@
       "id": "pre_push_r3a",
       "commit": "7d1d04d13ed394983e0942a542fff149539f6dcc",
       "result": "scripts/pre_push.sh exit 0; pytest 5670 passed, 52 skipped, 5 xfailed"
+    },
+    {
+      "id": "codex_review_r5",
+      "reviewed_commit": "99b0a86f07615fc72ff40de7768bf955d5edb366",
+      "output": "results/549_s2_2_n03/review/codex_review_r5.md",
+      "output_sha256": "f1212e24f0d248d12b2052e98b1e4d6ddd67c4d64a90c434ec99b73f6fe66f56",
+      "result": "no blocker or major; revision 3b cleared for owner review; 2 minor test-coverage items (decoy at the auditor's 65,535 continuation boundary; newline variants at 8192/65535) addressed in revision 3c"
+    },
+    {
+      "id": "parser_selftest_r2",
+      "directory": "results/549_s2_2_n03/parser_selftest_r2/",
+      "result": "auditor, host post-check and GPU smoke parsers each 14/14: target records of 8191, 8192 and 65535 bytes each with and without a final newline; 70,000-byte target; 8191- and 70,000-byte earlier records with header-shaped decoys at 4 KiB boundaries, 8191 and 65,535; target path lengths 4095/4096; no target. Long targets also exceed PATH_MAX (auditor refuses by its PATH_MAX rule); long earlier records exercise buffer limits"
+    },
+    {
+      "id": "matrix_r10",
+      "summary_sha256": "c63c5750e23c12a6d1d5329fe1b2244cc21754fbaa24e2332ef102d766d98f7e",
+      "result": "45/45 with revision 3c probe; inputs unchanged in every case"
+    },
+    {
+      "id": "gpu_smoke_r6",
+      "summary_sha256": "7a346089971b9716a1b34d61a3d11d1d47fdc25ff3ad1e33e1ae941d87f14b08",
+      "result": "6/6 with revision 3c smoke; eager outputs identical across load modes; graph replays equal eager; foreign same-byte source refused 127. Output hashes only",
+      "serialization": "tools/resctl.py run --wait gpu0"
     }
   ],
   "raw_evidence": {
     "directory": "results/549_s2_2_n03/",
     "sha256sums": "results/549_s2_2_n03/SHA256SUMS",
-    "sha256sums_digest": "4dafa94205cca3da17adccb8bb6fee82d1d840ffccb9666561635f634a79a172",
+    "sha256sums_digest": "0d76794bd4d4633fc6264f7e3ac1928a8b62ea8a9e7106055b5f6c591d67666e",
     "excluded": "prefix_installed/, prefix_proto_r1/ and prefix_proto/ (lib/vendor hard links to the #536 evidence tree; per-case N03 copies are re-created from the frozen source)"
   },
   "unverified": [
@@ -302,7 +331,7 @@
     "SIGKILL during the proposed load",
     "qualified V5 (driver 616.92 required; host is 617.42)",
     "owner acceptance (D-N03-1..6)",
-    "independent review of revision 3b changes (getline parsers, mapping_from_fd refactor, self-tests, wording)"
+    "independent review of revision 3c test-case additions"
   ],
   "residuals": [
     "P2/I2 is an audit-time observation, as on main: neither establishes the path through which the source was originally opened (review r1 finding 2, r2 finding A); a writer to the fixed directory can rename a foreign-opened inode onto the fixed path. Requires owner acceptance (D-N03-6) or host-side binding (D-N03-5)",

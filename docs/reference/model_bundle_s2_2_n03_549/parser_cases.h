@@ -1,5 +1,7 @@
 /* Synthetic /proc/self/maps texts for the N03 research parser self-tests
- * (review r3/r4). The target address is 0x5000; a matching record is
+ * (review r3/r4/r5). Long *target* cases also exceed PATH_MAX, so the
+ * auditor's refusal of them is its PATH_MAX rule, not its buffer limit; the
+ * long *earlier* cases exercise the buffer limits. The target address is 0x5000; a matching record is
  * "1000-9000 r--p 00000000 08:30 777 /path...". The auditor's buffer is
  * 64 KiB, the host's former buffer 8 KiB: lengths straddle both. */
 #include <stdio.h>
@@ -25,7 +27,9 @@ static const struct parser_case kParserCases[] = {
     {"target_path_4096_newline", 0, sizeof TARGET_HEAD - 2 + 4096, 1, 777},
     {"target_8191_newline", 0, 8191, 1, 777},
     {"target_8191_last_no_newline", 1, 8191, 1, 777},
+    {"target_8192_newline", 0, 8192, 1, 777},
     {"target_8192_last_no_newline", 1, 8192, 1, 777},
+    {"target_65535_newline", 0, 65535, 1, 777},
     {"target_65535_last_no_newline", 1, 65535, 1, 777},
     {"target_70000_newline_oversized_auditor", 0, 70000, 2, 777},
     {"earlier_oversized_with_header_text", 2, 70000, 1, 777},
@@ -43,8 +47,9 @@ static void put_target(char *out, size_t len, int newline) {
     out[len + 1] = '\0';
 }
 
-/* An earlier record whose path, at every 4096-byte chunk boundary and at
- * 8191, carries header-shaped text claiming 0x5000 with inode 666. */
+/* An earlier record whose path, at every 4096-byte chunk boundary, at 8191
+ * (the former host buffer) and at 65535 (the auditor buffer), carries
+ * header-shaped text claiming 0x5000 with inode 666. */
 static void put_decoy(char *out, size_t len) {
     const char *head = "a000-b000 r--p 00000000 08:30 1 /";
     const char *fake = "1000-9000 r--p 00000000 08:30 666 /fake";
@@ -53,6 +58,9 @@ static void put_decoy(char *out, size_t len) {
     for (size_t i = h; i < len; ++i) out[i] = 'q';
     for (size_t b = 4096; b + fl < len; b += 4096) memcpy(out + b, fake, fl);
     if (8191 + fl < len) memcpy(out + 8191, fake, fl);
+    /* review r5: the auditor's 64 KiB buffer fills at 65535 bytes; its
+     * continuation then starts with a header-shaped decoy */
+    if (65535 + fl < len) memcpy(out + 65535, fake, fl);
     if (len > fl + h) memcpy(out + len - fl, fake, fl);
     out[len] = '\n';
 }
