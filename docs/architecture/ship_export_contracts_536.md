@@ -268,7 +268,7 @@ flowchart TB
   - **Main CI（`c5ddf51c`）**：8/8 SUCCESS，run 的 headSha 就是 merge SHA。
     - [CI 38115253152](https://github.com/raylei50653/saccade/actions/runs/38115253152)：lockfile、shipping-config-loader、contracts、pytest、ruff、mypy、lint-typecheck；pytest 5393 passed。
     - [C++ Core Build 38115253145](https://github.com/raylei50653/saccade/actions/runs/38115253145)。
-    - CPU CI 只跑 coverage 中標為 `ci_ctest` 的測試。真 binary CLI（`local_cli`）與 GPU（`local_gpu`）只在本機跑。
+    - CI 會執行 coverage 中標為 `ci_ctest` 的測試。C++ build 會編譯 `saccade_track`，但不執行它。真 binary CLI（`local_cli`）與 GPU（`local_gpu`）的測試只在本機跑，在 CI 的 pytest job 會 skip。
   - **獨立審查**：都是 read-only review，都不是 GitHub APPROVED review。
     - Codex review `9f899ec3`：3 項，於 `8748566e` 修正。
     - owner review `8748566e`：1 項，於 `c0b7d8f1` 修正。

@@ -40,7 +40,7 @@ source-level implemented 不得寫成 runtime、GPU、installed package 或 prod
 | [verification_matrix.json](model_bundle_549/verification_matrix.json) | MB-01…MB-62 正負控制。每一列有 gap、層級、預期結果、現況、既有 enforcement 的引用和切片 |
 | [test_model_bundle_contract_549.py](../../tests/contract/test_model_bundle_contract_549.py) | 驗 schema 本身合法、examples 合法並符合 R-01..R-09、example 與 S0 一致、allowlist example 解析不出可信等級；矩陣中所有 schema 和 semantic 列都實際執行，而且必須在矩陣指定的位置（schema 的 instance path 與 keyword）或規則（R-xx）失敗；引用的檔案和行號必須存在 |
 
-這個測試只檢查設計稿彼此一致，**不測 runtime**。S1 時 runtime 沒有讀這些檔案。S2-1 起，runtime reader 有自己的 C++ ctest：它逐列讀這份 matrix，在 runtime reader 上重跑 schema 與 semantic 列。S2-1 擁有的列對應到哪些測試、在 CI 或本機哪裡跑，記在 [S2-1 coverage](../reference/model_bundle_s2_1_coverage_549.json)。matrix 的 `current` 欄仍是 S1 baseline 的現況，沒有改寫。
+這個測試只檢查設計稿彼此一致，**不測 runtime**。S1 時 runtime 沒有讀這些檔案。S2-1 起，runtime reader 有自己的 C++ ctest：它逐列讀這份 matrix，把有 mutation 的 23 個 schema／semantic 負控制列在 runtime reader 上重跑。S2-1 擁有的列對應到哪些測試、在 CI 或本機哪裡跑，記在 [S2-1 coverage](../reference/model_bundle_s2_1_coverage_549.json)。matrix 的 `current` 欄仍是 S1 baseline 的現況，沒有改寫。
 
 ## 2. Bundle 目錄與兩種 root
 
