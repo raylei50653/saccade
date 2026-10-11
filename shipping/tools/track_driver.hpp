@@ -9,7 +9,7 @@
 //   --config JSON --lineage JSON [--attestation JSON] [--model-root DIR]
 //   --out DIR SEQUENCE_DIR...
 //   --report JSON   what ran: run id, identity, plan bindings, load report,
-//                   per-sequence counts (format saccade.native_track_report/v3)
+//                   per-sequence counts (format saccade.native_track_report/v4)
 //   --trace DIR     per sequence, DIR/<sequence>/detector.bin: each frame's
 //                   detector rows in the PR-5 detector.bin record format
 //                   (int32 frame, n, is_tiled; float32 boxes [n, 4]; float32
@@ -55,8 +55,9 @@
 
 namespace saccade::shipping::track {
 
-// v3 (#536): v2 plus run_id and identity; v2 reports keep their meaning.
-inline constexpr const char* kReportFormat = "saccade.native_track_report/v3";
+// v4 (S2-1a): immutable Gate A identity. Historical v3's null identity and
+// v2's lack of completion evidence retain their original meanings.
+inline constexpr const char* kReportFormat = "saccade.native_track_report/v4";
 
 [[noreturn]] inline void fail(const std::string& what) { throw std::runtime_error(what); }
 
@@ -114,7 +115,7 @@ inline void begin_run(const Options& o, const char* entrypoint, std::optional<Ru
 // Gate A, right after begin_run; the runtime is built from what it returns.
 // `max_frames` and `serial_requested` are the developer build's (0 / false in
 // saccade_track).
-inline PreflightResult preflight(const Options& o, const char* entrypoint, const RunCompletion& completion,
+inline PreflightResult preflight(const Options& o, const char* entrypoint, RunCompletion& completion,
                                  int max_frames, bool serial_requested) {
     PreflightResult p = run_preflight(
         PreflightInputs{o.config, o.lineage, o.attestation, o.model_root, o.sequences, max_frames,
@@ -272,11 +273,12 @@ int run_sequences(Runtime& rt, const Options& opt, RunCompletion& completion, co
         JsonValue rep = JsonValue::make_object();
         rep.set("format", JsonValue::make_string(kReportFormat));
         rep.set("run_id", JsonValue::make_string(completion.run_id()));
-        rep.set("identity", unverified_identity());
+        rep.set("identity", completion.identity());
         rep.set("entrypoint", JsonValue::make_string(entrypoint));
         rep.set("config", JsonValue::make_string(opt.config));
         rep.set("lineage", JsonValue::make_string(opt.lineage));
         rep.set("attestation", JsonValue::make_string(opt.attestation));
+        rep.set("model_root", JsonValue::make_string(opt.model_root));
         rep.set("schedule", JsonValue::make_string(schedule));
         if (measurement != nullptr) rep.set("measurement", *measurement);
         rep.set("detector", load_json(rt));

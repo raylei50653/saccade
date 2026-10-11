@@ -102,7 +102,35 @@ std::string new_run_id() {
 JsonValue unverified_identity() {
     JsonValue o = JsonValue::make_object();
     o.set("level", JsonValue::make_null());
+    o.set("expected_source", JsonValue::make_null());
+    o.set("publisher_authentication", JsonValue::make_string("not_checked_by_runtime"));
+    JsonValue bindings = JsonValue::make_object();
+    for (const char* name : {"config", "lineage", "attestation", "op_library", "head", "engine"}) {
+        JsonValue b = JsonValue::make_object();
+        b.set("path", JsonValue::make_null());
+        b.set("expected_sha256", JsonValue::make_null());
+        b.set("observed_sha256", JsonValue::make_null());
+        b.set("status", JsonValue::make_string("unchecked"));
+        b.set("expected_source", JsonValue::make_null());
+        bindings.set(name, std::move(b));
+    }
+    o.set("bindings", std::move(bindings));
     return o;
+}
+
+void RunCompletion::record_gate_a_identity(const JsonValue& identity, bool final) {
+    if (identity_finalized_) throw std::logic_error("preflight: identity already finalized");
+    identity_ = identity;
+    try {
+        write_journal();
+    } catch (...) {
+        // Failed publication must not leave an in-memory promotion that a
+        // later fail() could publish as a successful Gate A result.
+        *identity_.find("level") = JsonValue::make_null();
+        throw;
+    }
+    identity_finalized_ = final;
+    SACCADE_COMPLETION_POINT("identity_published", 0);
 }
 
 RunCompletion::RunCompletion(std::string run_id, std::string entrypoint, RunOutputs outputs)
@@ -236,7 +264,7 @@ void RunCompletion::write_journal() const {
     j.set("run_id", JsonValue::make_string(run_id_));
     j.set("entrypoint", JsonValue::make_string(entrypoint_));
     j.set("state", JsonValue::make_string(state_));
-    j.set("identity", unverified_identity());
+    j.set("identity", identity_);
     std::vector<JsonValue> seqs;
     for (const Sequence& s : sequences_) {
         JsonValue o = JsonValue::make_object();

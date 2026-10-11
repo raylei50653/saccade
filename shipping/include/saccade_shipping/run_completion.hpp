@@ -24,12 +24,14 @@
 // file's. `pending` means "not confirmed": after a kill between a rename and
 // the journal update the file can be this run's complete output, and it is
 // still not evidence that the run produced it. State transitions and failure
-// classes belong to #537; identity stays `{"level": null}` here (CC-536-01-02
-// fills it).
+// classes belong to #537. Gate A alone updates identity; its final record is
+// immutable through sequence, report, complete and failed writes (S2-1a).
 //
-// Journal (format saccade.native_track_journal/v1):
+// Journal (format saccade.native_track_journal/v2; historical v1 is unchanged):
 //   {"format", "run_id", "entrypoint", "state": running|failed|complete,
-//    "identity": {"level": null},
+//    "identity": {"level": null|checksum_matched, "expected_source": null,
+//                 "publisher_authentication": "not_checked_by_runtime",
+//                 "bindings": {config,lineage,attestation,op_library,head,engine}},
 //    "sequences": [{"name", "state": pending|written, "txt", "txt_sha256",
 //                   "trace", "trace_sha256"}...]   (argv order),
 //    "report": null | {"path", "sha256"},
@@ -47,16 +49,19 @@
 
 namespace saccade::shipping {
 
-inline constexpr const char* kRunJournalFormat = "saccade.native_track_journal/v1";
+inline constexpr const char* kRunJournalFormat = "saccade.native_track_journal/v2";
 inline constexpr const char* kRunJournalName = "saccade_track.journal.json";
 inline constexpr const char* kRunLockName = "saccade_track.lock";
 
 // 128 random bits (getrandom) as 32 lowercase hex digits.
 std::string new_run_id();
 
-// The identity record of journal and report until CC-536-01-02:
-// {"level": null} (nothing verified, no level claimed).
+// Initial legacy identity: no level, six unvisited bindings, no recognized
+// independent expected source or publisher authentication.
 JsonValue unverified_identity();
+
+struct PreflightInputs;
+struct PreflightResult;
 
 struct RunOutputs {
     std::filesystem::path out;             // --out
@@ -77,6 +82,7 @@ public:
     RunCompletion& operator=(const RunCompletion&) = delete;
 
     const std::string& run_id() const { return run_id_; }
+    const JsonValue& identity() const { return identity_; }
 
     // Gate A's output check (preflight.hpp): in every directory this run
     // publishes into -- `<out>`, the --report file's directory (which must
@@ -98,6 +104,10 @@ public:
     void fail(const std::string& message) noexcept;
 
 private:
+    friend PreflightResult run_preflight(const PreflightInputs&, RunCompletion&);
+    // Only Gate A may publish observations and seal its final identity. The
+    // caller cannot install an identity or mutate the const report snapshot.
+    void record_gate_a_identity(const JsonValue& identity, bool final);
     struct Sequence {
         std::string name;
         std::filesystem::path txt, trace;  // trace empty without --trace
@@ -111,6 +121,8 @@ private:
     void commit_sequence(std::size_t i, const std::string& text);
 
     std::string run_id_, entrypoint_;
+    JsonValue identity_ = unverified_identity();
+    bool identity_finalized_ = false;
     std::filesystem::path out_, report_, journal_;
     std::vector<Sequence> sequences_;
     std::string state_ = "running", report_sha256_;

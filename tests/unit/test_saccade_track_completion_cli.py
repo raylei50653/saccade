@@ -116,9 +116,18 @@ def test_run_id_is_the_first_line_and_names_the_journal(
     ida, idb = _run_id(a, binary), _run_id(b, binary)
     assert ida != idb
     j = json.loads((tmp_path / "out" / JOURNAL).read_text())
-    assert j["format"] == "saccade.native_track_journal/v1"
+    assert j["format"] == (
+        "saccade.native_track_journal/v1"
+        if INSTALLED
+        else "saccade.native_track_journal/v2"
+    )
     assert (j["run_id"], j["entrypoint"], j["state"]) == (idb, binary, "failed")
-    assert j["identity"] == {"level": None}
+    assert j["identity"]["level"] is None
+    if INSTALLED:
+        assert j["identity"] == {"level": None}
+    else:
+        assert j["identity"]["bindings"]["lineage"]["status"] == "missing"
+        assert j["identity"]["bindings"]["config"]["observed_sha256"] is not None
     assert [(s["name"], s["state"]) for s in j["sequences"]] == [
         ("MOT17-02-SDP", "pending"),
         ("MOT17-04-SDP", "pending"),

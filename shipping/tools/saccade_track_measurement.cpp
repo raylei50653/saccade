@@ -15,7 +15,7 @@
 //                   the PR-9 serial, eager runtime (serial_runtime.hpp) instead
 //                   of the config's schedule (the PR-9 reference)
 //   --max-frames N  frames 1..min(N, seqLength), the oracle's --max-frames
-// The report (format saccade.native_track_report/v3) names this entrypoint and
+// The report (format saccade.native_track_report/v4) names this entrypoint and
 // records the three under "measurement". A mutation name is checked after Gate
 // A and before any model is loaded. Run id, <out> lock and journal: as saccade_track
 // (track_driver.hpp).
