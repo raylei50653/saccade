@@ -29,6 +29,8 @@
 // Before step 1:
 //   0a. VL0: <bundle>/model_bundle.json, opened beneath the bundle root, is
 //       the exact saccade.model_bundle/v1 schema and R-01..R-08;
+//       S2-2: one whole target must match the compiled platform and
+//       TensorRT / LibTorch / CUDA build versions (unknown is refused);
 //   0b. VL2 input: <runtime root>/trusted_model_bundles.json has the sha256
 //       the entrypoint was built with (`allowlist_sha256`), the
 //       saccade.trusted_model_bundles/v1 schema and R-09, and the manifest's
@@ -41,7 +43,9 @@
 // too (the attestation is required). The lineage / attestation must bind the
 // same three files (path and sha256) as the manifest's pairing. Gate A then
 // gives the detector plan the resolved bindings of those three files
-// (DetectorPlan::resolved): the only paths the detector load reads.
+// (DetectorPlan::resolved): the only paths the detector load reads. S2-2
+// also hands off the version-matched targets and ordered I/O declarations
+// (DetectorPlan::manifest_contract); Gate B owns SM and loaded-I/O checks.
 //
 // Gate A decodes no frame, dlopens nothing, deserializes no engine and loads
 // no head (Gate B, detector_host.hpp). Through RunCompletion, Gate A records
@@ -87,6 +91,9 @@ struct PreflightInputs {
     // runtime package's share/saccade/ and the allowlist sha256 the
     // entrypoint was built with (track_driver.hpp; never a caller option).
     std::string model_bundle{}, runtime_root{}, allowlist_sha256{};
+    // Compiled native entrypoint coordinates, never read from caller options.
+    // Manifest mode refuses missing coordinates; legacy mode keeps its path.
+    RuntimeBuildCompatibility runtime_build{};
 };
 
 // What Gate A checked, for the runtime to build from: the same config and

@@ -135,6 +135,9 @@ struct Bundle {
     std::vector<std::string> sequences;
     std::string model_bundle;  // what --model-bundle names (default: bundle)
     std::string legacy_config;  // a legacy option given too (refused)
+    // Synthetic compile coordinates: CPU fixtures prove comparisons and
+    // journal behavior; the native provider is verified by the GPU test.
+    sh::RuntimeBuildCompatibility runtime_build{"linux-x86_64", "13.0", "10.16.1.11", "2.11.0+cu130"};
 
     const JsonValue& member(std::size_t i) const { return at(manifest_json, "members").array.at(i); }
     fs::path member_path(std::size_t i) const {
@@ -251,6 +254,7 @@ sh::PreflightInputs inputs_of(const Bundle& b) {
     in.model_bundle = b.model_bundle;
     in.runtime_root = b.runtime.string();
     in.allowlist_sha256 = b.pin;
+    in.runtime_build = b.runtime_build;
     return in;
 }
 
@@ -369,6 +373,15 @@ void expect_pass(const char* name, const Bundle& b, const Outcome& o, const char
     check_resolved(r->backbone_engine, ids.backbone, "backbone_engine", "model_bundle");
     CHECK(fs::path(r->op_library.absolute_path).is_absolute());
     CHECK(o.result->detector.op_library_from_attestation);
+    const auto& contract = o.result->detector.manifest_contract;
+    CHECK(contract != nullptr);
+    if (contract) {
+        CHECK(contract->targets.size() == 1);
+        CHECK(contract->targets[0].gpu_sm == std::vector<std::string>{"sm_120"});
+        CHECK(contract->backbone.inputs[0].name == "images");
+        CHECK(contract->backbone.outputs[0].name == "p3_feat");
+        CHECK(contract->head.outputs[3].name == "reg_p3");
+    }
 }
 
 void expect_refused(const char* name, const Bundle& b, const Outcome& o, const std::string& needle,
@@ -463,6 +476,55 @@ int main(int argc, char** argv) {
 
     const std::vector<Case> cases = {
         {"pass_unlisted", [](Bundle&) {}, nullptr, "checksum_matched", "absent", nullptr},
+        // MB-43: version refusal seals identity with no promoted level,
+        // leaves load_verification null and records the precise build values.
+        {"build_cuda_mismatch", [](Bundle& b) { b.runtime_build.cuda_runtime = "99.0"; },
+         "no manifest target matches runtime build", nullptr, nullptr,
+         [](const Bundle&, const Outcome& o) {
+             CHECK(o.error.find("CUDA=99.0") != std::string::npos);
+             CHECK(is_null(identity(o), "allowlist_sha256"));
+             CHECK(str(binding(identity(o), "engine"), "status") == "unchecked");
+         }},
+        {"build_tensorrt_mismatch", [](Bundle& b) { b.runtime_build.tensorrt = "99.0.0.0"; },
+         "TensorRT=99.0.0.0", nullptr, nullptr, nullptr},
+        {"build_libtorch_mismatch", [](Bundle& b) { b.runtime_build.libtorch = "99.0.0+cu130"; },
+         "LibTorch=99.0.0+cu130", nullptr, nullptr, nullptr},
+        {"build_platform_mismatch", [](Bundle& b) { b.runtime_build.platform = "linux-aarch64"; },
+         "platform=linux-aarch64", nullptr, nullptr, nullptr},
+        {"build_unavailable", [](Bundle& b) { b.runtime_build = {}; },
+         "runtime build versions unavailable", nullptr, nullptr, nullptr},
+        {"targets_cannot_be_combined",
+         [](Bundle& b) {
+             auto& targets = at(at(b.manifest_json, "compatibility"), "targets").array;
+             const auto first = targets[0];
+             targets = {first, first, first};
+             at(targets[0], "cuda_runtime").string = "99.0";
+             at(targets[1], "tensorrt").string = "99.0.0.0";
+             at(targets[2], "libtorch").string = "99.0.0+cu130";
+             write_manifest(b);
+         },
+         "no manifest target matches runtime build", nullptr, nullptr, nullptr},
+        // MB-60..MB-62 retain the same R-08 refusal and journal semantics.
+        {"manifest_class_channels",
+         [](Bundle& b) {
+             at(at(b.manifest_json, "postprocessing"), "num_classes") = JsonValue::make_int(81);
+             write_manifest(b);
+         },
+         "R-08", nullptr, nullptr, nullptr},
+        {"manifest_box_channels",
+         [](Bundle& b) {
+             auto& outputs = at(at(at(b.manifest_json, "io"), "head"), "outputs").array;
+             at(outputs[3], "shape").array[1] = JsonValue::make_int(5);
+             write_manifest(b);
+         },
+         "R-08", nullptr, nullptr, nullptr},
+        {"manifest_head_spatial",
+         [](Bundle& b) {
+             auto& outputs = at(at(at(b.manifest_json, "io"), "head"), "outputs").array;
+             at(outputs[0], "shape").array[2] = JsonValue::make_int(40);
+             write_manifest(b);
+         },
+         "R-08", nullptr, nullptr, nullptr},
         {"pass_require_checksum", [](Bundle& b) { b.required = L::ChecksumMatched; }, nullptr, "checksum_matched",
          "absent", nullptr},
         // MB-30

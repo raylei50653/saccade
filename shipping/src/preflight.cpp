@@ -300,6 +300,8 @@ PreflightResult manifest_gate_a(const PreflightInputs& in, RunCompletion& comple
     publish();
     const ModelBundleManifest manifest =
         step("", [&] { return parse_model_bundle(parse_strict_json(manifest_text)); });
+    const ManifestLoadContract matched_contract =
+        step("", [&] { return select_manifest_build_targets(manifest.load_contract, in.runtime_build); });
 
     // 0b. The allowlist this entrypoint was built with (TR-1b).
     const std::string allowlist_path = runtime.absolute(kTrustedModelBundlesName);
@@ -379,6 +381,7 @@ PreflightResult manifest_gate_a(const PreflightInputs& in, RunCompletion& comple
         hash_load_member(root_of(engine_m), engine_m, binding(identity, "engine"), "backbone engine");
     publish();
     detector.resolved = std::make_shared<const ResolvedLoadBindings>(std::move(resolved));
+    detector.manifest_contract = std::make_shared<const ManifestLoadContract>(matched_contract);
 
     // VL2: only an approved entry for this exact manifest names an expected
     // source independent of the bundle.

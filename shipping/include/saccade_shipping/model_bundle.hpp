@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "saccade_shipping/strict_json.hpp"
+#include "saccade_shipping/model_compatibility.hpp"
 
 namespace saccade::shipping {
 
@@ -87,6 +88,7 @@ struct BundleMember {
 struct ModelBundleManifest {
     std::string bundle_name, bundle_version, detector_contract;
     std::vector<BundleMember> members;
+    ManifestLoadContract load_contract;
     std::size_t backbone_engine = 0, head = 0, op_library = 0, config = 0, lineage = 0, attestation = 0;
 };
 

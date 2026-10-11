@@ -30,19 +30,32 @@ public:
         file.seekg(0, file.beg);
 
         std::vector<char> model_data(size);
-        file.read(model_data.data(), size);
+        if (!file.read(model_data.data(), size)) {
+            throw std::runtime_error("❌ [TRTEngine] Cannot read model: " + model_path);
+        }
         file.close();
+
+        load(model_data.data(), size);
+        std::cout << "✅ [TRTEngine] Pimpl Loaded: " << model_path << std::endl;
+    }
+
+    Impl(const void* model_data, std::size_t size) {
+        load(model_data, size);
+        std::cout << "✅ [TRTEngine] Pimpl Loaded: memory buffer" << std::endl;
+    }
+
+    void load(const void* model_data, std::size_t size) {
+        if (model_data == nullptr || size == 0) throw std::runtime_error("❌ Empty TRT engine buffer");
 
         runtime_.reset(nvinfer1::createInferRuntime(gLogger));
         if (!runtime_) throw std::runtime_error("❌ Failed to create TRT Runtime");
 
-        engine_.reset(runtime_->deserializeCudaEngine(model_data.data(), size));
+        engine_.reset(runtime_->deserializeCudaEngine(model_data, size));
         if (!engine_) throw std::runtime_error("❌ Failed to deserialize engine");
 
         // context_ is created lazily on first infer()/enqueueV3() call so that
         // callers that only query metadata (tensor shapes, engine ptr) or use
         // infer_with_context() with their own context don't pay the VRAM cost.
-        std::cout << "✅ [TRTEngine] Pimpl Loaded: " << model_path << std::endl;
     }
 
     nvinfer1::IExecutionContext* ensure_context() {
@@ -111,6 +124,22 @@ public:
         return ensure_context()->setInputShape(name, dims);
     }
 
+    nvinfer1::DataType getTensorDataType(const char* name) const {
+        return engine_->getTensorDataType(name);
+    }
+
+    nvinfer1::TensorLocation getTensorLocation(const char* name) const {
+        return engine_->getTensorLocation(name);
+    }
+
+    nvinfer1::TensorFormat getTensorFormat(const char* name) const {
+        return engine_->getTensorFormat(name);
+    }
+
+    nvinfer1::Dims getContextTensorDims(const char* name) {
+        return ensure_context()->getTensorShape(name);
+    }
+
     nvinfer1::IExecutionContext* create_context() const {
         return engine_->createExecutionContext();
     }
@@ -138,6 +167,9 @@ private:
 
 TRTEngine::TRTEngine(const std::string& model_path)
     : pimpl_(std::make_unique<Impl>(model_path)) {}
+
+TRTEngine::TRTEngine(const void* model_data, std::size_t size)
+    : pimpl_(std::make_unique<Impl>(model_data, size)) {}
 
 TRTEngine::~TRTEngine() = default;
 
@@ -179,6 +211,22 @@ bool TRTEngine::is_input(const char* name) const {
 
 bool TRTEngine::set_input_shape(const char* name, const std::vector<int64_t>& shape) {
     return pimpl_->setInputShape(name, shape);
+}
+
+nvinfer1::DataType TRTEngine::get_tensor_data_type(const char* name) const {
+    return pimpl_->getTensorDataType(name);
+}
+
+nvinfer1::TensorLocation TRTEngine::get_tensor_location(const char* name) const {
+    return pimpl_->getTensorLocation(name);
+}
+
+nvinfer1::TensorFormat TRTEngine::get_tensor_format(const char* name) const {
+    return pimpl_->getTensorFormat(name);
+}
+
+nvinfer1::Dims TRTEngine::get_context_tensor_dims(const char* name) {
+    return pimpl_->getContextTensorDims(name);
 }
 
 nvinfer1::IExecutionContext* TRTEngine::create_context() const {

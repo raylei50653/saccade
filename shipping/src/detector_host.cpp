@@ -29,6 +29,7 @@
 #include "perception/trt_engine.hpp"
 #include "saccade_shipping/detector_s2.hpp"
 #include "saccade_shipping/sha256.hpp"
+#include "saccade_shipping/verified_model_bytes.hpp"
 
 namespace saccade::shipping {
 namespace {
@@ -77,6 +78,43 @@ std::string dims_text(const nvinfer1::Dims& d) {
     for (int i = 0; i < d.nbDims; ++i) o << (i ? "," : "") << d.d[i];
     o << "]";
     return o.str();
+}
+
+std::string trt_dtype_name(nvinfer1::DataType dtype) {
+    switch (dtype) {
+        case nvinfer1::DataType::kFLOAT: return "float32";
+        case nvinfer1::DataType::kHALF: return "float16";
+        case nvinfer1::DataType::kINT8: return "int8";
+        case nvinfer1::DataType::kINT32: return "int32";
+        case nvinfer1::DataType::kBOOL: return "bool";
+        default: return "unsupported(" + std::to_string(static_cast<int>(dtype)) + ")";
+    }
+}
+
+TensorContract observed_tensor(saccade::TRTEngine& engine, const char* name, int ordinal) {
+    TensorContract t;
+    t.ordinal = ordinal;
+    t.name = name;
+    t.dtype = trt_dtype_name(engine.get_tensor_data_type(name));
+    t.device = engine.get_tensor_location(name) == nvinfer1::TensorLocation::kDEVICE ? "cuda" : "cpu";
+    const nvinfer1::Dims dims = engine.get_context_tensor_dims(name);
+    if (dims.nbDims < 0) load_error("backbone tensor " + t.name + " has invalid dimensions");
+    for (int i = 0; i < dims.nbDims; ++i) t.shape.push_back(dims.d[i]);
+    return t;
+}
+
+TensorIoContract supported_head_io(const DetectorPlan& plan) {
+    TensorIoContract io;
+    for (int i = 0; i < 3; ++i) {
+        const auto& shape = plan.feature_shapes[static_cast<std::size_t>(i)];
+        io.inputs.push_back({i, {}, {shape[0], shape[1], shape[2], shape[3]}, "float32", "cuda"});
+        io.outputs.push_back({i, {}, {shape[0], plan.num_classes, shape[2], shape[3]}, "float32", "cuda"});
+    }
+    for (int i = 0; i < 3; ++i) {
+        const auto& shape = plan.feature_shapes[static_cast<std::size_t>(i)];
+        io.outputs.push_back({i + 3, {}, {shape[0], plan.reg_channels, shape[2], shape[3]}, "float32", "cuda"});
+    }
+    return io;
 }
 
 #ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS
@@ -208,11 +246,39 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
         engine_path = resolve_model_path(model_root, plan.backbone_engine.path);
     }
 
-    // 1. hashes before anything is loaded.
+    // Manifest mode's immutable Gate A handoff contains only targets matching
+    // this binary's builds. Read the actual device before any deserialization.
+    // No SM fallback, caller override, or forced-run option exists.
+    if (plan.resolved && !plan.manifest_contract) load_error("resolved bindings have no manifest load contract");
+    if (plan.manifest_contract) {
+        int device = -1;
+        cudaDeviceProp properties{};
+        cudaError_t error = cudaGetDevice(&device);
+        if (error != cudaSuccess) load_error(std::string("cannot identify CUDA device: ") + cudaGetErrorString(error));
+        if (device != 0) load_error("detector requires cuda:0, current device is " + std::to_string(device));
+        error = cudaGetDeviceProperties(&properties, device);
+        if (error != cudaSuccess) load_error(std::string("cannot read GPU SM: ") + cudaGetErrorString(error));
+        m.report.gpu_sm = "sm_" + std::to_string(properties.major) + std::to_string(properties.minor);
+        require_manifest_gpu_sm(*plan.manifest_contract, m.report.gpu_sm);
+        // Head I/O labels are manifest semantics rather than TorchScript
+        // graph tensor names. Its ordered float32 CUDA layout must match the
+        // native forward path; per-forward actual outputs are checked below.
+        require_tensor_io_contract(plan.manifest_contract->head, supported_head_io(plan),
+                                   "head supported contract", false);
+    }
+
+    // 1. hashes before anything is loaded. Head/engine are owned immutable
+    // memory buffers; their loaders never reopen the paths after these hashes.
+    // The operator keeps its existing path load and auditor contract (N03).
     check_sha("operator library", op_path, plan.op_library.sha256, m.report.op_library_sha256);
-    check_sha("head artifact", head_path, plan.head_artifact.sha256, m.report.head_artifact_sha256);
-    check_sha("backbone engine", engine_path, plan.backbone_engine.sha256,
-              m.report.backbone_engine_sha256);
+    const VerifiedModelBytes head_bytes = VerifiedModelBytes::read(
+        "head artifact", head_path, plan.head_artifact.sha256,
+        plan.resolved ? plan.resolved->head_artifact.bytes : -1);
+    const VerifiedModelBytes engine_bytes = VerifiedModelBytes::read(
+        "backbone engine", engine_path, plan.backbone_engine.sha256,
+        plan.resolved ? plan.resolved->backbone_engine.bytes : -1);
+    m.report.head_artifact_sha256 = head_bytes.sha256();
+    m.report.backbone_engine_sha256 = engine_bytes.sha256();
 
     // 2. the native scan operator.
     m.op_handle = dlopen(op_path.c_str(), RTLD_NOW | RTLD_LOCAL);
@@ -228,7 +294,9 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
     if (!same(m.report.runtime_readback, plan.runtime)) {
         load_error("runtime requirements did not read back as set");
     }
-    m.head = torch::jit::load(head_path);
+    VerifiedModelStream head_stream(head_bytes);
+    m.head = torch::jit::load(head_stream);
+    m.report.head_artifact_byte_scope = "loaded_buffer";
     m.head.eval();
     std::set<std::string> param_devices;
     for (const at::Tensor& t : m.head.parameters(/*recurse=*/true)) param_devices.insert(t.device().str());
@@ -264,7 +332,8 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
     }
 
     // 5. the backbone engine (the existing TRTEngine) and its I/O.
-    m.engine = std::make_unique<saccade::TRTEngine>(engine_path);
+    m.engine = std::make_unique<saccade::TRTEngine>(engine_bytes.data(), engine_bytes.size());
+    m.report.backbone_engine_byte_scope = "loaded_buffer";
     m.report.trt_version = getInferLibVersion();
     const int n_io = m.engine->get_nb_tensors();
     if (n_io != 4) load_error("backbone engine has " + std::to_string(n_io) + " I/O tensors, expected 4");
@@ -273,20 +342,35 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
         m.report.engine_io.push_back(std::string(name) + ":" + dims_text(m.engine->getTensorDims(name)));
         // TRTYoloBackbone: tensor 0 is the input, the rest are p3, p4, p5 in order.
         if ((i == 0) != m.engine->is_input(name)) load_error("backbone engine I/O order");
+        if (m.engine->get_tensor_data_type(name) != nvinfer1::DataType::kFLOAT) {
+            load_error("backbone tensor " + std::string(name) + " dtype " +
+                       trt_dtype_name(m.engine->get_tensor_data_type(name)) + " != float32");
+        }
+        if (m.engine->get_tensor_location(name) != nvinfer1::TensorLocation::kDEVICE ||
+            m.engine->get_tensor_format(name) != nvinfer1::TensorFormat::kLINEAR) {
+            load_error("backbone tensor " + std::string(name) + " requires CUDA linear storage");
+        }
         if (i == 0) m.engine_input = name;
         else m.engine_outputs.push_back(name);
     }
     if (!m.engine->set_input_shape(m.engine_input.c_str(), {1, 3, plan.img_size, plan.img_size})) {
         load_error("backbone engine rejects input [1, 3, img, img]");
     }
+    if (plan.manifest_contract) {
+        TensorIoContract observed;
+        observed.inputs.push_back(observed_tensor(*m.engine, m.engine_input.c_str(), 0));
+        for (std::size_t i = 0; i < m.engine_outputs.size(); ++i) {
+            observed.outputs.push_back(observed_tensor(*m.engine, m.engine_outputs[i].c_str(), static_cast<int>(i)));
+        }
+        require_tensor_io_contract(plan.manifest_contract->backbone, observed, "backbone engine");
+    }
     const auto f32 = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA, 0);
     for (int i = 0; i < 3; ++i) {
         const auto& want = plan.feature_shapes[static_cast<std::size_t>(i)];
-        const nvinfer1::Dims d = m.engine->getTensorDims(m.engine_outputs[static_cast<std::size_t>(i)].c_str());
+        const nvinfer1::Dims d = m.engine->get_context_tensor_dims(m.engine_outputs[static_cast<std::size_t>(i)].c_str());
         bool ok = d.nbDims == 4;
         for (int k = 0; ok && k < 4; ++k) {
-            const auto dk = d.d[k] == -1 && k == 0 ? 1 : d.d[k];
-            ok = dk == want[static_cast<std::size_t>(k)];
+            ok = d.d[k] == want[static_cast<std::size_t>(k)];
         }
         if (!ok) load_error("backbone output " + m.engine_outputs[static_cast<std::size_t>(i)] + " " +
                             dims_text(d) + " does not match the head's input");

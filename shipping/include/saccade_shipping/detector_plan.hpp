@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "saccade_shipping/resolved_config.hpp"
+#include "saccade_shipping/model_compatibility.hpp"
 #include "saccade_shipping/strict_json.hpp"
 
 namespace saccade::shipping {
@@ -78,14 +79,6 @@ struct ResolvedLoadBindings {
     ResolvedBinding op_library, head_artifact, backbone_engine;
 };
 
-// A failure of the detector load (Gate B, detector_host.hpp): a hash, dlopen,
-// LibTorch, TensorRT or load-check failure while the three files are loaded.
-// The entrypoint records it as load_verification failed (run_completion.hpp).
-class DetectorLoadError : public ConfigError {
-public:
-    using ConfigError::ConfigError;
-};
-
 // The four runtime requirements of the PR-1L artifact (lineage).
 struct HeadRuntimeRequirements {
     bool graph_executor_optimize = false;
@@ -113,6 +106,9 @@ struct DetectorPlan {
     // Manifest mode only (Gate A, preflight.hpp): where the three files are.
     // Null in legacy mode, where they are resolved against the model root.
     std::shared_ptr<const ResolvedLoadBindings> resolved;
+    // Manifest versions matched by Gate A, SM and ordered I/O for Gate B.
+    // Null in legacy mode; Gate B never reopens the manifest to obtain it.
+    std::shared_ptr<const ManifestLoadContract> manifest_contract;
 };
 
 // sha256 of the lineage file is the caller's (it read the bytes).

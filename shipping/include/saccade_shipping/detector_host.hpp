@@ -7,24 +7,28 @@
 //   0. the three paths: in manifest mode (#549 S2-1) only Gate A's resolved
 //      bindings (DetectorPlan::resolved; there is no model root), in legacy
 //      mode the plan's paths against the model root;
+//      manifest mode checks the actual GPU SM and the supported ordered head
+//      layout against Gate A's immutable manifest contract;
 //   1. sha256 of the operator library, the TorchScript artifact and the
 //      backbone engine == the plan's bindings (frozen lineage, or the
 //      realization attestation for the operator library; in manifest mode
-//      also the manifest's), each file read again by its path: the bytes
-//      then loaded are opened again (TOCTOU, #549 S2-2);
+//      also the manifest's). Head and engine load the owned immutable buffer
+//      whose SHA-256 was checked. The operator is hashed, then dlopen'ed by
+//      its path; its TOCTOU gap remains (#549 S2-2, ADR 028 D5);
 //   2. the operator library is dlopen'ed (it registers
 //      `saccade_native::selective_scan_fwd` with the dispatcher);
 //   3. the artifact's runtime requirements are set and read back (graph
 //      executor optimize off, cuDNN benchmark off, cuDNN TF32 on, matmul TF32
-//      off), then `torch::jit::load(path)` without a device map: parameters
+//      off), then `torch::jit::load(verified_stream)` without a device map: parameters
 //      must land on cuda:0 and every tensor constant must stay on the CPU (a
 //      CUDA constant in the traced shape arithmetic turns aten::Int into a
 //      device sync; PR-2L amendment A1);
 //   4. the inlined forward graph has no prim::PythonOp, never calls the Python
 //      op `saccade::selective_scan_fwd`, and calls the native op exactly the
 //      lineage's number of times;
-//   5. the backbone engine's I/O is one input [1, 3, img, img] and three
-//      outputs of the planned feature shapes, in that order;
+//   5. the backbone engine's I/O is float32, one input [1, 3, img, img] and
+//      three outputs of the planned feature shapes, in that order. Manifest
+//      mode checks the exact names, dtype, shape and order of its I/O contract;
 //   6. no libpython / libtorch_python is mapped into the process.
 //
 // Per frame (`detect`): ATen's upsample_bilinear2d (align_corners false; the
@@ -71,6 +75,11 @@ struct HeadLoadReport {
     std::vector<std::string> engine_io;  // "name:[dims]" in engine order
     int trt_version = 0;                 // getInferLibVersion()
     std::string torch_version;
+    std::string gpu_sm;  // manifest mode: device 0's actual SM, checked before deserialization
+    // Per-object byte readback; the aggregate remains hashed_before_load
+    // while the operator retains its path load and unresolved TOCTOU gap.
+    std::string op_library_byte_scope = "hashed_before_load";
+    std::string head_artifact_byte_scope, backbone_engine_byte_scope;
 };
 
 #ifdef SACCADE_SHIPPING_MEASUREMENT_HOOKS

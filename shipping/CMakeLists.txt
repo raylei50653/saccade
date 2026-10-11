@@ -53,7 +53,8 @@ set_target_properties(saccade_shipping_mot PROPERTIES POSITION_INDEPENDENT_CODE 
 # tracking headers (tracker_params.hpp, perception_params.hpp).
 add_library(saccade_shipping_native_config STATIC
     src/native_config.cpp src/post_detector_plan.cpp src/sequence_output.cpp src/ingest_plan.cpp
-    src/sha256.cpp src/detector_plan.cpp src/schedule_plan.cpp)
+    src/sha256.cpp src/detector_plan.cpp src/schedule_plan.cpp src/model_compatibility.cpp
+    src/verified_model_bytes.cpp)
 target_link_libraries(saccade_shipping_native_config PUBLIC
     saccade_shipping_config saccade_tracker_params saccade_shipping_mot)
 target_compile_options(saccade_shipping_native_config PRIVATE -Wall -Wextra -Wpedantic)
@@ -189,6 +190,20 @@ add_test(NAME saccade_shipping_model_bundle_test
             ${SACCADE_REPO_ROOT}/docs/architecture/model_bundle_549/verification_matrix.json
             ${SACCADE_REPO_ROOT} ${SACCADE_TRUSTED_MODEL_BUNDLES})
 
+add_executable(saccade_shipping_model_compatibility_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_model_compatibility.cpp)
+target_link_libraries(saccade_shipping_model_compatibility_test PRIVATE saccade_shipping_model_bundle)
+target_compile_options(saccade_shipping_model_compatibility_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_model_compatibility_test
+    COMMAND saccade_shipping_model_compatibility_test
+            ${SACCADE_REPO_ROOT}/docs/architecture/model_bundle_549/examples/headline_s_n01_n06.model_bundle.example.json)
+
+add_executable(saccade_shipping_verified_model_bytes_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_verified_model_bytes.cpp)
+target_link_libraries(saccade_shipping_verified_model_bytes_test PRIVATE saccade_shipping_native_config)
+target_compile_options(saccade_shipping_verified_model_bytes_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_verified_model_bytes_test COMMAND saccade_shipping_verified_model_bytes_test)
+
 if(TARGET saccade_tracking)
     # Measurement boundary (#465 Phase C PR-C2). Each runtime library below is
     # built twice from the same sources: <name>, the shipping objects, and
@@ -268,13 +283,23 @@ if(TARGET saccade_tracking)
     # (saccade_perception) -> the PR-1L LibTorch head -> S2. LibTorch only
     # (TORCH_LIBRARIES has no libtorch_python); the head's scan operator is
     # dlopen'ed at load time after its hash is checked.
-    saccade_shipping_variants(saccade_shipping_detector src/detector_host.cpp src/detector_s2.cu)
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import torch; print(torch.__version__)"
+        OUTPUT_VARIABLE SACCADE_LIBTORCH_BUILD_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE _saccade_torch_version_rc)
+    if(NOT _saccade_torch_version_rc EQUAL 0 OR
+       NOT SACCADE_LIBTORCH_BUILD_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+\\+cu[0-9]+$")
+        message(FATAL_ERROR "Cannot prove LibTorch CUDA build version: '${SACCADE_LIBTORCH_BUILD_VERSION}'")
+    endif()
+    saccade_shipping_variants(saccade_shipping_detector
+        src/detector_host.cpp src/detector_s2.cu src/native_runtime_build.cpp)
     foreach(_v "" "_measurement")
         target_link_libraries(saccade_shipping_detector${_v} PUBLIC
             saccade_shipping_native_config saccade_perception ${TORCH_LIBRARIES} CUDA::cudart
             ${CMAKE_DL_LIBS})
         target_include_directories(saccade_shipping_detector${_v} PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${SACCADE_REPO_ROOT}/include)
+        target_compile_definitions(saccade_shipping_detector${_v} PRIVATE
+            SACCADE_LIBTORCH_BUILD_VERSION="${SACCADE_LIBTORCH_BUILD_VERSION}")
     endforeach()
 
     # Developer tool (#465 PR-8): stream the native ingest + detector of one

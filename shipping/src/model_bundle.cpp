@@ -748,6 +748,40 @@ ModelBundleManifest parse_model_bundle(const JsonValue& m) {
     out.config = by_id.at(pairing.find("config")->string);
     out.lineage = by_id.at(pairing.find("lineage")->string);
     out.attestation = by_id.at(pairing.find("attestation")->string);
+    auto tensor_list = [](const JsonValue& list) {
+        std::vector<TensorContract> result;
+        for (const JsonValue& t : list.array) {
+            TensorContract item;
+            integral(*t.find("ordinal"), &item.ordinal);
+            item.name = t.find("name")->string;
+            item.dtype = t.find("dtype")->string;
+            item.device = t.find("device")->string;
+            for (const JsonValue& dim : t.find("shape")->array) {
+                if (dim.kind == Kind::Float && dim.number >= 9223372036854775808.0)
+                    throw ConfigError("model bundle tensor " + item.name + " shape exceeds runtime int64 support");
+                std::int64_t value = 0;
+                integral(dim, &value);
+                item.shape.push_back(value);
+            }
+            result.push_back(std::move(item));
+        }
+        return result;
+    };
+    auto io_contract = [&](const JsonValue& io) {
+        return TensorIoContract{tensor_list(*io.find("inputs")), tensor_list(*io.find("outputs"))};
+    };
+    const JsonValue& io = *m.find("io");
+    out.load_contract.backbone = io_contract(*io.find("backbone_engine"));
+    out.load_contract.head = io_contract(*io.find("head"));
+    for (const JsonValue& target : m.find("compatibility")->find("targets")->array) {
+        CompatibilityTarget t;
+        t.platform = target.find("platform")->string;
+        t.cuda_runtime = target.find("cuda_runtime")->string;
+        t.tensorrt = target.find("tensorrt")->string;
+        t.libtorch = target.find("libtorch")->string;
+        for (const JsonValue& sm : target.find("gpu_sm")->array) t.gpu_sm.push_back(sm.string);
+        out.load_contract.targets.push_back(std::move(t));
+    }
     return out;
 }
 
