@@ -379,6 +379,8 @@ def test_an_origin_needed_name_is_refused_by_the_host(prefix: Path) -> None:
         "-o",
         str(op),
         str(prefix / "src/op.c"),
+        # op.c never calls dep(): keep the dependency recorded under --as-needed
+        "-Wl,--no-as-needed",
         str(dep),
     )
     r = _audited(prefix, "saccade_track", "load", _sha(op))

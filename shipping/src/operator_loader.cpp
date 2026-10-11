@@ -280,13 +280,17 @@ void require_no_origin_search_path(const std::string& elf, const std::string& wh
     std::uint64_t mapped_end = 0;  // page-rounded end of the previous segment
     bool first = true;
     for (const Elf64_Phdr& h : ph) {
-        if (h.p_type != PT_LOAD || h.p_memsz == 0) continue;
-        if (h.p_filesz > h.p_memsz || h.p_vaddr % kPage != h.p_offset % kPage ||
-            h.p_memsz > UINT64_MAX - h.p_vaddr - (kPage - 1)) {
+        if (h.p_type != PT_LOAD) continue;
+        // Every load command counts (the loader maps each one, MAP_FIXED);
+        // a zero-size one is refused rather than reasoned about.
+        if (h.p_memsz == 0 || h.p_filesz > h.p_memsz || h.p_vaddr % kPage != h.p_offset % kPage) {
             bad("has a malformed loadable segment");
         }
+        if (h.p_memsz > UINT64_MAX - h.p_vaddr) bad("has a malformed loadable segment");
+        const std::uint64_t end = h.p_vaddr + h.p_memsz;
+        if (end > UINT64_MAX - (kPage - 1)) bad("has a malformed loadable segment");
         const std::uint64_t lo = h.p_vaddr - h.p_vaddr % kPage;
-        const std::uint64_t hi = (h.p_vaddr + h.p_memsz + kPage - 1) / kPage * kPage;
+        const std::uint64_t hi = (end + (kPage - 1)) / kPage * kPage;
         if (!first && lo < mapped_end) bad("has overlapping or unordered loadable segments");
         mapped_end = hi;
         first = false;

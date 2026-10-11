@@ -54,13 +54,15 @@ legal operator library:
    `DT_RUNPATH`, `DT_NEEDED`, `DT_AUXILIARY`, `DT_FILTER`) do not use `$ORIGIN`, which would
    expand under `/proc/self/fd` when loaded from the memfd. They are read where the loader maps
    them:
-   - loadable segments must be ascending and page-disjoint, with offsets congruent to their
-     addresses, so every mapped byte comes from one segment;
+   - every loadable segment must be nonempty, ascending and page-disjoint, with offsets
+     congruent to their addresses, so every mapped byte comes from one segment;
    - the dynamic table is read through `p_vaddr` within a file-backed `PT_LOAD`, its stated file
      offset must agree, and it must be terminated;
    - the string table must lie within its segment.
 
-   A non-ELF or malformed object is refused here, before anything is sealed or `dlopen`'ed.
+   A non-ELF object, or one these properties do not hold for, is refused here, before anything
+   is sealed or `dlopen`'ed. Other ELF acceptance checks (version, machine, type and so on)
+   remain `dlopen`'s.
 3. Write the buffer into a memfd labeled `saccade-n03:src-fd=<S>` (`MFD_NOEXEC_SEAL`, with a
    retry only on `EINVAL`).
 4. Add `F_SEAL_WRITE | GROW | SHRINK | SEAL` and read the seals back. `F_SEAL_WRITE` itself
@@ -162,6 +164,20 @@ Its findings and their resolution:
 |:--|:--|:--|
 | major | overlapping `PT_LOAD` segments: the check translated through an earlier segment that the loader overwrites (`MAP_FIXED`), hiding `$ORIGIN` | ascending, page-disjoint, congruent loadable segments required; CPU overlap control; the overlap is accepted by the round 2 parser and refused now (`elf_overlap_attack_r2_vs_new.log`) |
 | minor | the malformed-ELF closure was overstated | scoped to the stated layout rule; `$ORIGIN` also refused in `DT_NEEDED`/`DT_AUXILIARY`/`DT_FILTER` (real-loader `DT_NEEDED` control) |
+
+Round 4 (`7734ee10`; the first attempt was refused by the reviewer's safety filter and is retained as
+`codex_review_p2_r4.refused.log`) found no blocker. It compared the checker's model with the
+loader's on the dynamic array, the string table, the expanded tags, RPATH/RUNPATH, `e_phnum`,
+`p_align`, BSS and RELRO, and found no divergence other than the major below. It found no ordinary
+layout refusal across 3,798 local x86-64 shared objects. Its review of the coordinate found
+nothing.
+
+| Severity | Finding | Resolution |
+|:--|:--|:--|
+| major | a `PT_LOAD` with `p_memsz` 0 skipped the layout rule while the translation still used it (the loader maps its file bytes) | every `PT_LOAD` is validated; zero-size load segments are refused; CPU control |
+| minor | the overflow guard could wrap | end and page rounding checked in separate ordered steps; CPU control |
+| minor | the `DT_NEEDED` control relied on the linker keeping an unused dependency | `--no-as-needed` |
+| minor | malformed-ELF refusal still described as complete | the validated properties are listed; other ELF checks stay `dlopen`'s |
 
 ## Known limits and residuals
 

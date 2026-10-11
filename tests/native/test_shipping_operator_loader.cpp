@@ -166,6 +166,33 @@ std::string overlapping_dynamic(std::string elf) {
     return elf;
 }
 
+// Review round 4: the same, with the extended segment's p_memsz zero (the
+// loader still maps its p_filesz bytes); and a segment ending past 2^64.
+std::string zero_size_overlap(std::string elf) {
+    elf = overlapping_dynamic(std::move(elf));
+    int count = 0;
+    Elf64_Phdr* ph = phdrs(elf, count);
+    Elf64_Phdr* widest = nullptr;
+    for (int i = 0; i < count; ++i) {
+        if (ph[i].p_type == PT_LOAD && (widest == nullptr || ph[i].p_filesz > widest->p_filesz)) widest = &ph[i];
+    }
+    if (widest != nullptr) widest->p_memsz = 0;
+    return elf;
+}
+
+std::string wrapping_segment(std::string elf) {
+    int count = 0;
+    Elf64_Phdr* ph = phdrs(elf, count);
+    for (int i = 0; i < count; ++i) {
+        if (ph[i].p_type == PT_LOAD) {
+            ph[i].p_vaddr = UINT64_MAX - 4095 + (ph[i].p_offset % 4096);
+            ph[i].p_memsz = 4096;
+            break;
+        }
+    }
+    return elf;
+}
+
 std::string two_dynamic(std::string elf) {
     int count = 0;
     Elf64_Phdr* ph = phdrs(elf, count);
@@ -397,6 +424,10 @@ int main(int argc, char** argv) {
                       "twice has more than one dynamic segment"));
             CHECK(has(refusal([&] { sh::require_no_origin_search_path(overlapping_dynamic(origin), "overlap"); }),
                       "overlap has overlapping or unordered loadable segments"));
+            CHECK(has(refusal([&] { sh::require_no_origin_search_path(zero_size_overlap(origin), "zero"); }),
+                      "zero has a malformed loadable segment"));
+            CHECK(has(refusal([&] { sh::require_no_origin_search_path(wrapping_segment(origin), "wrap"); }),
+                      "wrap has a malformed loadable segment"));
         }
         {
             const fs::path origin = dir / "origin" / "libsaccade_scan_torchop.so";

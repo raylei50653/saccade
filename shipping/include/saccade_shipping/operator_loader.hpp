@@ -76,10 +76,12 @@ bool sealed_against_writes(int fd);
 // Step 2: a 64-bit ELF whose dynamic strings that the loader expands
 // (DT_RPATH, DT_RUNPATH, DT_NEEDED, DT_AUXILIARY, DT_FILTER) do not use
 // $ORIGIN (a load from /proc/self/fd/<M> would expand it there), read where
-// the loader maps them: ascending, page-disjoint PT_LOAD segments, the dynamic
-// table through its address with an agreeing file offset and a terminator,
-// the string table within its segment. DetectorLoadError naming `what`
-// otherwise, also for a malformed or non-ELF object.
+// the loader maps them: nonempty, ascending, page-disjoint PT_LOAD segments
+// with congruent offsets, the dynamic table through its address with an
+// agreeing file offset and a terminator, the string table within its segment.
+// DetectorLoadError naming `what` otherwise (also for a non-ELF object or one
+// these properties do not hold for). Other ELF acceptance checks (version,
+// machine, type, ...) remain dlopen's.
 void require_no_origin_search_path(const std::string& elf, const std::string& what);
 
 class VerifiedOperator {
