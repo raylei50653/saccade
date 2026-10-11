@@ -33,7 +33,8 @@ directory. "No CUDA call" is observed as in
   ``load_verification`` verified / hashed_before_load and the resolved
   bindings across the two roots, whose MOT text is compared with a legacy-mode
   run of the same binary (raw equality; not a qualified parity claim); and a
-  SIGKILL during the load, which leaves the journal running with
+  SIGKILL sent once the runtime root's operator library is mapped (the load
+  has begun) and before any load record, which leaves the journal running with
   ``load_verification`` null (MB-58, uncatchable).
 
 Skips when ``build/shipping/saccade_track`` has not been built; the real-bundle
@@ -631,9 +632,16 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
 def test_real_bundle_killed_during_the_load_leaves_no_load_claim(
     tmp_path: Path,
 ) -> None:
-    """MB-58, uncatchable: SIGKILL right after Gate A passed, while the
-    runtime loads the detector."""
-    prefix, bundle, _ = _real_bundle(tmp_path, "saccade_track")
+    """MB-58, uncatchable: SIGKILL while the runtime is loading the detector.
+
+    "During the load" is observed, not assumed: the kill is sent only once the
+    runtime root's operator library is mapped into the process (dlopen, Gate
+    B step 2) while the journal still has no load_verification -- the head and
+    engine loads that follow take seconds. A run that got further (verified)
+    fails this test instead of passing it."""
+    prefix, bundle, manifest = _real_bundle(tmp_path, "saccade_track")
+    op = str((prefix / "share" / "saccade" / manifest["members"][OP]["path"]).resolve())
+    journal = tmp_path / "out" / JOURNAL
     p = subprocess.Popen(
         [
             str(prefix / "libexec" / "saccade_track"),
@@ -643,23 +651,28 @@ def test_real_bundle_killed_during_the_load_leaves_no_load_claim(
             str(tmp_path / "out"),
             str(SEQUENCE),
         ],
-        stderr=subprocess.PIPE,
-        text=True,
+        stderr=subprocess.DEVNULL,
     )
-    assert p.stderr is not None
-    lines = []
+    loading = False
     deadline = time.monotonic() + 120
-    while time.monotonic() < deadline:
-        line = p.stderr.readline()
-        if not line:
-            break
-        lines.append(line)
-        if line.strip() == "saccade_track: preflight passed":
-            p.send_signal(signal.SIGKILL)
-            break
-    p.wait(timeout=60)
-    assert p.returncode == -signal.SIGKILL, lines
-    j = _journal(tmp_path)
+    try:
+        while time.monotonic() < deadline and p.poll() is None:
+            try:
+                maps = Path(f"/proc/{p.pid}/maps").read_text()
+            except OSError:
+                maps = ""
+            if op in maps:
+                loading = json.loads(journal.read_text())["load_verification"] is None
+                p.send_signal(signal.SIGKILL)
+                break
+            time.sleep(0.001)
+    finally:
+        if p.poll() is None:
+            p.kill()
+        p.wait(timeout=60)
+    assert loading, "the kill did not land after dlopen with no load record"
+    assert p.returncode == -signal.SIGKILL
+    j = json.loads(journal.read_text())
     assert j["state"] == "running"
     assert j["load_verification"] is None
     assert j["identity"]["level"] == "checksum_matched"

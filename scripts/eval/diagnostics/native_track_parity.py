@@ -150,6 +150,9 @@ IDENTITY_LEVELS = ("none", "checksum_matched", "expected_source_verified")
 # Gate B's record of a complete S2-1 run: the files were rehashed before they
 # were loaded by path; nothing proves the loaded bytes are the hashed ones.
 LOAD_VERIFIED = {"status": "verified", "byte_scope": "hashed_before_load"}
+# Top-level report fields that exist only from report v5 on (with
+# detector.plan.resolved); a historical report carrying any is not as written.
+S2_1_REPORT_FIELDS = ("load_verification", "mode", "model_bundle")
 LOAD_FAILED = {"status": "failed", "byte_scope": None}
 JOURNAL_NAME = "saccade_track.journal.json"
 _RUN_ID = re.compile(r"[0-9a-f]{32}")
@@ -747,7 +750,7 @@ def report_problems(
                 f"report load_verification {rep.get('load_verification')!r} is not "
                 "verified / hashed_before_load"
             )
-    elif "load_verification" in rep or "mode" in rep:
+    elif any(k in rep for k in S2_1_REPORT_FIELDS):
         problems.append("a historical report carries S2-1 fields")
     name = ENTRYPOINTS[entrypoint][0]
     if rep.get("entrypoint") != name:
@@ -802,6 +805,8 @@ def report_problems(
         resolved = plan.get("resolved", "absent")
         if resolved is not None:
             problems.append("a legacy-mode plan has resolved bindings")
+    elif "resolved" in plan:
+        problems.append("a historical report carries S2-1 fields (plan resolved)")
     if rep.get("format") in (TRACK_REPORT_FORMAT, S2_1A_TRACK_REPORT_FORMAT):
         identity = rep.get("identity")
         bindings = identity.get("bindings", {}) if isinstance(identity, dict) else {}

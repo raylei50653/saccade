@@ -12,10 +12,11 @@
 //        schema is hand-coded here, keyword for keyword; every issue names the
 //        instance path and keyword (or rule) a JSON Schema validator would, so
 //        the verification matrix's schema / semantic rows run against this code
-//        (tests/native/test_shipping_model_bundle.cpp). One deliberate
-//        difference: a pattern's `$` matches only at the end of the string,
-//        where Python's `re.search` also matches before a final newline (this
-//        reader is stricter).
+//        (tests/native/test_shipping_model_bundle.cpp). Two differences, both
+//        stricter: a pattern's `$` matches only at the end of the string,
+//        where Python's `re.search` also matches before a final newline; and
+//        the strict JSON reader refuses an integer literal outside int64
+//        (an integral float of any magnitude is an integer, as in the schema).
 //   VL1  `BundleRoot` / `open_beneath`: a root directory is resolved once
 //        (realpath) and opened once; every member is opened beneath it with
 //        openat2(RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS),

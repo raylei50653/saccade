@@ -386,6 +386,42 @@ def _s2_1a_report() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     return rep, att, lineage
 
 
+@pytest.mark.parametrize("historical", ["s2_1a", "legacy"])
+@pytest.mark.parametrize(
+    "path,value",
+    [
+        (
+            ("load_verification",),
+            {"status": "verified", "byte_scope": "hashed_before_load"},
+        ),
+        (("load_verification",), None),
+        (("mode",), "legacy"),
+        (("model_bundle",), "/caller/bundle"),
+        (("model_bundle",), None),
+        (("detector", "plan", "resolved"), {"op_library": {}}),
+        (("detector", "plan", "resolved"), None),
+    ],
+)
+def test_historical_reports_refuse_every_s2_1_field(
+    historical: str, path: tuple[str, ...], value: Any
+) -> None:
+    """Review finding (#576): any v5-only field, present with any value, makes
+    a historical report not the one its writer wrote."""
+    rep, att, lineage = _s2_1a_report()
+    if historical == "legacy":
+        rep.update(format=T.LEGACY_TRACK_REPORT_FORMAT, identity={"level": None})
+    args = (att, lineage, ["S1", "S2"], "shipping", "none", None)
+    assert T.report_problems(rep, *args) == []
+    node = rep
+    for k in path[:-1]:
+        node = node[k]
+    node[path[-1]] = value
+    assert any(
+        "historical report carries S2-1 fields" in p
+        for p in T.report_problems(rep, *args)
+    )
+
+
 def test_s2_1a_report_is_read_as_written() -> None:
     rep, att, lineage = _s2_1a_report()
     args = (att, lineage, ["S1", "S2"], "shipping", "none", None)

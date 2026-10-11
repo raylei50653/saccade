@@ -45,8 +45,10 @@
 //                     Gate A as saccade_track's load_runtime does -- verified
 //                     (hashed_before_load) in every completed run; a caught
 //                     detector load failure writes failed (byte_scope null)
-//                     and the run failed; a SIGKILL during the load leaves it
-//                     null and the run running; a failure after Gate A that is
+//                     and the run failed; a SIGKILL after Gate A, before
+//                     Gate B records anything, leaves it null and the run
+//                     running (no loader runs here: the real-binary kill
+//                     during the load is test_saccade_track_model_bundle_cli); a failure after Gate A that is
 //                     not the detector load leaves it null; and the writer
 //                     rules: never before Gate A passed, never twice, never a
 //                     change of the sealed identity.

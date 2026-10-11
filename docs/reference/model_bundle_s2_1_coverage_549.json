@@ -122,10 +122,10 @@
       "id": "MB-58",
       "tests": [
         {"file": "tests/native/test_shipping_run_completion.cpp", "case": "load_verification_failed", "runs": "ci_ctest"},
-        {"file": "tests/native/test_shipping_run_completion.cpp", "case": "killed_during_load", "runs": "ci_ctest"},
+        {"file": "tests/native/test_shipping_run_completion.cpp", "case": "killed_during_load", "runs": "ci_ctest", "note": "writer rule only: SIGKILL after Gate A before any load record; no loader runs in this CPU test"},
         {"file": "tests/native/test_shipping_run_completion.cpp", "case": "load_verification_rules", "runs": "ci_ctest"},
         {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "test_standin_bundle_passes_gate_a_and_gate_b_records_the_failed_load", "runs": "local_gpu"},
-        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "test_real_bundle_killed_during_the_load_leaves_no_load_claim", "runs": "local_gpu"},
+        {"file": "tests/unit/test_saccade_track_model_bundle_cli.py", "case": "test_real_bundle_killed_during_the_load_leaves_no_load_claim", "runs": "local_gpu", "note": "kill sent only after the runtime-root operator library is mapped and before any load record"},
         {"file": "tests/unit/test_saccade_track_preflight_cli.py", "case": "test_positive_control_passes_gate_a_then_initializes_cuda", "runs": "local_gpu"}
       ],
       "limits": "The loader auditor's _exit(127) runs only under the installed launcher (--audit); the installed package is not re-pinned, so that end is UNVERIFIED."

@@ -63,15 +63,20 @@ std::size_t code_points(const std::string& s) {
     return n;
 }
 
-// JSON Schema "integer": an integral number (1.0 counts, as it does there).
+// JSON Schema "integer": an integral number of any magnitude (1.0 and 1e300
+// count, as they do there). `out` is clamped to int64; callers compare Float
+// values as doubles (Checker::integer).
 bool integral(const JsonValue& v, std::int64_t* out = nullptr) {
     if (v.kind == Kind::Int) {
         if (out) *out = v.integer;
         return true;
     }
-    if (v.kind == Kind::Float && std::isfinite(v.number) && std::floor(v.number) == v.number &&
-        std::fabs(v.number) < 9007199254740992.0) {
-        if (out) *out = static_cast<std::int64_t>(v.number);
+    if (v.kind == Kind::Float && std::isfinite(v.number) && std::floor(v.number) == v.number) {
+        if (out) {
+            *out = v.number >= 9223372036854775808.0    ? INT64_MAX
+                   : v.number < -9223372036854775808.0 ? INT64_MIN
+                                                        : static_cast<std::int64_t>(v.number);
+        }
         return true;
     }
     return false;
@@ -175,12 +180,13 @@ public:
 
     void integer(const JsonValue& v, const std::string& path, std::int64_t minimum, std::int64_t multiple_of = 0) {
         if (!type(v, path, "integer")) return;
-        std::int64_t n = 0;
-        integral(v, &n);
-        if (n < minimum) add(path, "minimum", std::to_string(n) + " is less than the minimum of " + std::to_string(minimum));
-        if (multiple_of > 0 && n % multiple_of != 0) {
-            add(path, "multipleOf", std::to_string(n) + " is not a multiple of " + std::to_string(multiple_of));
-        }
+        // An integral Float is compared as a double: no int64 clamping.
+        const bool below = v.kind == Kind::Int ? v.integer < minimum : v.number < static_cast<double>(minimum);
+        const bool off = multiple_of > 0 && (v.kind == Kind::Int ? v.integer % multiple_of != 0
+                                                                 : std::fmod(v.number, static_cast<double>(multiple_of)) != 0.0);
+        const std::string shown = v.kind == Kind::Int ? std::to_string(v.integer) : python_float_repr(v.number);
+        if (below) add(path, "minimum", shown + " is less than the minimum of " + std::to_string(minimum));
+        if (off) add(path, "multipleOf", shown + " is not a multiple of " + std::to_string(multiple_of));
     }
 
     // type array + minItems / maxItems / uniqueItems. True when an array.

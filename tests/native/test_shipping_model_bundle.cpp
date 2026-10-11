@@ -12,8 +12,10 @@
 //   (schema), or passes the schema and fails exactly the row's rule
 //   (semantic). A row this reader does not reject is a failure here;
 // * keywords the matrix has no row for: additionalProperties, required,
-//   oneOf, uniqueItems, multipleOf, maxItems, an integral float, a path with a
-//   trailing newline (this reader is stricter than Python's re.search);
+//   oneOf, uniqueItems, multipleOf, maxItems, integral floats of any
+//   magnitude (and the strict reader's int64 limit on integer literals), a
+//   path with a trailing newline (this reader is stricter than Python's
+//   re.search);
 // * the production allowlist is schema-valid and EMPTY (no approved bundle);
 //   allowlist_state for absent / example / revoked / approved entries;
 // * open_beneath: a regular file opens; a missing one, a symlinked member, a
@@ -233,11 +235,36 @@ void test_more_keywords(const JsonValue& manifest) {
         for (int i = 0; i < 11; ++i) members.array.push_back(members.array[0]);
         CHECK(has_issue(sh::model_bundle_schema_issues(doc), "/members", "maxItems"));
     }
-    // An integral float is a JSON Schema integer (as Python's validator has it).
+    // An integral float of any magnitude is a JSON Schema integer (as Python's
+    // validator has it); minimum / multipleOf compare it as a double.
     {
         JsonValue doc = manifest;
         apply(doc, sh::parse_strict_json(R"([{"op": "replace", "path": "/preprocessing/resize/width", "value": 640.0}])"));
         CHECK(sh::model_bundle_issues(doc).empty());
+        for (const char* big : {"9007199254740992.0", "9223372036854775808.0", "1e300"}) {
+            JsonValue d = manifest;
+            apply(d, sh::parse_strict_json(std::string(R"([{"op": "replace", "path": "/members/0/bytes", "value": )") +
+                                           big + "}]"));
+            const auto issues = sh::model_bundle_schema_issues(d);
+            dump(big, issues);
+            CHECK(issues.empty());
+        }
+        JsonValue d = manifest;
+        apply(d, sh::parse_strict_json(R"([{"op": "replace", "path": "/preprocessing/resize/width", "value": 1e300}])"));
+        CHECK(sh::model_bundle_schema_issues(d).empty());  // 1e300 is a multiple of 32 as a double
+        apply(d, sh::parse_strict_json(R"([{"op": "replace", "path": "/members/0/bytes", "value": -1e300}])"));
+        CHECK(has_issue(sh::model_bundle_schema_issues(d), "/members/0/bytes", "minimum"));
+    }
+    // The strict reader refuses an integer literal outside int64 (stricter
+    // than the schema, which has no upper bound): the manifest never parses.
+    {
+        bool refused = false;
+        try {
+            sh::parse_strict_json(R"({"bytes": 9223372036854775808})");
+        } catch (const sh::ConfigError& e) {
+            refused = std::string(e.what()).find("does not fit int64") != std::string::npos;
+        }
+        CHECK(refused);
     }
     // No R-xx fires on a schema-valid document that breaks no rule; a
     // schema-invalid one is never given to the rules.
