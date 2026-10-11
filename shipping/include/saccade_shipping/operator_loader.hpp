@@ -9,7 +9,8 @@
 //      the same under direct exec and the launcher's explicit loader);
 //   2. prepare: open that path once (openat2, no symlink or magic link in any
 //      component), require a regular file (and Gate A's size when known), read
-//      it whole, require the plan's SHA-256; copy the buffer into a memfd
+//      it whole, require the plan's SHA-256 and an ELF whose search paths do
+//      not use $ORIGIN; copy the buffer into a memfd
 //      labeled "saccade-n03:src-fd=<S>" (S = the source descriptor, which the
 //      loader auditor checks), add F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK |
 //      F_SEAL_SEAL and read them back, then read the memfd back whole and
@@ -20,7 +21,9 @@
 //      process lifetime.
 //
 // One verified operator per process: a later request with the same SHA-256
-// and source path reuses it; any other request is refused. There is no
+// and source path reuses it (also one prepared while it loaded); any other
+// request is refused. A load that fails after dlopen succeeded poisons the
+// process: its memfd stays open and every later request is refused. There is no
 // pathname-load fallback; a host without openat2, memfd_create, /proc or an
 // executable memfd mapping is refused (D-N03-3). Every refusal is a
 // DetectorLoadError (catchable); the loader auditor's own refusals are its
@@ -65,6 +68,15 @@ std::string entrypoint_runtime_operator_path();
 // The post-check of step 3: the mapping holding `handle`'s dynamic section is
 // the memfd `fd` (device, inode and the memfd's own /proc name).
 bool mapped_from_memfd(void* handle, int fd);
+
+// Step 2's seal check: F_SEAL_WRITE | GROW | SHRINK | SEAL are all set
+// (F_SEAL_FUTURE_WRITE does not count for F_SEAL_WRITE).
+bool sealed_against_writes(int fd);
+
+// Step 2: a 64-bit ELF whose DT_RPATH / DT_RUNPATH do not use $ORIGIN (a load
+// from /proc/self/fd/<M> would expand it there). DetectorLoadError naming
+// `what` otherwise, also for a malformed or non-ELF object.
+void require_no_origin_search_path(const std::string& elf, const std::string& what);
 
 class VerifiedOperator {
 public:

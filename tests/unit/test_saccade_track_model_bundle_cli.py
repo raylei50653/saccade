@@ -20,9 +20,10 @@ directory. "No CUDA call" is observed as in
   ``--require-identity``, exits 2 before the run id (MB-54) -- no journal, no
   ``<out>``, no CUDA;
 * stand-in bundle (small files, a lineage / attestation / manifest bound to
-  them): Gate A passes in manifest mode, CUDA initializes, and Gate B's dlopen
-  of the stand-in operator fails: ``load_verification`` failed, identity
-  unchanged (MB-58, catchable). Needs a CUDA driver;
+  them): Gate A passes in manifest mode, CUDA initializes, and Gate B refuses
+  the stand-in operator (not an ELF object, before it is sealed or dlopen'ed;
+  #549 S2-2): ``load_verification`` failed, identity unchanged (MB-58,
+  catchable). Needs a CUDA driver;
 * refusals without CUDA, each one change: a replaced member, a member of
   another size, a symlinked member, an allowlist other than the pinned one
   (MB-32), no manifest, ``--require-identity expected_source_verified`` with
@@ -359,7 +360,9 @@ def test_standin_bundle_passes_gate_a_and_gate_b_records_the_failed_load(
     assert cuda, "the observer did not see cuInit after Gate A passed"
     j = _journal(tmp_path)
     assert j["state"] == "failed"
-    assert "dlopen" in j["failure"]["message"], j["failure"]
+    assert "is not a 64-bit little-endian ELF object" in j["failure"]["message"], j[
+        "failure"
+    ]
     assert j["load_verification"] == LOAD_FAILED
     identity = j["identity"]
     assert identity["mode"] == "model_bundle" and identity["required"] == "none"

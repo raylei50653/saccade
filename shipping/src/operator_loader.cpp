@@ -2,6 +2,7 @@
 #include "saccade_shipping/operator_loader.hpp"
 
 #include <dlfcn.h>
+#include <elf.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <link.h>
@@ -19,12 +20,17 @@
 #include <fstream>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "saccade_shipping/detector_plan.hpp"
 #include "saccade_shipping/sha256.hpp"
 
 #ifndef MFD_NOEXEC_SEAL
 #define MFD_NOEXEC_SEAL 0x0008U
+#endif
+#ifndef F_SEAL_FUTURE_WRITE
+#define F_SEAL_FUTURE_WRITE 0x0010
 #endif
 
 namespace saccade::shipping {
@@ -125,6 +131,11 @@ struct Registry {
     void* handle = nullptr;
     int memfd = -1;
     MappedObject mapped;
+    // A load that failed after dlopen succeeded: its object may be mapped and
+    // its memfd is kept open (the number is never reused); every later
+    // request is refused.
+    bool poisoned = false;
+    int poisoned_memfd = -1;
 };
 
 Registry& registry() {
@@ -206,16 +217,83 @@ std::string entrypoint_runtime_operator_path() {
     return runtime_operator_path_for_entrypoint(m->path);
 }
 
-bool mapped_from_memfd(void* handle, int fd) {
+std::optional<MappedObject> memfd_mapping(void* handle, int fd) {
     struct link_map* lm = nullptr;
     struct stat st {};
     if (handle == nullptr || ::dlinfo(handle, RTLD_DI_LINKMAP, &lm) != 0 || lm == nullptr || lm->l_ld == nullptr ||
         ::fstat(fd, &st) != 0) {
-        return false;
+        return std::nullopt;
     }
-    const std::optional<MappedObject> m = mapped_object_at(reinterpret_cast<std::uintptr_t>(lm->l_ld));
-    return m && m->major == major(st.st_dev) && m->minor == minor(st.st_dev) &&
-           m->inode == static_cast<unsigned long>(st.st_ino) && m->path == fd_link(fd);
+    std::optional<MappedObject> m = mapped_object_at(reinterpret_cast<std::uintptr_t>(lm->l_ld));
+    if (!m || m->major != major(st.st_dev) || m->minor != minor(st.st_dev) ||
+        m->inode != static_cast<unsigned long>(st.st_ino) || m->path != fd_link(fd)) {
+        return std::nullopt;
+    }
+    return m;
+}
+
+bool mapped_from_memfd(void* handle, int fd) { return memfd_mapping(handle, fd).has_value(); }
+
+bool sealed_against_writes(int fd) {
+    const int seals = ::fcntl(fd, F_GET_SEALS);
+    return seals >= 0 && (seals & kSeals) == kSeals;
+}
+
+void require_no_origin_search_path(const std::string& elf, const std::string& what) {
+    const auto bad = [&](const std::string& why) { fail(what + " " + why); };
+    if (elf.size() < sizeof(Elf64_Ehdr) || std::memcmp(elf.data(), ELFMAG, SELFMAG) != 0 ||
+        static_cast<unsigned char>(elf[EI_CLASS]) != ELFCLASS64 || static_cast<unsigned char>(elf[EI_DATA]) != ELFDATA2LSB) {
+        bad("is not a 64-bit little-endian ELF object");
+    }
+    Elf64_Ehdr eh;
+    std::memcpy(&eh, elf.data(), sizeof eh);
+    if (eh.e_phentsize != sizeof(Elf64_Phdr) || eh.e_phoff > elf.size() ||
+        eh.e_phnum > (elf.size() - eh.e_phoff) / sizeof(Elf64_Phdr)) {
+        bad("has malformed program headers");
+    }
+    std::vector<Elf64_Phdr> ph(eh.e_phnum);
+    if (eh.e_phnum != 0) std::memcpy(ph.data(), elf.data() + eh.e_phoff, eh.e_phnum * sizeof(Elf64_Phdr));
+    const Elf64_Phdr* dyn = nullptr;
+    for (const Elf64_Phdr& h : ph) {
+        if (h.p_type == PT_DYNAMIC) dyn = &h;
+    }
+    if (dyn == nullptr) bad("has no dynamic section");
+    if (dyn->p_offset > elf.size() || dyn->p_filesz > elf.size() - dyn->p_offset) bad("has a malformed dynamic section");
+    std::uint64_t strtab = 0, strsz = 0;
+    bool have_strtab = false;
+    std::vector<std::pair<std::int64_t, std::uint64_t>> paths;  // (tag, string offset)
+    for (std::uint64_t at = dyn->p_offset; at + sizeof(Elf64_Dyn) <= dyn->p_offset + dyn->p_filesz;
+         at += sizeof(Elf64_Dyn)) {
+        Elf64_Dyn d;
+        std::memcpy(&d, elf.data() + at, sizeof d);
+        if (d.d_tag == DT_NULL) break;
+        if (d.d_tag == DT_STRTAB) strtab = d.d_un.d_ptr, have_strtab = true;
+        if (d.d_tag == DT_STRSZ) strsz = d.d_un.d_val;
+        if (d.d_tag == DT_RPATH || d.d_tag == DT_RUNPATH) paths.emplace_back(d.d_tag, d.d_un.d_val);
+    }
+    if (paths.empty()) return;
+    if (!have_strtab) bad("has a search path but no string table");
+    std::uint64_t str_off = 0;
+    bool found = false;
+    for (const Elf64_Phdr& h : ph) {  // the string table's file offset (a PT_LOAD maps it)
+        if (h.p_type == PT_LOAD && strtab >= h.p_vaddr && strtab - h.p_vaddr < h.p_filesz) {
+            str_off = h.p_offset + (strtab - h.p_vaddr);
+            found = true;
+            break;
+        }
+    }
+    if (!found || str_off > elf.size() || strsz > elf.size() - str_off) bad("has a malformed string table");
+    for (const auto& [tag, off] : paths) {
+        if (off >= strsz) bad("has a malformed search path");
+        const char* begin = elf.data() + str_off + off;
+        const void* end = std::memchr(begin, '\0', strsz - off);
+        if (end == nullptr) bad("has an unterminated search path");
+        const std::string entry(begin, static_cast<const char*>(end));
+        if (entry.find("$ORIGIN") != std::string::npos || entry.find("${ORIGIN}") != std::string::npos) {
+            bad(std::string(tag == DT_RPATH ? "DT_RPATH" : "DT_RUNPATH") + " " + entry +
+                " uses $ORIGIN, which a load from its memfd would expand under /proc/self/fd");
+        }
+    }
 }
 
 VerifiedOperator VerifiedOperator::prepare(const std::string& source, const std::string& expected_sha256,
@@ -227,6 +305,7 @@ VerifiedOperator VerifiedOperator::prepare(const std::string& source, const std:
     {
         Registry& r = registry();
         std::lock_guard<std::mutex> lock(r.mutex);
+        if (r.poisoned) fail("an earlier operator library load failed in this process; " + what + " is refused");
         if (r.handle != nullptr) {
             if (r.sha256 != expected_sha256) {
                 fail("an operator library with sha256 " + r.sha256 + " is already loaded; " + what + " expects " +
@@ -250,6 +329,8 @@ VerifiedOperator VerifiedOperator::prepare(const std::string& source, const std:
     const std::string bytes = read_whole(op.source_fd_, static_cast<std::uint64_t>(st.st_size), what);
     const std::string got = sha256_hex(bytes.data(), bytes.size());
     if (got != expected_sha256) fail(what + " sha256 " + got + " != " + expected_sha256);
+    // Its search paths keep their meaning when loaded from /proc/self/fd/<M>.
+    require_no_origin_search_path(bytes, what);
 
     op.memfd_ = create_memfd(kOperatorMemfdLabel + std::to_string(op.source_fd_));
     write_all(op.memfd_, bytes);
@@ -257,8 +338,7 @@ VerifiedOperator VerifiedOperator::prepare(const std::string& source, const std:
         fail(std::string("cannot seal the operator memfd: ") + std::strerror(errno));
     }
     // F_SEAL_FUTURE_WRITE is not a substitute: F_SEAL_WRITE itself must be set.
-    const int seals = ::fcntl(op.memfd_, F_GET_SEALS);
-    if (seals < 0 || (seals & kSeals) != kSeals) fail("the operator memfd does not carry its four seals");
+    if (!sealed_against_writes(op.memfd_)) fail("the operator memfd does not carry its four seals");
     struct stat ms {};
     if (::fstat(op.memfd_, &ms) != 0 || ms.st_size != st.st_size) fail("the operator memfd size is not the source's");
     const std::string back = read_whole(op.memfd_, static_cast<std::uint64_t>(ms.st_size), "the operator memfd");
@@ -273,29 +353,50 @@ void* VerifiedOperator::load() {
     Registry& r = registry();
     std::lock_guard<std::mutex> lock(r.mutex);
     if (loaded_) fail("the operator library was already loaded by this request");
-    if (reused_) {
-        if (r.handle == nullptr || r.sha256 != sha256_ || r.source != source_) fail("the operator registry changed");
+    if (r.poisoned) fail("an earlier operator library load failed in this process");
+    if (r.handle != nullptr) {
+        // A reuse, or a request prepared while an identical one loaded.
+        if (r.sha256 != sha256_ || r.source != source_) fail("another operator library was loaded since this request");
+        mapped_ = r.mapped;
+        reused_ = true;
         loaded_ = true;
         return r.handle;
     }
-    if (r.handle != nullptr) fail("an operator library was loaded since this request was prepared");
+    if (reused_) fail("the operator registry changed");
     const std::string name = "/proc/self/fd/" + std::to_string(memfd_);
     void* handle = ::dlopen(name.c_str(), RTLD_NOW | RTLD_LOCAL);
     if (handle == nullptr) {
         const char* e = ::dlerror();
         fail("dlopen of the verified operator memfd (" + source_ + "): " + (e ? e : "unknown error"));
     }
-    if (!mapped_from_memfd(handle, memfd_)) fail("the loaded operator object is not the verified memfd");
-    struct link_map* lm = nullptr;
-    ::dlinfo(handle, RTLD_DI_LINKMAP, &lm);
-    mapped_ = *mapped_object_at(reinterpret_cast<std::uintptr_t>(lm->l_ld));
-    close_fd(source_fd_);
-    r.sha256 = sha256_;
-    r.source = source_;
-    r.handle = handle;
+    // From here an object may be mapped: any failure poisons the registry and
+    // keeps the memfd open, so its number is never reused by a later load.
+    std::optional<MappedObject> checked;
+    std::string sha, source;
+    try {
+        checked = memfd_mapping(handle, memfd_);
+        if (checked) {
+            sha = sha256_;
+            source = source_;
+        }
+    } catch (...) {
+        checked.reset();
+    }
+    if (!checked) {
+        r.poisoned = true;
+        r.poisoned_memfd = memfd_;
+        memfd_ = -1;
+        fail("the loaded operator object is not the verified memfd (" + source_ + ")");
+    }
+    // Publication: nonthrowing transfers, the handle last.
+    r.sha256.swap(sha);
+    r.source.swap(source);
+    r.mapped = std::move(*checked);
     r.memfd = memfd_;  // kept open: its number is never reused for another operator
-    r.mapped = mapped_;
+    r.handle = handle;
     memfd_ = -1;
+    mapped_ = r.mapped;
+    close_fd(source_fd_);
     loaded_ = true;
     return handle;
 }

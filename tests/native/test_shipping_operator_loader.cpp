@@ -3,6 +3,7 @@
 // stand-in operator objects (fixtures/operator_fixture.cpp, values 1 and 2).
 //
 // Usage: saccade_shipping_operator_loader_test <fixture value 1> <fixture value 2>
+//            <origin runpath> <origin rpath> <absolute runpath>
 //        saccade_shipping_operator_loader_test --print-entrypoint-operator
 //   (the second form prints entrypoint_runtime_operator_path(), or the
 //   refusal and exit 2; tests/unit/test_shipping_n03_auditor.py runs it from
@@ -17,8 +18,15 @@
 //   * loaded bytes: the object is mapped from the sealed memfd (the kernel's
 //     record), and replacing or rewriting the source after prepare, or after
 //     load, does not change what runs (value 1);
-//   * registry: the same SHA-256 and path reuse the handle; another SHA-256 or
-//     path is refused; the post-check refuses a memfd that is not the mapping;
+//   * registry: the same SHA-256 and path reuse the handle (also a request
+//     prepared while an identical one loaded); another SHA-256 or path is
+//     refused; the post-check refuses a memfd that is not the mapping;
+//   * descriptor reuse through load(): an object dlopen'ed earlier as
+//     /proc/self/fd/<K> is returned by name when the operator memfd gets the
+//     number K; load() refuses it, and the process is poisoned;
+//   * seals: F_SEAL_FUTURE_WRITE without F_SEAL_WRITE does not count;
+//   * search paths: $ORIGIN in DT_RUNPATH or DT_RPATH, or a non-ELF object, is
+//     refused before any memfd; an absolute DT_RUNPATH is accepted;
 //   * refusals: wrong SHA-256 or size, a symlink (final or directory
 //     component), a directory, a FIFO, a relative or missing path.
 #include <dlfcn.h>
@@ -180,8 +188,9 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
-    if (argc != 3) {
-        std::fprintf(stderr, "usage: %s <fixture value 1> <fixture value 2>\n", argv[0]);
+    if (argc != 6) {
+        std::fprintf(stderr, "usage: %s <value 1> <value 2> <origin runpath> <origin rpath> <absolute runpath>\n",
+                     argv[0]);
         return 2;
     }
     const std::string one = read_file(argv[1]), two = read_file(argv[2]);
@@ -240,12 +249,66 @@ int main(int argc, char** argv) {
             CHECK(value_of(h) == 1);
         });
         write_file(a, one);
+        in_child("overlapping_identical_requests", [&] {
+            sh::VerifiedOperator first = sh::VerifiedOperator::prepare(a.string(), sha1);
+            sh::VerifiedOperator second = sh::VerifiedOperator::prepare(a.string(), sha1);
+            void* h = first.load();
+            CHECK(second.load() == h && second.reused() && value_of(h) == 1);
+        });
+        in_child("descriptor_reuse_refused_by_load", [&] {
+            // Occupy the lowest free number L with a placeholder, dlopen the
+            // value-2 object as /proc/self/fd/<L+1>, then free both: prepare's
+            // source descriptor takes L and its memfd L+1, whose name glibc
+            // resolves to the object already loaded under it.
+            const int placeholder = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+            const int other = ::open(argv[2], O_RDONLY | O_CLOEXEC);
+            CHECK(placeholder >= 0 && other == placeholder + 1);
+            void* stale = ::dlopen(("/proc/self/fd/" + std::to_string(other)).c_str(), RTLD_NOW | RTLD_LOCAL);
+            CHECK(stale != nullptr && value_of(stale) == 2);
+            ::close(other);
+            ::close(placeholder);
+            sh::VerifiedOperator op = sh::VerifiedOperator::prepare(a.string(), sha1);
+            const std::string e = refusal([&] { (void)op.load(); });
+            CHECK(has(e, "the loaded operator object is not the verified memfd"));
+            CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(a.string(), sha1); }),
+                      "an earlier operator library load failed in this process"));
+        });
         in_child("source_rewritten_after_prepare", [&] {
             sh::VerifiedOperator op = sh::VerifiedOperator::prepare(a.string(), sha1);
             overwrite(a, two);  // in place after the hash (P-N03 B2)
             CHECK(value_of(op.load()) == 1);
         });
         write_file(a, one);
+
+        // Seals: F_SEAL_FUTURE_WRITE does not stand in for F_SEAL_WRITE.
+        for (int with_write : {0, 1}) {
+            const int m = ::memfd_create("seal-check", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+            const int seals = (with_write ? F_SEAL_WRITE : 0x0010 /* F_SEAL_FUTURE_WRITE */) | F_SEAL_GROW |
+                              F_SEAL_SHRINK | F_SEAL_SEAL;
+            CHECK(m >= 0 && ::fcntl(m, F_ADD_SEALS, seals) == 0);
+            CHECK(sh::sealed_against_writes(m) == (with_write == 1));
+            ::close(m);
+        }
+        // Search paths ($ORIGIN would expand under /proc/self/fd) and non-ELF.
+        CHECK(refusal([&] { sh::require_no_origin_search_path(one, "fixture"); }).empty());
+        CHECK(refusal([&] { sh::require_no_origin_search_path(read_file(argv[5]), "absolute"); }).empty());
+        CHECK(has(refusal([&] { sh::require_no_origin_search_path(read_file(argv[3]), "runpath"); }),
+                  "runpath DT_RUNPATH $ORIGIN/../lib uses $ORIGIN"));
+        CHECK(has(refusal([&] { sh::require_no_origin_search_path(read_file(argv[4]), "rpath"); }),
+                  "rpath DT_RPATH $ORIGIN uses $ORIGIN"));
+        CHECK(has(refusal([&] { sh::require_no_origin_search_path("not an elf object at all, padded out to the header "
+                                                                  "size of an ELF64 file", "text"); }),
+                  "text is not a 64-bit little-endian ELF object"));
+        {
+            const fs::path origin = dir / "origin" / "libsaccade_scan_torchop.so";
+            fs::create_directories(origin.parent_path());
+            const std::string bytes = read_file(argv[3]);
+            write_file(origin, bytes);
+            CHECK(has(refusal([&] {
+                          (void)sh::VerifiedOperator::prepare(origin.string(), sh::sha256_hex(bytes.data(), bytes.size()));
+                      }),
+                      "uses $ORIGIN"));
+        }
 
         // Refusals before anything is mapped.
         CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(a.string(), sha2); }), "sha256 " + sha1 + " != " + sha2));

@@ -39,8 +39,10 @@ legal operator library:
 - `DetectorHost` refuses a plan whose operator binding, normalized lexically, is another file,
   and refuses a plan that names none. Legacy mode under the launcher therefore needs
   `--model-root <prefix>/share/saccade`, as in the installed usage. Any other model root is a
-  catchable refusal. Main's auditor refused that case with exit 127, so the set of runs that
-  succeed under the launcher is unchanged.
+  catchable refusal; main's auditor refused a foreign model root with exit 127.
+- One deliberate tightening: a model root reached through a symlink (or a `..` spelling) that
+  resolves to the package's own `share/saccade` passed main's `realpath`-based auditor. It is now
+  refused, because the comparison is lexical and the open refuses symlinks.
 
 **Load sequence (`operator_loader.hpp`):**
 

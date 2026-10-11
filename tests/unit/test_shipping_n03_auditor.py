@@ -15,7 +15,8 @@ refuse.
 * positives: the driver through the launcher (explicit loader, --audit) and
   by direct exec with LD_AUDIT both derive <prefix>/share/saccade/build/...
   and run the operator from its memfd; the vDSO and the vendor library pass;
-* D-N03-5: a plan naming another file is refused by the host (exit 2);
+* D-N03-5: a plan naming another file is refused by the host (exit 2); so is
+  an operator whose RUNPATH uses $ORIGIN (it would expand under /proc/self/fd);
 * races (production host, real auditor): rename-replace or in-place write of
   the source after the hash is refused by the auditor (127); an in-place
   write after the load does not change what runs;
@@ -24,7 +25,12 @@ refuse.
   hardlink; a deleted or regular file via /proc/self/fd; a relative alias to
   a memfd; an alias whose realpath is a planted "... (deleted)" file; an
   ordinary file whose name ends in " (deleted)" (compatibility restriction);
-  the operator by path from a foreign directory;
+  the operator by path from a foreign directory; a memfd sealed with
+  F_SEAL_FUTURE_WRITE in place of F_SEAL_WRITE;
+* the production auditor's /proc/self/maps record parser (mapping_from_fd) on
+  synthetic texts: records at its 65,535-byte buffer and the former 8 KiB
+  boundary, with and without a final newline, oversized earlier records whose
+  continuations start with header-shaped decoys, and the PATH_MAX limit;
 * the operator by path at the fixed location still passes (path mode).
 
 Skips without cc, g++ or the x86-64 loader.
@@ -155,6 +161,10 @@ int main(int argc, char **argv) {
     int s = -1, m = -1;
     if (!strcmp(mode, "unlabeled")) {
         m = memfd("saccade_operator_candidate", fixed, all);
+    } else if (!strcmp(mode, "future-write")) {  /* F_SEAL_FUTURE_WRITE, not F_SEAL_WRITE */
+        s = open(fixed, O_RDONLY);
+        snprintf(label, sizeof label, "saccade-n03:src-fd=%d", s);
+        m = memfd(label, fixed, 0x0010 | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL);
     } else if (!strcmp(mode, "unsealed")) {
         s = open(fixed, O_RDONLY);
         snprintf(label, sizeof label, "saccade-n03:src-fd=%d", s);
@@ -338,6 +348,16 @@ def test_a_binding_to_another_file_is_refused_by_the_host(prefix: Path) -> None:
     assert f"is not the runtime package's {(prefix / OP_REL)}" in r.stdout
 
 
+def test_an_origin_runpath_is_refused_by_the_host(prefix: Path) -> None:
+    op = prefix / OP_REL
+    _cc("-shared", "-fPIC", "-DVALUE=1", "-Wl,--enable-new-dtags,-rpath,$ORIGIN/../lib", "-o", str(op),
+        str(prefix / "src/op.c"))  # fmt: skip
+    r = _audited(prefix, "saccade_track", "load", _sha(op))
+    assert r.returncode == 2, (r.stdout, r.stderr)
+    assert "DT_RUNPATH $ORIGIN/../lib uses $ORIGIN" in r.stdout
+    assert "value=" not in r.stdout
+
+
 def test_a_wrong_sha256_is_refused_before_anything_is_mapped(prefix: Path) -> None:
     r = _audited(prefix, "saccade_track", "load", "0" * 64)
     assert r.returncode == 2, (r.stdout, r.stderr)
@@ -385,6 +405,7 @@ def test_source_rewritten_after_the_load_does_not_change_what_runs(
     [
         ("unlabeled", "op2", "descriptor-backed object is not the operator memfd"),
         ("unsealed", "op2", "operator memfd is not sealed"),
+        ("future-write", "op2", "operator memfd is not sealed"),
         ("forged-content", "op2", "operator memfd differs from the operator library"),
         ("closed-source", "op2", "operator source descriptor is not open"),
         ("foreign-source", "copy", "operator library mapped from another path"),
@@ -432,3 +453,101 @@ def test_the_operator_by_path_at_the_fixed_location_still_passes(
     r = _forge(prefix, "path", prefix / OP_REL, tmp_path / "work")
     assert r.returncode == 0, r.stderr
     assert r.stdout == "loaded value=1\n"
+
+
+_PARSER_SRC = r"""
+/* shipping/src/loader_audit.c's mapping_from_fd on synthetic maps texts. */
+#define _GNU_SOURCE
+#include <sys/mman.h>
+#include "loader_audit.c"
+#define HEAD "1000-9000 r--p 00000000 08:30 777 /"
+static char text[1 << 18];
+static size_t put_target(size_t at, size_t len, int newline) {
+    size_t h = strlen(HEAD);
+    memcpy(text + at, HEAD, h);
+    memset(text + at + h, 'p', len - h);
+    at += len;
+    if (newline) text[at++] = '\n';
+    return at;
+}
+static size_t put_decoy(size_t at, size_t len) {
+    const char *head = "a000-b000 r--p 00000000 08:30 1 /";
+    const char *fake = "1000-9000 r--p 00000000 08:30 666 /fake";
+    size_t h = strlen(head), fl = strlen(fake), offs[] = {4096, 8191, 65535};
+    memcpy(text + at, head, h);
+    memset(text + at + h, 'q', len - h);
+    for (size_t i = 0; i < 3; ++i)
+        if (offs[i] + fl < len) memcpy(text + at + offs[i], fake, fl);
+    text[at + len] = '\n';
+    return at + len + 1;
+}
+int main(int argc, char **argv) {
+    /* argv: kind len  (kind: target | target-last | decoy | none) */
+    if (argc != 3) return 64;
+    size_t len = (size_t)strtoul(argv[2], NULL, 10), n;
+    const char *pre = "0400-0800 r--p 00000000 08:30 5 /pre\n";
+    strcpy(text, pre);
+    n = strlen(pre);
+    if (!strcmp(argv[1], "target")) n = put_target(n, len, 1);
+    else if (!strcmp(argv[1], "target-last")) n = put_target(n, len, 0);
+    else if (!strcmp(argv[1], "decoy")) n = put_target(put_decoy(n, len), 60, 1);
+    else { strcpy(text + n, "c000-d000 r--p 00000000 08:30 9 /other\n"); n += strlen(text + n); }
+    int fd = memfd_create("maps", 0);
+    if (fd < 0 || write(fd, text, n) != (ssize_t)n || lseek(fd, 0, SEEK_SET) != 0) return 65;
+    struct mapped_id id;
+    memset(&id, 0, sizeof id);
+    int found = mapping_from_fd(fd, 0x5000, &id);
+    printf("found=%d ino=%lu\n", found, found ? id.ino : 0UL);
+    return 0;
+}
+"""
+
+# The path the target record carries: its length minus the header, plus "/".
+_HEAD_LEN = len("1000-9000 r--p 00000000 08:30 777 /")
+
+
+@pytest.fixture(scope="module")
+def parser(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    d = tmp_path_factory.mktemp("auditor_parser")
+    (d / "loader_audit_names.inc").write_text(
+        'static const char *const kBundled[] = {"libfoo.so", NULL};\n'
+    )
+    (d / "parser.c").write_text(_PARSER_SRC)
+    _cc("-std=gnu11", "-Wall", "-Wno-unused-function", f"-I{d}", f"-I{REPO / 'shipping/src'}", "-o",
+        str(d / "parser"), str(d / "parser.c"))  # fmt: skip
+    return d / "parser"
+
+
+@pytest.mark.parametrize(
+    ("kind", "length"),
+    [
+        ("target", 60),
+        ("target-last", 60),
+        ("target", _HEAD_LEN - 1 + 4095),  # path length 4095: identified
+        ("target", _HEAD_LEN - 1 + 4096),  # path length 4096 (PATH_MAX): refused
+        ("target", 8191),
+        ("target-last", 8191),
+        ("target", 8192),
+        ("target-last", 8192),
+        ("target", 65535),
+        ("target-last", 65535),
+        ("target", 70000),
+        ("decoy", 8191),
+        ("decoy", 70000),
+        ("none", 0),
+    ],
+)
+def test_auditor_maps_parser_reads_whole_records(
+    parser: Path, kind: str, length: int
+) -> None:
+    r = subprocess.run(
+        [str(parser), kind, str(length)], capture_output=True, text=True, check=True
+    )
+    path_length = length - _HEAD_LEN + 1 if kind.startswith("target") else 0
+    # The auditor identifies a record only when its path fits PATH_MAX - 1;
+    # an oversized earlier record is skipped whole, never parsed from its middle
+    # (a decoy claiming inode 666 sits where each continuation starts).
+    if kind == "none" or path_length >= 4096:
+        assert r.stdout == "found=0 ino=0\n"
+    else:
+        assert r.stdout == "found=1 ino=777\n"
