@@ -18,7 +18,10 @@ constructor dlopens it before ``main`` in every run.
   root) passes Gate A -- it checks bytes, not their source -- so the run prints
   ``preflight passed``, builds the runtime (``cuInit`` is logged) and is
   refused by the detector load (Gate B: the stand-in operator library is not
-  an ELF file). Needs a CUDA driver on the host;
+  an ELF file). The build binary runs from an install-shaped prefix
+  (``libexec/<binary>``) whose ``share/saccade`` is that model root: the
+  detector load opens only the runtime package's operator library (#549 S2-2
+  D-N03-5). Needs a CUDA driver on the host;
 * negative controls, each one change to that bundle or the real one: a
   replaced head artifact; the stand-in lineage with the committed attestation
   (bound to the frozen lineage's bytes); the real model files without the
@@ -50,6 +53,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -121,8 +125,9 @@ def _write_sequence(seq: Path, seq_length: int = 3) -> None:
 
 
 def _standin_bundle(tmp_path: Path) -> tuple[Path, Path]:
-    """A model root with stand-in files and a lineage bound to them."""
-    root = tmp_path / "root"
+    """A model root with stand-in files and a lineage bound to them: the
+    share/saccade of the prefix _run stages (D-N03-5)."""
+    root = tmp_path / "prefix" / "share" / "saccade"
     lineage = json.loads(LINEAGE.read_text())
     entries = {
         "op_library": lineage["op_library"],
@@ -149,12 +154,21 @@ def _run(
     report: Path | None = None,
     sequences: list[Path] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], bool]:
-    """Run the entrypoint; returns its result and whether cuInit ran."""
+    """Run the entrypoint; returns its result and whether cuInit ran. A build
+    binary runs from <tmp>/prefix/libexec/<binary> (an install-shaped copy;
+    its runtime package's operator library is <tmp>/prefix/share/saccade/
+    build/..., #549 S2-2 D-N03-5)."""
     exe = PREFIX / "bin" / binary if PREFIX else BUILD / binary
     if not exe.exists():
         if INSTALLED:
             pytest.fail(f"installed entrypoint {exe} is missing")
         pytest.skip(f"{exe.relative_to(REPO)} not built")
+    if not INSTALLED:
+        staged = tmp_path / "prefix" / "libexec" / binary
+        if not staged.exists():
+            staged.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(exe, staged)
+        exe = staged
     if sequences is None:
         sequences = [tmp_path / "seqs" / s for s in SEQS]
         for s in sequences:

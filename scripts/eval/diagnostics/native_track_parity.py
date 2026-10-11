@@ -116,6 +116,7 @@ import json
 import math
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -1031,16 +1032,50 @@ def journal_problems(
 # ── parity ─────────────────────────────────────────────────────────────────────
 
 
+# The runtime package's operator library, relative to a model root / share/saccade
+# (the lineage and realization attestation's op_library path).
+OPERATOR_LIBRARY = Path("build") / "libsaccade_scan_torchop.so"
+
+
+def stage_runtime_prefix(
+    binary: Path, model_root: Path, out: Path
+) -> tuple[Path, Path]:
+    """An install-shaped prefix for a build entrypoint (#549 S2-2 D-N03-5).
+
+    The entrypoint opens only its runtime package's operator library,
+    <prefix>/share/saccade/build/libsaccade_scan_torchop.so for
+    <prefix>/libexec/<entrypoint>. The build binary is copied to
+    out/runtime_prefix/libexec/, the model root's operator library is copied
+    (a real file: its open refuses symbolic links) to share/saccade/build/,
+    and share/saccade/models links to the model root's models. The run's
+    --model-root is that share/saccade; config, lineage and attestation are
+    still read at the model root. Returns (entrypoint, share/saccade)."""
+    prefix = out / "runtime_prefix"
+    if prefix.exists():
+        shutil.rmtree(prefix)
+    exe = prefix / "libexec" / binary.name
+    share = prefix / "share" / "saccade"
+    exe.parent.mkdir(parents=True)
+    shutil.copy2(binary, exe)
+    (share / OPERATOR_LIBRARY).parent.mkdir(parents=True)
+    shutil.copy2(model_root / OPERATOR_LIBRARY, share / OPERATOR_LIBRARY)
+    (share / "models").symlink_to(
+        (model_root / "models").resolve(), target_is_directory=True
+    )
+    return exe, share
+
+
 def run_track(args: argparse.Namespace, out: Path) -> tuple[int, Path]:
     report = out / "track_report.json"
     root = args.model_root
+    exe, share = stage_runtime_prefix(project_root / args.track_binary, root, out)
     # The shipping interface (saccade_track has nothing else, PR-C2).
     cmd = [
-        str(project_root / args.track_binary),
+        str(exe),
         "--config", str(root / det.RESOLVED_CONFIG),
         "--lineage", str(root / det.LINEAGE),
         "--attestation", str(root / det.ATTESTATION),
-        "--model-root", str(root),
+        "--model-root", str(share),
         "--out", str(out / "native"),
         "--report", str(report),
     ]  # fmt: skip
