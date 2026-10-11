@@ -1,6 +1,6 @@
 <!-- doc-status: accepted -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-10-10 -->
+<!-- doc-date: 2026-10-11 -->
 <!-- doc-module: cross -->
 
 # ADR 028: 模型 bundle 與 native runtime 分離：可信 expected identity 與發行責任
@@ -9,7 +9,24 @@
 
 **Accepted — S1 design targets only**（2026-10-10）。對應 [#549](https://github.com/raylei50653/saccade/issues/549) S1；決策內容與邊界見 [S1 設計決策](#decision-549-s1)。
 
-被接受的只是**設計目標**；範圍與邊界只在下方決策段落陳述。沒有任何部分已實作或驗證，不得被引用成 implemented 或 verified。介面契約、fail-closed 規則、G01–G07 處置與控制矩陣放在 [model bundle 契約](../architecture/model_bundle_contract_549.md)，本文不重述。
+本 ADR 接受的只是**設計目標**；範圍與邊界只在下方決策段落陳述。介面契約、fail-closed 規則、G01–G07 處置與控制矩陣放在 [model bundle 契約](../architecture/model_bundle_contract_549.md)，本文不重述。
+
+<a id="implementation-status"></a>**實作狀態（2026-10-11，只引用，不在此重述證據）**：S2-1 已 merge（[#576](https://github.com/raylei50653/saccade/pull/576)，merge commit `c5ddf51c62c382b8f6851c57bb07b2b72d18d083`），屬於 **source-level implemented**。狀態的唯一寫入處是 [CC-536-01-02 S2-1 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-1)，逐層證據在 [S2-1 evidence page](../reference/model_bundle_s2_1_549.md)。依決策項目區分：
+
+- **source-level implemented（S2-1）**：
+  - D2 TR-1b 機制：allowlist sha256 編進 entrypoint，approved entry 才給 `expected_source_verified`。**production allowlist 是空的**，所以目前沒有任何 shipping bundle 能達到 `expected_source_verified`；CI 只用測試自帶 pin 的 fixture 驗過這條路徑。
+  - D3 兩個 root：N03 在 runtime root，其餘在 bundle root（R-07）。
+  - D4 的 S2-1 部分：模式互斥，`--require-identity` 預設 `none`。
+  - D6：manifest 模式下 attestation 必填。
+  - D7：v1 schema 接受 `engine_precision: unresolved`。
+  - 狀態與寫入邊界：Gate A 唯一寫入 `identity`；Gate B 寫 `load_verification`，`byte_scope` 最多 `hashed_before_load`。
+- **仍是 accepted target、未實作**：
+  - D1 的 package 拆分，以及 D4 的 installed launcher 預設改成 `expected_source_verified`，兩者都屬 S2-3。
+  - D5 的不變式（`loaded_buffer`），以及 SM、TRT、LibTorch、CUDA 版本 gate 和 TRT I/O dtype 比對，都屬 S2-2。
+  - TR-2 延後。
+- **未驗證**：qualified V5 是 **UNRESOLVED**，installed package 是 **UNVERIFIED**，equivalence 是 `unproven`。manifest 模式 MOT text 相等只是 diagnostic，不是 parity。`distribution.status=local-only`。
+
+source-level implemented 不代表 runtime、GPU、installed package 或 production qualification 已完成。
 
 <a id="decision-549-s1"></a>**S1 設計決策（2026-10-10，Asia/Taipei）**：`owner=raylei50653; decision=accepted (design targets only); scope=#549 S1`。Decision source：[#571 owner design decision](https://github.com/raylei50653/saccade/pull/571#issuecomment-6097834145)（權威來源；comment 可編輯，因此具體內容以本段的版本控制紀錄保存）。審查的 PR head 是 `c5de7abe6ea91cca8d8e79080005ee44aa28ba29`（source baseline `46ab79c1`），該 head 的 PR CI 8/8 SUCCESS。review 修正（resolved bindings、Gate A 專屬的 `identity`、Gate B 專屬的 `load_verification`）被接受為**設計**，不是 runtime 行為已實作的證據。
 
@@ -23,7 +40,7 @@
 - **狀態與寫入邊界**：Gate A 是不可變 `identity` 唯一的寫入者，`identity` 報告核對過的 bytes 和 expected-source level，不報告載入成功。Gate B 另外擁有 `load_verification`，初值 `null`；只有三個載入與檢查全部成功後才可以寫 `verified`，在完整 qualified 的 S2-2 路徑存在之前 `byte_scope=hashed_before_load`。Gate B 失敗永遠不改 `identity`。可捕捉的 Gate B 失敗會把 `load_verification` 寫成 `failed`；無法捕捉的 loader-auditor `_exit(127)`、SIGKILL 或 abort 可能讓 `load_verification` 維持 `null`（journal 維持 `running`），不承諾寫入 `failed`。F3 known limit 保留，這個區分由之後的實作測試涵蓋。state machine 細節歸 #537。
 - **本決策的邊界（全文唯一陳述，其他段落引用此處）**：只批准 S1 設計目標。不是在任何 head 上 merge #571 的授權，不啟動 S2-1a／S2-1 或其他 runtime／package／CI 工作，不批准 trusted allowlist 中的 N01–N06 內容，不開新 repository，不替換 weights，不公開散佈。#547 維持 `distribution.status=local-only`、`owner_confirmation=null`；權利問題、#535 A3 與 #541 as-built／check 交接各自獨立。#550 的跨 Issue checkpoint 只在 S1 PR merge 且 main 驗證成功後更新。
 
-Source baseline 是 `46ab79c1785b85f8afbef1d43909f1a7cb2eff23`（[#570](https://github.com/raylei50653/saccade/pull/570) 合併 S0 後的 main）。本文的現況描述都是讀原始碼得到的（source-inspected），沒有跑 runtime、GPU 或 package。事實來源只引用、不複製：模型 bytes、producer 與權利未知項見 [S0 inventory](../reference/model_runtime_inventory_549.md)；#536 的節點與邊 ID 見 [S-SHIP／S-EXPORT 總圖](../architecture/ship_export_contracts_536.md#1-總圖)；訓練血統見 [#421 inventory](../research/training/training_lineage_inventory.md)；權利與發行門檻見 [#547](https://github.com/raylei50653/saccade/issues/547) 和 [license audit](../../shipping/license_audit.json)。
+Source baseline 是 `46ab79c1785b85f8afbef1d43909f1a7cb2eff23`（[#570](https://github.com/raylei50653/saccade/pull/570) 合併 S0 後的 main）。本文的現況描述（第 1、2 節）都是在這個 baseline 讀原始碼得到的（source-inspected），沒有跑 runtime、GPU 或 package；S2-1 之後的狀態見[實作狀態](#implementation-status)。事實來源只引用、不複製：模型 bytes、producer 與權利未知項見 [S0 inventory](../reference/model_runtime_inventory_549.md)；#536 的節點與邊 ID 見 [S-SHIP／S-EXPORT 總圖](../architecture/ship_export_contracts_536.md#1-總圖)；訓練血統見 [#421 inventory](../research/training/training_lineage_inventory.md)；權利與發行門檻見 [#547](https://github.com/raylei50653/saccade/issues/547) 和 [license audit](../../shipping/license_audit.json)。
 
 ---
 
@@ -114,6 +131,8 @@ flowchart LR
   classDef target stroke-dasharray: 5 5
   class M1,M2,M3,M4,BI,GA2,T3,GB2 target
 ```
+
+**S2-1 之後的對應**：GA2（VL0、VL1）和 T3（VL2）已有 source-level 實作。GB2 只實作了兩件事：從 resolved bindings 取路徑，以及寫 `load_verification`；「載入已 hash 的 bytes」和 SM／TRT／dtype 都屬 S2-2，仍未實作。N-M1 到 N-M5 的拆分發行流程尚未建立，屬 S2-3。這些都不是驗證宣稱，見[實作狀態](#implementation-status)。
 
 **目標的信任根（D2）**：可信的 expected identity 是 allowlist 中 state 為 `approved` 的 entry，以 bundle manifest 檔案的 sha256 為鍵。allowlist 檔隨 runtime package 出貨，它的 sha256 在建置時編進 entrypoint。entrypoint 由 [entrypoint pin](../../shipping/entrypoint_pin.json) 釘住，並納入 runtime package 的 digest 和簽章。要讓 runtime 對替換的模型報出 `expected_source_verified`，就得連 pinned entrypoint 一起換掉，光換模型 bundle 做不到。這回答了 CC-536-01-02 要求的判準：expected 來源能不能和模型被同一個 caller 一起替換。
 
