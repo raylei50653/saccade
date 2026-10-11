@@ -48,7 +48,9 @@ legal operator library:
 
 1. Open the legal path once with `openat2`, allowing no symlink or magic link in any component.
 2. Require a regular file and Gate A's size when known, read the whole file, and require the
-   plan's SHA-256.
+   plan's SHA-256. Require a 64-bit ELF whose `DT_RPATH`/`DT_RUNPATH` do not use `$ORIGIN`
+   (it would expand under `/proc/self/fd` when loaded from the memfd); a non-ELF object is
+   refused here, before anything is sealed or `dlopen`'ed.
 3. Write the buffer into a memfd labeled `saccade-n03:src-fd=<S>` (`MFD_NOEXEC_SEAL`, with a
    retry only on `EINVAL`).
 4. Add `F_SEAL_WRITE | GROW | SHRINK | SEAL` and read the seals back. `F_SEAL_WRITE` itself
@@ -57,7 +59,10 @@ legal operator library:
 6. `dlopen("/proc/self/fd/<M>")`, then require that the complete maps record holding the
    returned object's dynamic section is `M` (device, inode and `M`'s own `/proc` name).
 7. Keep `M` open for the process lifetime. The process-wide registry reuses the handle for the
-   same SHA-256 and source path and refuses anything else.
+   same SHA-256 and source path (also for a request prepared while an identical one loaded)
+   and refuses anything else. It is filled only after validation, with non-throwing transfers.
+8. If anything fails after `dlopen` succeeded, the registry is marked poisoned and `M` stays
+   open, so its number is never reused; every later request in the process is refused.
 
 Steps 1–5 run in Gate B step 1, before the head and engine are read. The `dlopen` in step 6 is
 Gate B step 2, so every hash refusal still happens before any operator constructor runs. There is
@@ -91,19 +96,20 @@ P-N03 rev 3c rule is applied verbatim apart from comments; see §17.9.
 
 ## Evidence
 
-Raw evidence is under `results/549_s2_2_n03_phase2/` (gitignored, local-only). The GPU replay is
-bound to clean source `e598d2f6b07af20b5b5c1cee8d6a76468b8a7203`; hashes are in the evidence JSON.
+Raw evidence is under `results/549_s2_2_n03_phase2/` (gitignored, local-only). The final runs are
+bound to clean source `492bb3d3`; the retained earlier run at `e598d2f6` predates the review round 1
+fixes. Hashes are in the evidence JSON.
 
 | Acceptance condition | Control | Result |
 |:--|:--|:--|
-| 1. Fixed source, verified bytes, readback | CPU `saccade_shipping_operator_loader_test` (fork-isolated): load, registry reuse and refusals, rename/in-place after prepare and after load, wrong SHA/size, symlink (file and directory), directory, FIFO, relative, missing; D-N03-5 path function; GPU `gate_b` `foreign_operator` and `detector_s2` refusals | 36 checks pass; GPU native 5/5 ctest |
-| 2. Seals and mapping identity | CPU: memfd mapping and post-check refusal of another memfd; GPU replay observer: live memfd via `/proc/<pid>/fd` | seals `0x2f` (four seals plus exec seal); mapped inode = open memfd inode; memfd SHA-256 = attested N03 `aa84cccd…` (manifest mode and launcher) |
-| 3. Auditor negative controls | `tests/unit/test_shipping_n03_auditor.py`: production host and auditor on a real loader (launcher and direct exec) and a forger | 20/20. Against main's auditor 13 fail: every bypass, source-forgery, post-hash race, FD and alias case |
+| 1. Fixed source, verified bytes, readback | CPU `saccade_shipping_operator_loader_test`, fork-isolated cases: load; registry reuse, overlapping identical requests and refusals; rename and in-place writes after prepare and after load; wrong SHA-256 or size; symlinked file or directory; directory, FIFO, relative and missing paths; `$ORIGIN` in `DT_RUNPATH`/`DT_RPATH` and non-ELF refused, absolute RUNPATH accepted; the D-N03-5 path function. GPU: `gate_b` `foreign_operator` and `detector_s2` refusals | 48 checks, 30/30 repeated runs; GPU native ctest 5/5 |
+| 2. Seals and mapping identity | CPU: `F_SEAL_FUTURE_WRITE` without `F_SEAL_WRITE` fails the seal check; descriptor reuse through `load()` is refused and poisons the process; that control fails when the post-check is removed (mutation run). GPU replay observer: the live memfd read through `/proc/<pid>/fd` | seals `0x2f` (four seals plus the exec seal); mapped device and inode = the open memfd's; memfd SHA-256 = attested N03 `aa84cccd…` (manifest mode and launcher) |
+| 3. Auditor negative controls | `tests/unit/test_shipping_n03_auditor.py`: production host and auditor on a real loader (launcher and direct exec) and a forger, including a memfd sealed with `F_SEAL_FUTURE_WRITE` and a host `$ORIGIN` refusal; the production auditor's `mapping_from_fd` on boundary texts (65,535/8,191-byte records with and without newline, oversized earlier records with decoys at each continuation start, `PATH_MAX`) | 36/36. The first 20 cases against main's auditor: 13 fail (every bypass, source-forgery, post-hash race, FD and alias case) |
 | 3. Legitimate objects kept | existing auditor/launcher regressions; vDSO and vendor in every positive; WSL overlayfs `libcuda.so.1` in every GPU run | 14/14 and all GPU positives |
 | 4. Full production verification | GPU replay: shipping trace/no-trace, measurement double-buffer and serial, 7 sequences / 5,316 frames each; 7 negative controls; manifest mode 7 sequences; policy refusal; launcher legacy run; surface checks | raw sections EXACT (no-trace detector NOT_RUN); MOT/trace hashes equal to the #582 replay; negative controls differ in their expected sections; manifest MOT equals legacy; all reports `loaded_buffer` ×3 with aggregate `hashed_before_load` |
 | 4. Load identity measured directly | replay observer on manifest mode and the launcher run | no operator path mapped; operator segments from one memfd whose bytes are N03 |
 | Failure states | launcher with a foreign model root; this entrypoint under another prefix's auditor; SIGKILL during load (CLI test) | exit 2 `failed`/null scope, identity kept, D-N03-5 message; exit 127 `running`/null, `operator library mapped from another path`; SIGKILL `running`/null |
-| CLI suites | preflight, completion, schedule, model-bundle, measurement surface, parity harness, bundle checks, G2, N03 auditor | 500 passed, 0 skipped (GPU lease); before the test fixes, 5 build-tree operator runs failed |
+| CLI suites | preflight, completion, schedule, model-bundle, measurement surface, parity harness, bundle checks, G2, N03 auditor | 516 passed, 0 skipped (GPU lease); before the test fixes, 5 build-tree operator runs failed |
 
 Qualification: anchor and oracle rows refuse this host (driver 617.42 ≠ 616.92), so formal
 verdicts are **UNRESOLVED** and negative controls are `caught=false`. Section equality is a local
@@ -114,6 +120,21 @@ repository launcher, the auditor compiled from this source with its CMake flags 
 the #536 tree's pinned vendor set (hard links) and its `share/saccade`. It is not an install,
 package or re-pin. `build/runtime_identity` has no shipping `TORCH_CUDA_ARCH_LIST`, so
 `cmake --install` refuses it (#465 PR-12).
+
+## Independent review
+
+Read-only Codex reviews; prompts, logs and outputs are in `results/549_s2_2_n03_phase2/review/`.
+Round 1 (`85eeb2af`) found no blocker. Its findings and their resolution in `492bb3d3`:
+
+| Severity | Finding | Resolution |
+|:--|:--|:--|
+| major | the rev 3c `$ORIGIN` refusal was missing | ELF search-path check before sealing; CPU fixtures and a real-loader control |
+| major | after a successful `dlopen`: unchecked second maps read, unowned handle with its memfd closed, non-atomic registry publication | one checked post-check; poison and keep the memfd on failure; publish after validation |
+| major | descriptor reuse not tested through `load()`; no `F_SEAL_FUTURE_WRITE` control; production auditor parser untested | added; the descriptor-reuse control fails with the post-check removed |
+| minor | overlapping identical requests refused | reused |
+| minor | replay observer joined the memfd to the maps by inode only | device and inode |
+| minor | "successful runs unchanged" ignored a symlinked legacy model root | stated as a deliberate tightening |
+| nit | the 30/30 repetition claim had no recorded log | recorded (`cpu_operator_loader_repeat30_492bb3d3.log`) |
 
 ## Known limits and residuals
 
@@ -130,8 +151,11 @@ package or re-pin. `build/runtime_identity` has no shipping `TORCH_CUDA_ARCH_LIS
 - **Provenance.** It is an audit-time observation on the auditor side. D-N03-5 adds the host-side
   binding of where the source is opened. The chunked auditor comparison is not a single-instant
   snapshot; byte identity does not depend on it.
-- **Runtime identity.** The implementation axis moved. The coordinate republication travels with
-  the final delivery (see the PR).
+- **Runtime identity.** The coordinate is republished in this delivery. Only the implementation
+  axis changed: `bc378f68…` → `02f4dd97…`, 303 → 305 files (the two new loader files and eight
+  modified shipping files). It was a fresh `--run-probe` capture of `492bb3d3`; the outgoing
+  canonical bytes are archived append-only, and the attested check passes. Probe equality does
+  not establish equivalence.
 - **Not covered:**
   - the installed package and launcher acceptance (no re-pin);
   - another GPU, driver 616.92 and V5 qualification;
