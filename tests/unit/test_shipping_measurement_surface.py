@@ -175,4 +175,4 @@ def test_cmake_boundary() -> None:
     assert "cmake/check_no_measurement_surface.cmake" in cm
     # Every runtime library with a hook exists in both variants.
     for lib in ("native", "ingest", "detector", "runtime"):
-        assert f"saccade_shipping_variants(saccade_shipping_{lib} " in cm
+        assert re.search(rf"saccade_shipping_variants\(\s*saccade_shipping_{lib}\s", cm)
