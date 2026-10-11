@@ -50,6 +50,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>
 
 #include "loader_audit_names.inc" /* static const char *const kBundled[] = {..., NULL}; */
@@ -209,7 +210,7 @@ static int read_full(int fd, unsigned char *b, size_t n, off_t off) {
  * (/proc/self/maps: device, inode, path). This identifies the object the
  * loader actually mapped; a name and its realpath are only claims about it. */
 struct mapped_id {
-    unsigned int maj, mnr; /* recorded, not compared (overlayfs) */
+    unsigned int maj, mnr; /* compared for the memfd only (overlayfs) */
     unsigned long ino;
     char path[PATH_MAX];
 };
@@ -219,9 +220,26 @@ static int mapping_of(uintptr_t addr, struct mapped_id *out) {
     int fd = open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
     if (fd < 0) return 0;
     size_t have = 0;
-    int found = 0, eof = 0, bad = 0;
+    int found = 0, eof = 0, bad = 0, skipping = 0;
     for (;;) {
         char *nl = memchr(g_maps, '\n', have);
+        if (skipping) { /* r3: discard an overlong record through its newline */
+            if (nl == NULL) {
+                have = 0;
+                if (eof) break;
+            } else {
+                size_t used = (size_t)(nl - g_maps) + 1;
+                memmove(g_maps, g_maps + used, have - used);
+                have -= used;
+                skipping = 0;
+                continue;
+            }
+        }
+        if (nl == NULL && !eof && have == sizeof g_maps - 1) { /* record longer than the buffer */
+            skipping = 1;
+            have = 0;
+            continue;
+        }
         if (nl == NULL && !eof && have < sizeof g_maps - 1) {
             ssize_t k = read(fd, g_maps + have, sizeof g_maps - 1 - have);
             if (k < 0 && errno == EINTR) continue;
@@ -234,7 +252,7 @@ static int mapping_of(uintptr_t addr, struct mapped_id *out) {
             continue;
         }
         if (have == 0) break;           /* end of file */
-        if (nl == NULL) nl = g_maps + have; /* last line, or a line longer than the buffer */
+        if (nl == NULL) nl = g_maps + have; /* last line without a newline */
         size_t used = (size_t)(nl - g_maps) + (nl < g_maps + have ? 1 : 0);
         *nl = '\0';
         unsigned long lo, hi, off, ino;
@@ -316,7 +334,8 @@ static void check_op_memfd(const char *path, const struct mapped_id *id) {
     if (fstat(s, &ss) != 0 || fstat(f, &fs) != 0 || fstat(m, &ms) != 0 || !S_ISREG(ss.st_mode) ||
         !S_ISREG(fs.st_mode) || ss.st_dev != fs.st_dev || ss.st_ino != fs.st_ino)
         fail("operator source descriptor is not the operator library", g_op_library);
-    if (strcmp(id->path, memfd_link) != 0 || (unsigned long)ms.st_ino != id->ino)
+    if (strcmp(id->path, memfd_link) != 0 || (unsigned long)ms.st_ino != id->ino || major(ms.st_dev) != id->maj ||
+        minor(ms.st_dev) != id->mnr)
         fail("mapped object is not the operator memfd", id->path);
     /* (3) byte equality: sealed memfd == operator library */
     if (ms.st_size != fs.st_size) fail("operator memfd differs from the operator library", g_op_library);

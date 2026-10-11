@@ -20,7 +20,8 @@
  *                    env N03_TWICE: legacy (r1 host: close M, no checks), postcheck
  *                    (M kept open, mapping identity check, no registry), closecheck
  *                    (post-check, then M closed so its number is reused), registry (default: one
- *                    verified operator per process, plus the postcheck).
+ *                    verified operator per process, keyed by SHA-256 and source path,
+ *                    plus the postcheck).
  *   forge-unlabeled  #582 candidate: sealed memfd without label from op_path.
  *   forge-unsealed   labeled memfd (S = op_path) without F_SEAL_WRITE.
  *   forge-content    label S = op_path, bytes from aux_path (expected = aux sha).
@@ -164,9 +165,10 @@ static int mapped_is(void *h, int m) {
     return ok;
 }
 
-/* Process-wide: one verified operator (SHA-256, handle, memfd kept open). */
+/* Process-wide: one verified operator (SHA-256, source path, handle; memfd kept open). */
 static char g_loaded_sha[65];
 static void *g_loaded_handle;
+static char g_loaded_path[4096];
 
 static int load_verified(const char *path, const char *expected, int *src_out) {
     int s = open(path, O_RDONLY | O_CLOEXEC);
@@ -238,6 +240,7 @@ static void print_objects(void) {
 static void *proposed_load(const char *op, const char *expected, int legacy, int registry) {
     if (registry && g_loaded_handle) {
         if (strcmp(g_loaded_sha, expected) != 0) refuse("operator already loaded with different bytes");
+        if (strcmp(g_loaded_path, op) != 0) refuse("operator already loaded from another source path");
         printf("registry: reuse verified operator %s\n", g_loaded_sha);
         return g_loaded_handle;
     }
@@ -266,6 +269,7 @@ static void *proposed_load(const char *op, const char *expected, int legacy, int
     }
     /* M stays open: its number is never reused for another operator. */
     snprintf(g_loaded_sha, sizeof g_loaded_sha, "%s", expected);
+    snprintf(g_loaded_path, sizeof g_loaded_path, "%s", op);
     g_loaded_handle = h;
     return h;
 }

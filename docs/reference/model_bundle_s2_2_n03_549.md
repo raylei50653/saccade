@@ -5,7 +5,7 @@
 
 # #549 S2-2 N03 TOCTOU: threat model and loading proposal
 
-**Status: PROPOSAL (Phase 1, revision 2).** N03 MB-41 remains **OPEN**, S2-2 remains **PARTIAL**,
+**Status: PROPOSAL (Phase 1, revision 3).** N03 MB-41 remains **OPEN**, S2-2 remains **PARTIAL**,
 aggregate `load_verification.byte_scope` remains `hashed_before_load`, and qualified V5 remains
 **UNRESOLVED**. No production loader, auditor, launcher, N03 bytes, allowlist, installed package or
 pin is changed. This document asks for independent review and owner acceptance of one design.
@@ -17,15 +17,16 @@ Base: `main@74f2f5cb1a3db8a1f42da48d533e3322f243d138` (#582 merged). Governing c
 [CC-536-01-02](../architecture/ship_export_contracts_536.md#cc-536-01-02), the
 [S2-2 bounded candidate](model_bundle_s2_2_549.md) and #550. Evidence bindings:
 [model_bundle_s2_2_n03_549.evidence.json](model_bundle_s2_2_n03_549.evidence.json). Prototype
-sources (revision 2): [prototype auditor](model_bundle_s2_2_n03_549/loader_audit_prototype.c)
+sources (revision 3): [prototype auditor](model_bundle_s2_2_n03_549/loader_audit_prototype.c)
 (compare with `shipping/src/loader_audit.c`), [host probe](model_bundle_s2_2_n03_549/n03_host_probe.c),
 [GPU smoke](model_bundle_s2_2_n03_549/n03_gpu_smoke.cpp).
 
 ## Gate 1 result
 
-Revision 2 keeps the auditor's N03 path and source refusals, closes the descriptor bypasses found
-so far, and makes the file the loader maps for N03 byte-identical to the verified buffer. Each
-claim below is a real-loader control in matrix r6 (42/42) or GPU smoke r2 (6/6):
+Revision 3 keeps the auditor's N03 path and source refusals at the strength main has (an
+audit-time observation, see P2), closes the descriptor bypasses found so far, and makes the file
+the loader maps for N03 byte-identical to the verified buffer. Each claim below is a real-loader
+control in matrix r7 (45/45) or GPU smoke r3 (6/6):
 
 - Same N03 bytes from a foreign path: still exit 127 (C02; GPU G4).
 - Hardlink under a foreign name: exit 127 (C03).
@@ -41,7 +42,8 @@ claim below is a real-loader control in matrix r6 (42/42) or GPU smoke r2 (6/6):
   host refusal (C07).
 - In-place modification after load: no longer reaches the compared mapped bytes (C08 vs B3).
 - A second operator load in the same process can no longer return an earlier object unchecked
-  (F1 reproduces the revision 1 host defect; F3/F5 refuse; F4 reuses the same verified operator).
+  (F1 reproduces the revision 1 host defect; F3/F4/F5 refuse a different SHA, a foreign second
+  source path and a reused descriptor; F6 reuses the verified operator for the same SHA and path).
 
 Gate 1 is therefore **not** a stop. This is research evidence on one host, not an accepted design.
 The verdict for this phase is **PARTIAL**: production implementation waits on the review and owner
@@ -49,8 +51,8 @@ decisions below.
 
 ## Independent review
 
-A read-only Codex review of revision 1 (commit `cdf86953`) blocked acceptance. Prompt, log and
-output are in `results/549_s2_2_n03/review/`. Disposition:
+Read-only Codex reviews; prompts, logs and outputs are in `results/549_s2_2_n03/review/`. Round 1
+(revision 1, commit `cdf86953`) blocked acceptance:
 
 | # | Severity | Finding | Revision 2 |
 |:--|:--|:--|:--|
@@ -61,6 +63,16 @@ output are in `results/549_s2_2_n03/review/`. Disposition:
 | 5 | minor | Memory comparison overstated; G3 has none | Wording fixed |
 | 6 | minor | I4 and dependency wording too strong; `$ORIGIN` refusal optional | Wording fixed; `$ORIGIN` refusal required in Phase 2 |
 | 7 | minor | Policy denial is not always a catchable exit 2 | Failure semantics split |
+
+Round 2 (revision 2, commit `4c7c0eba`) found no new byte-equality bypass and held acceptance on
+wording:
+
+| # | Severity | Finding | Revision 3 |
+|:--|:--|:--|:--|
+| A | major | P2 promised historical provenance that I2 cannot establish; registry reuse accepted a foreign subsequent binding (F4) | P2 restated as the audit-time observation; registry keyed by SHA-256 **and** source path (F4 refuses, F6 reuses); residual needs explicit owner acceptance (D-N03-6) |
+| B | minor | `/proc/self/maps` parser could parse an overlong line's continuation as a record | overlong records discarded through their newline (kernel paths ≤ `PATH_MAX` keep real lines far below 64 KiB; not exercised) |
+| C | minor | ordinary files named `… (deleted)` and objects whose `l_ld` is not file-backed are refused | stated as compatibility restrictions; E8 control; frozen N03's `PT_DYNAMIC` is file-backed |
+| D | minor | written and GPU post-check compared only the inode | device and inode for the memfd (auditor, host, GPU smoke r3) |
 
 ## Current path and observed gaps
 
@@ -92,9 +104,13 @@ Protected properties:
 
 - **P1 (byte equality).** The file the dynamic loader maps for N03 holds the bytes whose SHA-256
   matched the plan (D5).
-- **P2 (provenance and ownership).** N03 is the runtime package's object at
-  `<prefix>/share/saccade/build/libsaccade_scan_torchop.so`, never from the model bundle or another
-  path, even with identical bytes.
+- **P2 (provenance and ownership, as main enforces it).** When the auditor runs, the N03 object
+  is the runtime package's file at `<prefix>/share/saccade/build/libsaccade_scan_torchop.so`. A
+  binding to the model bundle or another path is refused (same bytes included) unless that inode
+  is, at audit time, linked at the fixed path. Main's `realpath` check is the same kind of
+  audit-time observation. Neither main nor this proposal establishes the path through which a
+  file was originally opened; this residual needs explicit owner acceptance (D-N03-6), or D-N03-5
+  enforces the binding on the host side.
 - **P3.** Existing vendor, Python-family, readiness and RUNPATH rules stay unchanged.
 
 Adversaries in scope:
@@ -114,13 +130,14 @@ Out of scope and unchanged:
 - Name-based classification: N03 bytes renamed to another basename and loaded by path are not
   operator-classified, on main and in this proposal alike.
 
-## Proposal P-N03 (revision 2)
+## Proposal P-N03 (revision 3)
 
 **Host (Gate B; replaces `check_sha` and `dlopen` for N03 only):**
 
 1. **Process-wide registry.** If an operator was already verified and loaded in this process,
-   reuse its handle when the plan's SHA-256 is the same. Refuse when it differs. (On main a second
-   path `dlopen` also returns the first object by name.)
+   reuse its handle only when the plan's SHA-256 **and** the resolved source path are the same as
+   the first load's. Refuse otherwise. (On main a second path `dlopen` of the same path also
+   returns the first object by name.)
 2. Open the resolved operator path once (`O_RDONLY | O_CLOEXEC`), giving the source descriptor `S`.
    Require a regular file and the manifest size when available. Read the whole file (EOF checked)
    into an owned buffer and require its SHA-256 to equal the plan's.
@@ -130,16 +147,16 @@ Out of scope and unchanged:
    F_SEAL_SEAL`.
 4. Read `M` back completely and require its size and SHA-256 to equal the plan's.
 5. Call `dlopen("/proc/self/fd/<M>", RTLD_NOW | RTLD_LOCAL)` while `S` and `M` are open, then:
-   - require that the `/proc/self/maps` entry containing the returned object's `l_ld` is `M`'s
-     inode;
+   - require that the `/proc/self/maps` entry containing the returned object's `l_ld` has `M`'s
+     device and inode;
    - close `S`, keep `M` open for the process lifetime, and record the SHA-256 and handle.
 6. There is no fallback to pathname loading. Every step that returns an error is a
    `DetectorLoadError`.
 
 **Auditor (`la_objopen`):**
 
-1. **Identify the mapped object.** Read the `/proc/self/maps` entry that contains `l_ld`: path and
-   inode. No entry → refuse. `[vdso]` is the vDSO; it passes unless its name matches the
+1. **Identify the mapped object.** Read the `/proc/self/maps` entry that contains `l_ld`: path,
+   device and inode. Records longer than the 64 KiB buffer are discarded whole. No entry → refuse. `[vdso]` is the vDSO; it passes unless its name matches the
    Python, bundled or operator rules (main's exception, now identified by the kernel).
 2. **Names that cannot be trusted.** Each of the following goes to the operator memfd check
    (step 4) and is refused unless it passes:
@@ -156,7 +173,7 @@ Out of scope and unchanged:
 4. **Operator memfd check.** All of the following must hold:
    - the name is exactly `/proc/self/fd/<M>`;
    - `M`'s readlink is `/memfd:saccade-n03:src-fd=<S> (deleted)` with strict decimal `S ≠ M`, and
-     it equals the kernel's mapped path with the same inode;
+     it equals the kernel's mapped path with the same device and inode;
    - `M` carries the four seals;
    - `S`'s readlink (kernel `d_path`) is the fixed operator path, and `S` is a regular file with the
      same device and inode as the file the auditor opens there (`O_NOFOLLOW`);
@@ -185,8 +202,9 @@ Out of scope and unchanged:
 - **I4.** Objects whose name identifies their mapping follow main's classification. New refusals
   apply to objects main accepted when their name does not identify the mapping (B4/B5 vs C16/C17,
   E1/E4 vs E3/E6).
-- **I5.** A process holds at most one verified operator. A later `dlopen` that returns another
-  object is refused by the host post-check (F5).
+- **I5.** A process holds at most one verified operator, for one SHA-256 and one source path. A
+  later request with another SHA-256 or path is refused (F3/F4), and a `dlopen` that returns
+  another object is refused by the host post-check (F5).
 
 ## Alternatives
 
@@ -195,6 +213,7 @@ Out of scope and unchanged:
 | Status quo: hash, then path `dlopen` | no (B1–B3) | path only; descriptor bypasses B4/E1/E4 | OPEN residual |
 | #582 unlabeled sealed memfd | yes | **bypassed** (A3) | rejected |
 | Revision 1 (name-based descriptor rule, memfd closed after load) | second load can return an earlier object (F1) | alias bypasses (E2/E5) | superseded |
+| Revision 2 (registry by SHA-256 only, inode-only post-check) | yes | registry reuse accepted a foreign second path | superseded |
 | Pin the inode: `dlopen /proc/self/fd/<S>` of the regular file | no: in-place writes still reach the mapping | main accepts even a deleted copy (B4) | rejected |
 | Auditor compares the memfd with the fixed path only, no source descriptor | yes | **weakened**: a same-byte foreign source would pass | rejected |
 | Auditor substitutes the name in `la_objsearch` and copies the file itself | needs the expected hash in the auditor, or a check after constructors run | auditor-side | rejected |
@@ -202,7 +221,7 @@ Out of scope and unchanged:
 | Host checks the source path against the fixed runtime path before opening | — | addresses finding 2 only for opens; needs the auditor's prefix in the host (explicit-loader root limitation, #582) | option for Phase 2 (D-N03-5) |
 | fs-verity, immutable attribute, read-only mount | yes, if the deployment provides it | path | later hardening; needs root or filesystem support |
 | Link N03 into the entrypoint | yes | ownership changes | out of scope (operator bytes change) |
-| **P-N03 revision 2** | **I1** | **I2 (narrowed), I3** | **proposed** |
+| **P-N03 revision 3** | **I1** | **P2 as main (audit-time), I2, I3** | **proposed** |
 
 ## Failure semantics and contract matrix
 
@@ -223,14 +242,14 @@ Gate A identity retained):
 
 | Requirement | P-N03 behavior | Evidence (this phase) | Phase 2 must show |
 |:--|:--|:--|:--|
-| Loaded bytes = verified bytes (D5, MB-41 N03) | sealed memfd + readback hash; mapping identity post-check | I1: C01/C08 (170,457 compared bytes), F1–F5; B1–B3 contrast | in `DetectorHost`, under the real CLI |
+| Loaded bytes = verified bytes (D5, MB-41 N03) | sealed memfd + readback hash; mapping identity post-check | I1: C01/C08 (170,457 compared bytes), F1–F6; B1–B3 contrast | in `DetectorHost`, under the real CLI |
 | N03 path/source auditing kept | `d_path` + device/inode + byte equality to the fixed path | C02–C06, C14, C15, G4 | auditor pytest cases mirroring C/E series |
-| Memfd/FD/alias paths cannot bypass | mapped-object identity; descriptor names fail closed | C11–C13, C16, C17, E3, E6 | same, plus installed launcher |
+| Memfd/FD/alias paths cannot bypass | mapped-object identity; descriptor names fail closed | C11–C13, C16, C17, E3, E6 (E8: compatibility restriction) | same, plus installed launcher |
 | Path mode | main classification for identified objects | C18, C19, 14/14 regressions; WSL overlay libcuda passes | full existing suite |
 | N03 RUNPATH exception and dependencies | RUNPATH absolute, no `$ORIGIN` | D1/D2: same search-path entries and same 30 mapped object paths (11 vendor); only the RUNPATH attribution label and init name change to `/proc/self/fd/<M>` | required refusal of an N03 with `$ORIGIN`; entrypoint closure |
-| Catchable vs uncatchable | split as above | C07, C09, C10, F3, F5 (exit 2); C- and E-series 127 | native CLI MB-58 controls, SIGKILL |
+| Catchable vs uncatchable | split as above | C07, C09, C10, F3–F5 (exit 2); C- and E-series 127 | native CLI MB-58 controls, SIGKILL |
 | Gate A identity | unchanged; N03 stays in the runtime package | not touched | identity unchanged in journal |
-| Real GPU operator | registered op runs; float32/float16 outputs bit-equal across load modes; graph capture + 3 replays = eager | G1–G3, G5, G6 (output hashes, no memory comparison) | full detector/graph/serial/double-buffer replays |
+| Real GPU operator | registered op runs; float32/float16 outputs bit-equal across load modes; graph capture + 3 replays = eager | GPU smoke r3 G1–G3, G5, G6 (output hashes, no memory comparison) | full detector/graph/serial/double-buffer replays |
 | Report scope | aggregate stays `hashed_before_load` | — | per-object N03 label per owner decision D-N03-2 |
 
 ## Experiments
@@ -242,14 +261,14 @@ Raw evidence is under `results/549_s2_2_n03/` (gitignored, local-only); the evid
 
 - `prefix_installed`: the untouched installed auditor;
 - `prefix_proto_r1`: the revision 1 prototype;
-- `prefix_proto`: the revision 2 prototype.
+- `prefix_proto`: the revision 3 prototype.
 
 Each has a hardlinked `lib/vendor` from the #536 evidence tree and a fresh N03 copy per case. Every
 run uses `/lib64/ld-linux-x86-64.so.2 --library-path <prefix>/lib/vendor --audit <auditor>` with
 `PATH=/usr/bin:/bin`, as the launcher does. A shell hook at a fixed stage (`after_open`,
 `after_hash`, `after_load`) places mutations inside the race window deterministically.
 
-**Matrix r6** (42/42; inputs unchanged in every case). Revision 2 rows:
+**Matrix r7** (45/45; inputs unchanged in every case). Revision 3 rows:
 
 | Case | Exit | Auditor or host message |
 |:--|--:|:--|
@@ -274,12 +293,14 @@ run uses `/lib64/ld-linux-x86-64.so.2 --library-path <prefix>/lib/vendor --audit
 | F1 second load, revision 1 host | 3 | same handle returned; second plan's bytes not loaded |
 | F2 second load, memfd kept open, no registry | 127 | new load, foreign source refused by the auditor |
 | F3 second load, different SHA, registry | 2 | `operator already loaded with different bytes` |
-| F4 second load, same SHA, registry | 0 | verified operator reused |
+| F4 second load, same SHA, foreign path, registry | 2 | `operator already loaded from another source path` |
 | F5 second load, descriptor number reused, post-check | 2 | `loaded object is not the verified memfd` |
+| F6 second load, same SHA, same path, registry | 0 | verified operator reused |
+| E8 ordinary file named `libplugin.so (deleted)`, path mode | 127 | compatibility restriction (E7: main accepts) |
 
-**GPU smoke r2** (6/6) runs under `tools/resctl.py run --wait gpu0` on an RTX 5070 Ti Laptop,
-sm_120, driver 617.42. G1 (installed, path), G2 (revision 2, path), G3 (revision 2, proposed,
-post-check), G5 (installed, proposed) and G6 (revision 1, proposed) all produce:
+**GPU smoke r3** (6/6) runs under `tools/resctl.py run --wait gpu0` on an RTX 5070 Ti Laptop,
+sm_120, driver 617.42. G1 (installed, path), G2 (revision 3, path), G3 (revision 3, proposed,
+device+inode post-check), G5 (installed, proposed) and G6 (revision 1, proposed) all produce:
 
 - eager float32 output `03f283f1…0be9` and float16 output `7a5a3331…bc2b`;
 - three CUDA graph replays equal to eager.
@@ -297,8 +318,8 @@ MOT or qualified parity.
 - **r5 F2.** The prediction was a host post-check refusal; the auditor refused first, because a
   kept-open `M` makes the second load genuine. F5 isolates the post-check.
 
-Runner and probe bytes of r1/r2/r4/r5 are partly not retained; their summaries record the probe and
-auditor hashes.
+r6/GPU r2 (revision 2) passed 42/42 and 6/6 and are retained. Runner and probe bytes of
+r1/r2/r4/r5 are partly not retained; their summaries record the probe and auditor hashes.
 
 ## Known limits
 
@@ -306,12 +327,20 @@ auditor hashes.
   mappings are refused. Such hosts (seccomp, SELinux, AppArmor, `vm.memfd_noexec=2`) are
   **UNVERIFIED**; this host has `vm.memfd_noexec=0`. The refusal is catchable only when the
   failing call returns an error.
-- The auditor now reads `/proc/self/maps` for every object. A mapped path with characters the
-  kernel escapes would not equal its `realpath` and would be refused (fail closed).
+- The auditor now reads `/proc/self/maps` for every object. Compatibility restrictions (fail
+  closed):
+  - a mapped path with characters the kernel escapes does not equal its `realpath`;
+  - an ordinary file whose name ends in ` (deleted)` is refused (E8);
+  - an object whose `l_ld` is not in a file-backed mapping is refused (untested; the frozen N03's
+    `PT_DYNAMIC` is file-backed).
+- Ordinary path-classified objects are identified by mapped path plus inode, without the device
+  (overlayfs). Path plus inode is not a universal identifier across filesystems; no in-scope
+  bypass is demonstrated. The operator memfd is identified by device plus inode.
 - `link_map` and `dladdr` names for N03 become `/proc/self/fd/<M>`, and `/proc/self/maps` shows
   `/memfd:saccade-n03:src-fd=<S> (deleted)`. Readers that match N03 by its path (LD_DEBUG evidence
   readers, report fields that echo the mapped name) must adapt.
-- Residuals of I2 (findings 2 and 4) stay as stated. D-N03-5 can narrow finding 2 for opens.
+- Residuals of P2/I2 (round 1 findings 2 and 4, round 2 finding A) stay as stated. D-N03-5 can
+  narrow finding 2 for opens; D-N03-6 records owner acceptance otherwise.
 - The prototype auditor is a research build. Phase 2 changes `shipping/src/loader_audit.c` and
   `detector_host.cpp`, so the installed package becomes **UNVERIFIED** until a separately
   authorized re-pin, and runtime identity coordinates move.
@@ -324,8 +353,9 @@ auditor hashes.
 - Refuse an operator whose RUNPATH or RPATH contains `$ORIGIN` (required, since a memfd load would
   change its expansion).
 - Tests:
-  - auditor pytest real-loader cases mirroring C02–C17, E3, E6 and the vDSO/overlay positives;
-  - native Gate B tests for host refusals, registry and post-check;
+  - auditor pytest real-loader cases mirroring C02–C17, E3, E6, E8 and the vDSO/overlay positives;
+  - a unit test of the maps parser, including an overlong record;
+  - native Gate B tests for host refusals, the registry (F3/F4/F6) and the post-check (F5);
   - native CLI controls for catchable exit 2/failed and uncatchable 127/SIGKILL running/null;
   - a GPU manifest and legacy positive;
   - serial, double-buffer, graph and seven-sequence replays;
@@ -333,7 +363,7 @@ auditor hashes.
 
 ## Owner decisions requested
 
-- **D-N03-1.** Accept P-N03 revision 2 (host sequence, registry, post-check and auditor rules) as
+- **D-N03-1.** Accept P-N03 revision 3 (host sequence, registry, post-check and auditor rules) as
   the Phase 2 design.
 - **D-N03-2.** Per-object N03 scope after Phase 2 evidence. Recommendation: `loaded_buffer` (the
   loader maps the sealed copy of the verified buffer). The aggregate stays `hashed_before_load`
@@ -345,6 +375,8 @@ auditor hashes.
 - **D-N03-5.** Optionally have the host refuse a source path that is not the runtime package's
   fixed operator path. This is defense in depth for finding 2; it depends on runtime-root
   derivation.
+- **D-N03-6.** Without D-N03-5, accept the residual that provenance is an audit-time observation
+  (as on main), not a record of the path used at open.
 
 Not included: S2-3, allowlist approvals, model or weight or N03 byte changes, re-pin, #547
 licensing, public release or signing, V5 qualification or benchmarks, and launcher/root policy.

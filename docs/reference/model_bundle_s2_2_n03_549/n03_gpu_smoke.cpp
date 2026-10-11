@@ -19,6 +19,7 @@
 #include <openssl/evp.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <torch/torch.h>
 #include <unistd.h>
 
@@ -119,7 +120,7 @@ int main(int argc, char** argv) {
                 char perm[8];
                 if (std::sscanf(line, "%lx-%lx %7s %lx %x:%x %lu", &lo, &hi, perm, &off, &maj, &mnr, &ino) == 7 &&
                     reinterpret_cast<uintptr_t>(lm->l_ld) >= lo && reinterpret_cast<uintptr_t>(lm->l_ld) < hi) {
-                    ok = ino == static_cast<unsigned long>(ms.st_ino);
+                    ok = ino == static_cast<unsigned long>(ms.st_ino) && maj == major(ms.st_dev) && mnr == minor(ms.st_dev);
                     break;
                 }
             }
