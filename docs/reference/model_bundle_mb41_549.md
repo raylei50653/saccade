@@ -148,7 +148,9 @@ What F-1 has to meet:
     reviewed, like the N03 pin or the TR-1b allowlist. A list carried in the caller-controlled
     lineage or manifest could authorize `aten::from_file` itself at `checksum_matched`.
 
-The design choice is the owner's.
+The owner approved F-1 on 2026-10-12: option (b), a runtime-owned allowlist, fail-closed and
+narrowed to what N02 needs. It is implemented in
+[F-1: TorchScript head admission](model_bundle_mb41_f1_549.md). MB-41 stays OPEN until F-2.
 
 **F-2 (after F-1): land the candidate.** Only after F-1 establishes condition 2 with option (b)
 or an equivalent runtime-owned policy, not merely when its tests pass:

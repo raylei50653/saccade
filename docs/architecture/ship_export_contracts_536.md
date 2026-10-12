@@ -20,7 +20,7 @@
 CC-536-01-02 其餘部分仍只是 `accepted target`，整張卡沒有完成：
 
 - 正式 shipping policy 要求 `expected_source_verified`，也就是 installed launcher 預設（S2-3）；
-- 整體 `load_verification.byte_scope=loaded_buffer` 與 MB-41 結案（S2-2）：逐物件已具備；依 owner 條件式批准做了條件核對，條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1），所以 MB-41 維持 OPEN（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）。
+- 整體 `load_verification.byte_scope=loaded_buffer` 與 MB-41 結案（S2-2）：逐物件已具備；依 owner 條件式批准做了條件核對，條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1），所以 MB-41 維持 OPEN（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）。F-1（head admission）在 source level 封住 G-1（[F-1 紀錄](../reference/model_bundle_mb41_f1_549.md)）；整體提升與結案留給獨立的 F-2。
 
 source-level implemented 不代表 runtime、GPU、installed package 或 production qualification 已完成。需求批准不等於設計批准，設計批准也不等於實作已驗證。
 
@@ -227,7 +227,7 @@ flowchart TB
   **沒有實作**的部分：
 
   - 強制 policy，也就是 installed launcher 預設要求 `expected_source_verified`（#549 S2-3）；
-  - 整體 `load_verification.byte_scope=loaded_buffer`（#549 S2-2）：逐物件已具備，整體值仍固定 `hashed_before_load`，MB-41 維持 OPEN，條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）。
+  - 整體 `load_verification.byte_scope=loaded_buffer`（#549 S2-2）：逐物件已具備，整體值仍固定 `hashed_before_load`，MB-41 維持 OPEN。條件核對時條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）；F-1 在 source level 封住 G-1（[F-1 紀錄](../reference/model_bundle_mb41_f1_549.md)），整體提升與結案等 F-2。
 
   production allowlist 是空的，所以目前沒有任何 shipping bundle 能達到 `expected_source_verified`。CC-536-01-02 整張卡仍是 `accepted target`。
 
@@ -344,6 +344,8 @@ flowchart TB
       - 條件 3 整體不符合：現有測試與負控制在候選實作上全部通過（shipping ctest 22/22、CLI suites 656 passed／0 skipped、六個 mutant 都被抓到），但沒有 G-1 的負控制。
       - 最小後續：F-1，Gate B 拒絕可讀取 archive 外 bytes 的 head，四個重現案例都作為負控制。載入前：只接受 ZIP 格式，拒絕 scripted `__setstate__`。載入後：走訪所有 method 的 block、Subgraph attribute 與被呼叫的函式。允許哪些 op：denylist 只算緩解、不能據以結案；op allowlist 必須由 runtime 擁有（內建並經審查，類似 N03 pin），不能由 caller 可控的 lineage／manifest 提供。設計由 owner 決定；F-2 只在 F-1 確立條件 2 之後才執行，不是只看測試通過。F-1 之後才重用候選實作（`feat/549-mb41-aggregate-loaded-buffer`，未提出 merge）並重新捕捉座標。
       - 不變：S2-2 標籤（PARTIAL）、legacy 模式、V5、installed package、`distribution.status`、`equivalence`。
+    - **Owner 裁決（2026-10-12，session 內）**：批准 F-1，採 runtime-owned allowlist 與 fail-closed，範圍限於 N02 實際需要的 TorchScript 功能；載入前若無法證明解序列化路徑安全就拒絕，不靠載入後的掃描補救；allowlist 固定在 runtime 原始碼，綁定審查過的 LibTorch 版本與實作座標，manifest／lineage 不得擴充；四個 G-1 重現都以 hash 自洽的替代 head 作負控制，N02 為正控制。Legacy 不改（維持 §4.1）、S2-2 維持 PARTIAL、F-2 等 F-1 驗證後以獨立 PR 處理；過時註解隨下一個 shipping PR（即 F-1）修正。
+    - **F-1（source-level，本段隨其 PR 寫入）**：Gate B 在 `torch::jit::load` 前後各做一次 head admission（[F-1 紀錄](../reference/model_bundle_mb41_f1_549.md)）。載入前只看核對過的 bytes：ZIP 格式、record 白名單、以 TorchScript parser 解析每個 code record 且不得定義 `__setstate__`、逐 opcode 讀 pickle 並限制 GLOBAL（不得有 custom class 或 code 未定義的 class）。載入後逐一走訪 compilation unit 的每個 function（含巢狀 block 與 Subgraph，不跑任何 pass）：每個 node 必須是 N02 的 28 個審查過的 operator 之一，或是靜態解析到 head 自己 function 的呼叫。四個 G-1 head 都被拒（exit 2、`load_verification` failed、不跑推論、sidecar 不存在也不影響結果），N02 照常通過。本機證據：CPU ctest 63 checks、Gate B GPU ctest 171 checks、CLI 8 tests、13 個 mutant 全部被抓到。MB-41 仍 OPEN、整體 `byte_scope` 仍 `hashed_before_load`，等 F-2。
     - Qualified GPU parity（V5）**`UNRESOLVED`**：host driver 是 `617.42`，要求 `616.92`，負控制 `caught=false`。MB-52（新 loader 下的 A_L parity）未取得 qualification。
     - Installed package **`UNVERIFIED`**。[entrypoint pin](../../shipping/entrypoint_pin.json) 仍是 `e0eab2f7` 建置的 entrypoint（`fbab8b79…`），比 N03 pin 舊；`check_shipping_bundle.py` 的 log 工具還不理解 memfd 載入（§17.9）。兩者都要等 package re-pin。
     - Runtime equivalence `unproven`；`distribution.status=local-only`。

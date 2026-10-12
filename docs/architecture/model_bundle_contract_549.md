@@ -20,7 +20,7 @@
   - 第 5 節中標為 S2-1 的 fail-closed 規則；
   - S2-2：engine、head、N03 各自從核對過的 bytes 載入（逐物件 `loaded_buffer`），manifest 模式的版本、SM 與 TRT I/O gate（VL3 的大部分）。
 - **仍是 accepted target、未實作或待裁決**：
-  - S2-2：整體 `load_verification.byte_scope=loaded_buffer` 與 MB-41 結案：條件核對後維持 OPEN，條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）；
+  - S2-2：整體 `load_verification.byte_scope=loaded_buffer` 與 MB-41 結案：條件核對後維持 OPEN，條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）；F-1 在 source level 封住 G-1（[F-1 紀錄](../reference/model_bundle_mb41_f1_549.md)），整體提升與結案等 F-2；
   - S2-3：package 拆分、launcher 預設 policy；
   - S2-4：TR-2。
 - **可達性限制**：`expected_source_verified` 只在 manifest 模式、且 production allowlist 有對應的 approved entry 時才可能出現。production allowlist 是空的，所以現有 shipping bundle 達不到這一級。
@@ -228,7 +228,7 @@ lineage 是 producer 對 checkpoint、export 工具、structural check 和 runti
 |:--|:--|
 | G01 | manifest 模式的 TR-1b 機制和 policy flag 是 source-level implemented。production allowlist 是空的，所以沒有 bundle 能達到 `expected_source_verified`；legacy 模式仍只到 `checksum_matched` |
 | G02 | manifest 模式的 pairing、config bytes 綁定和 size 檢查是 source-level implemented |
-| G03 | 路徑限制是 source-level implemented。TOCTOU：S2-2 讓 engine、head、N03 各自從核對過的 bytes 載入（source-level）；整體 `byte_scope` 仍是 `hashed_before_load`，MB-41 仍 OPEN：條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)） |
+| G03 | 路徑限制是 source-level implemented。TOCTOU：S2-2 讓 engine、head、N03 各自從核對過的 bytes 載入（source-level）；整體 `byte_scope` 仍是 `hashed_before_load`，MB-41 仍 OPEN：條件核對時條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）；F-1 在 source level 封住 G-1（[F-1 紀錄](../reference/model_bundle_mb41_f1_549.md)），整體提升等 F-2 |
 | G04 | S2-2 source-level implemented：Gate A 版本 gate，Gate B 的 SM 與 TRT I/O 比對（MB-43..45） |
 | G05 | 未實作（S2-3）。allowlist 隨現行 package 定義安裝，但 installed package 沒有 re-pin，**UNVERIFIED** |
 | G06 | 不變 |

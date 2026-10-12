@@ -10,6 +10,7 @@
 | [model_bundle_s2_2_549.md](model_bundle_s2_2_549.md) | #549 S2-2：engine／head 從 buffer 載入、manifest 模式的版本／SM／TRT I/O gate 的 source-level 實作（[#582](https://github.com/raylei50653/saccade/pull/582) merged）與分層驗證紀錄（[evidence](model_bundle_s2_2_549.evidence.json)）；S2-2 PARTIAL |
 | [model_bundle_s2_2_n03_offline_proposal_549.md](model_bundle_s2_2_n03_offline_proposal_549.md) | #549 S2-2 N03：P-N03 rev 3d 離線 admission＋compiled pin 提案（owner 已接受 O-N03-1..3） |
 | [model_bundle_s2_2_n03_phase2_549.md](model_bundle_s2_2_n03_phase2_549.md) | #549 S2-2 N03 Phase 2：sealed-memfd operator 載入的實作與證據（[#584](https://github.com/raylei50653/saccade/pull/584) merged，[evidence](model_bundle_s2_2_n03_phase2_549.evidence.json)）；MB-41 OPEN、整體 `hashed_before_load` |
+| [model_bundle_mb41_f1_549.md](model_bundle_mb41_f1_549.md) | #549 MB-41 F-1：Gate B 的 TorchScript head admission（載入前封閉解序列化路徑、載入後以 runtime-owned 的 N02 operator allowlist 走訪所有 function）；四個 G-1 重現成為負控制；MB-41 仍 OPEN，等 F-2 |
 | [model_bundle_mb41_549.md](model_bundle_mb41_549.md) | #549 MB-41：owner 條件式批准的三個條件核對；條件 2 未滿足（G-1，head 的 TorchScript 可在載入或推論時讀取外部 bytes），MB-41 維持 OPEN；最小後續 F-1／F-2 |
 | [native_identity_observability_549.md](native_identity_observability_549.md) | #549 S2-1a：legacy checksum identity 的 source-level 實作（[#572](https://github.com/raylei50653/saccade/pull/572) merged）、六項 binding／SHA source、journal v2／report v4 與分層驗證紀錄；非 installed package re-pin |
 | [ci_timing_baseline_509.md](ci_timing_baseline_509.md) | #509 前段：remote main/PR CI job/step、cache 與本機 pytest/build 的可追溯耗時基線；不承載跨 Issue 排程 |
