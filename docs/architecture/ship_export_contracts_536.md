@@ -20,7 +20,7 @@
 CC-536-01-02 其餘部分仍只是 `accepted target`，整張卡沒有完成：
 
 - 正式 shipping policy 要求 `expected_source_verified`，也就是 installed launcher 預設（S2-3）；
-- 整體 `load_verification.byte_scope=loaded_buffer` 與 MB-41 結案（S2-2）：逐物件已具備；依 owner 條件式批准做了條件核對，條件 2 未滿足：head 的 TorchScript 反序列化可讀取未經 hash 的外部 bytes（G-1），所以 MB-41 維持 OPEN（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）。
+- 整體 `load_verification.byte_scope=loaded_buffer` 與 MB-41 結案（S2-2）：逐物件已具備；依 owner 條件式批准做了條件核對，條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1），所以 MB-41 維持 OPEN（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）。
 
 source-level implemented 不代表 runtime、GPU、installed package 或 production qualification 已完成。需求批准不等於設計批准，設計批准也不等於實作已驗證。
 
@@ -227,7 +227,7 @@ flowchart TB
   **沒有實作**的部分：
 
   - 強制 policy，也就是 installed launcher 預設要求 `expected_source_verified`（#549 S2-3）；
-  - 整體 `load_verification.byte_scope=loaded_buffer`（#549 S2-2）：逐物件已具備，整體值仍固定 `hashed_before_load`，MB-41 維持 OPEN，條件 2 未滿足：head 的 TorchScript 反序列化可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）。
+  - 整體 `load_verification.byte_scope=loaded_buffer`（#549 S2-2）：逐物件已具備，整體值仍固定 `hashed_before_load`，MB-41 維持 OPEN，條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）。
 
   production allowlist 是空的，所以目前沒有任何 shipping bundle 能達到 `expected_source_verified`。CC-536-01-02 整張卡仍是 `accepted target`。
 
@@ -340,9 +340,9 @@ flowchart TB
     - **Owner 條件式批准（2026-10-12，session 內）**：原則上批准關閉 MB-41，並把整體 `byte_scope` 提升為 `loaded_buffer`。執行前必須確認三件事：operator、head、engine 涵蓋契約 4.1 要求的全部載入檔案；每個檔案實際載入的 bytes 就是 hash 驗證的 bytes，而且沒有未驗證的替代載入路徑；對應測試、負控制與 journal 一致性檢查全部通過。符合後以獨立小 PR 只改整體記錄與 MB-41 狀態；任一條件未滿足就維持 OPEN，並列出缺失、證據與最小後續任務。V5、package admission 與 `distribution.status` 維持原狀。本段只記錄這個決定；核對結果見下一項。
     - **條件核對結果（2026-10-12）：MB-41 維持 OPEN。** 證據見 [MB-41 條件核對](../reference/model_bundle_mb41_549.md)。
       - 條件 1 符合：shipping 只有 head、engine、operator 三個載入點，正是契約 4.1 列出的三個檔案。
-      - 條件 2 **不符合**：三個外層檔案的 loaded bytes 都等於 hash 過的 bytes；但 LibTorch 反序列化時會執行 scripted `__setstate__`，它可以用 `torch.from_file` 讀入不在 archive 內、未經 hash 的外部 bytes（G-1）。已重現：同一份 archive bytes，外部檔案改變，載入結果跟著改變。出貨的 head N02 沒有 `__setstate__` 或 `from_file`（診斷），但保證必須涵蓋 manifest 能綁定的任何 head。
+      - 條件 2 **不符合**：三個外層檔案的 loaded bytes 都等於 hash 過的 bytes；但 head 的 TorchScript 可以用 `aten::from_file` 讀入不在 archive 內、未經 hash 的外部 bytes（G-1）：LibTorch 反序列化時會執行 scripted `__setstate__`（G-1a），`forward` 也可以在每次推論時讀檔（G-1b）。兩者都已重現：archive bytes 相同，外部檔案改變，結果就跟著改變。出貨的 head N02 沒有 `__setstate__` 或 `from_file`（診斷），但保證必須涵蓋 manifest 能綁定的任何 head。
       - 條件 3 整體不符合：現有測試與負控制在候選實作上全部通過（shipping ctest 22/22、CLI suites 656 passed／0 skipped、六個 mutant 都被抓到），但沒有 G-1 的負控制。
-      - 最小後續：F-1，Gate B 拒絕可讀取 archive 外 bytes 的 head，並以重現案例作為負控制；做法（例如載入前拒絕 scripted `__setstate__`，或綁在 lineage／manifest 的 op allowlist）需要 owner 決定。F-1 之後才重用候選實作（`feat/549-mb41-aggregate-loaded-buffer`，未提出 merge）並重新捕捉座標。
+      - 最小後續：F-1，Gate B 拒絕可讀取 archive 外 bytes 的 head，兩條路徑都以重現案例作為負控制；G-1a 要在 `torch::jit::load` 之前拒絕 scripted `__setstate__`，G-1b 要在載入後檢查所有 method（denylist 或綁在 lineage／manifest 的 op allowlist），做法需要 owner 決定。F-1 之後才重用候選實作（`feat/549-mb41-aggregate-loaded-buffer`，未提出 merge）並重新捕捉座標。
       - 不變：S2-2 標籤（PARTIAL）、legacy 模式、V5、installed package、`distribution.status`、`equivalence`。
     - Qualified GPU parity（V5）**`UNRESOLVED`**：host driver 是 `617.42`，要求 `616.92`，負控制 `caught=false`。MB-52（新 loader 下的 A_L parity）未取得 qualification。
     - Installed package **`UNVERIFIED`**。[entrypoint pin](../../shipping/entrypoint_pin.json) 仍是 `e0eab2f7` 建置的 entrypoint（`fbab8b79…`），比 N03 pin 舊；`check_shipping_bundle.py` 的 log 工具還不理解 memfd 載入（§17.9）。兩者都要等 package re-pin。

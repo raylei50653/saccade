@@ -56,7 +56,7 @@ this page reproduces below.
 | Condition | Result | Evidence |
 |:--|:--|:--|
 | 1. Load files covered | **Met** for the three files that contract 4.1 names. In the shipping tree, `dlopen(`, `torch::jit::load(` and the `TRTEngine` constructors appear only at `detector_host.cpp` (head from a stream, engine from a pointer/size) and `operator_loader.cpp` (`/proc/self/fd/<M>`). Each runtime builds one `DetectorHost`. The pathname loaders under `src/perception/` are not reachable from shipping code. | `git grep` over `shipping/`, `src/`, `include/` |
-| 2. Loaded bytes = hashed bytes, no unverified alternative path | **Not met.** The outer bytes hold: head and engine come from one immutable hashed buffer, and the operator comes from a sealed, read-back memfd whose mapping is checked. **But loading the head can read bytes that were never hashed** (gap G-1 below). | `repro_from_file.log`, `codex_review_r1.md`. Outer-byte controls: `verified_model_bytes`, `model_bundle_gate_b`, `operator_loader` ctests and the N03 auditor suite |
+| 2. Loaded bytes = hashed bytes, no unverified alternative path | **Not met.** The outer bytes hold: head and engine come from one immutable hashed buffer, and the operator comes from a sealed, read-back memfd whose mapping is checked. **But the head's TorchScript can read bytes that were never hashed**, both while it loads and while it runs (gap G-1 below). | `repro_from_file.log`, `repro_forward_from_file.log`, `codex_review_r1.md`. Outer-byte controls: `verified_model_bytes`, `model_bundle_gate_b`, `operator_loader` ctests and the N03 auditor suite |
 | 3. Tests, negative controls, journal consistency | **Not met as a whole.** Everything that exists passes on the candidate, but there is no negative control for G-1, so the controls do not cover condition 2. | Candidate runs below |
 
 Candidate runs (local, gpu0 lease; CI runs neither GPU nor real-binary CLI tests):
@@ -67,18 +67,20 @@ Candidate runs (local, gpu0 lease; CI runs neither GPU nor real-binary CLI tests
 - full pre-push 5671 passed. Its one failure (`test_dali_pipeline`) was a missing worktree
   dataset link; it passes (12/12) once the link exists.
 
-## Gap G-1: TorchScript deserialization can read external, unverified bytes
+## Gap G-1: the head's TorchScript can read external, unverified bytes
 
-**Mechanism.** LibTorch runs a scripted `__setstate__` while it deserializes a module. That
-method can call `torch.from_file(path, …)`. The C++ `torch::jit::load(std::istream&)` that
-Gate B uses goes through the same import code, so Gate B is affected too. The bytes read this
-way:
+`aten::from_file` is a scriptable op that reads a file named at run time. Two paths use it:
 
-- are not part of the hashed archive;
-- are not among the head's parameters or buffers;
-- are read before any graph check of Gate B runs.
+- **G-1a, at load.** LibTorch runs a scripted `__setstate__` (of a module or a scripted class)
+  while it deserializes the archive. The C++ `torch::jit::load(std::istream&)` that Gate B uses
+  goes through the same import code. The read happens before any Gate B check, and the bytes
+  are neither in the hashed archive nor among the head's parameters or buffers.
+- **G-1b, at run time.** `forward`, or any method it calls, can read a file on every inference.
+  The op does appear in the inlined forward graph that Gate B already walks
+  (`detector_host.cpp`). That walk refuses `prim::PythonOp` and the Python scan op, but not
+  `aten::from_file`.
 
-**Reproduction** (`repro_from_file.py`, Torch 2.11, entirely in memory):
+**Reproduction of G-1a** (`repro_from_file.py`, Torch 2.11, entirely in memory):
 
 1. Save a module whose `__setstate__` reads a sidecar file containing `60.0`.
 2. Load it from an in-memory buffer (archive sha256 `1dd5b309…`). It restores `w = [60.0]`.
@@ -86,6 +88,10 @@ way:
    `w = [7.0]`.
 
 The parameter and buffer lists are empty in both loads.
+
+**Reproduction of G-1b** (`repro_forward_from_file.py`): one loaded module's `forward` returns
+`[60.0]`, and after the sidecar is rewritten the same module returns `[7.0]`. The inlined
+forward graph contains `aten::from_file`.
 
 **Scope.**
 
@@ -102,17 +108,21 @@ The parameter and buffer lists are empty in both loads.
 ## Minimal follow-up
 
 **F-1 (blocks MB-41): head closure in Gate B.** Gate B refuses (exit 2, `load_verification`
-failed) any head whose TorchScript can read bytes outside its archive. The repro becomes the
-negative control in the GPU ctest and the CLI suite.
+failed) any head whose TorchScript can read bytes outside its archive, on both paths. Both
+repros become negative controls in the GPU ctest and the CLI suite. A refusal after the load
+still meets the MB-41 row ("the loaded bytes are the hashed bytes, or exit 2"): no inference
+runs.
 
-The design choice is the owner's:
+Each design has two parts, one per path. The choice is the owner's:
 
-- **(a) Refuse any scripted `__setstate__`**, checked in the archive's code entries **before**
-  `torch::jit::load`. That is the earliest point; after the load, the external read has already
-  happened. Narrow and simple.
-- **(b) An op allowlist over every method of every submodule**, bound to the lineage or the
-  manifest. Stronger, but it is a new contract field.
-- **(c) A denylist of known file-reading ops.** Least work, but it can never be shown complete.
+- **G-1a, before `torch::jit::load`.** Refuse any scripted `__setstate__` (module or class),
+  found in the archive's code entries. A post-load check cannot stop this read, because it has
+  already happened.
+- **G-1b, after the load**, over every method of every submodule and class:
+  - **(a)** a denylist of file-reading ops (`aten::from_file` and similar). Least work, but it
+    can never be shown complete;
+  - **(b)** an op allowlist bound to the lineage or the manifest. Stronger, but it is a new
+    contract field.
 
 **F-2 (after F-1): land the candidate.** Rebase `69476d4b` onto F-1 and recapture the
 coordinate. Rerun the shipping ctest, the CLI suites, the mutants and pre-push, then close MB-41
@@ -139,6 +149,8 @@ All files are local-only, under `results/549_mb41/` (gitignored).
 | `review/repro_from_file.log` | `534ca8ae2f281776c44360a67d3bfa1d56655f0bc783c89b2db6d65878190514` |
 | `review/scan_head.py` | `fdd17673696d9e71ae50d5209c7a6dc7a29d0113e2fc8d7fe24b409c5b68ecec` |
 | `review/production_head_scan.log` | `b019305789472a3ef2b80859a321ecc557e9b0dd609df95763661252d39d63a5` |
+| `review/repro_forward_from_file.py` | `dd4ba683b7caa5f553e7a9921f05c5bfc56213f62475ed57d8206f6cb93368a5` |
+| `review/repro_forward_from_file.log` | `5544c2dd963fb01410661d2de55a584d324acd2c8394328358194866f2826c38` |
 | `ctest_shipping.log` (candidate) | `c957ee162bf3e38a5e03ecc538cc901528f517e507d9f33af1efad8b20463859` |
 | `cli_suites_69476d4b.log` (candidate) | `8b8bf2a6552f66ea3d1413152c45723f94783d3ac33cd3c284dbbb3182f6d718` |
 | `mutation_cpu.log` (candidate) | `ff72d29891f108db911c1deae183f7ed1c28fdbe6ee45ae6fe2670759875ee71` |

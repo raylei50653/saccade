@@ -26,7 +26,7 @@
   - install 只寫入驗證過的 snapshot（#586）。
 - **仍是 accepted target、未實作或待裁決**：
   - D1 的 package 拆分，以及 D4 的 installed launcher 預設改成 `expected_source_verified`，兩者都屬 S2-3。
-  - D5 的整體宣稱：`load_verification.byte_scope` 仍固定 `hashed_before_load`；提升為 `loaded_buffer` 與 MB-41 結案經條件核對後未執行，條件 2 未滿足：head 的 TorchScript 反序列化可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）。
+  - D5 的整體宣稱：`load_verification.byte_scope` 仍固定 `hashed_before_load`；提升為 `loaded_buffer` 與 MB-41 結案經條件核對後未執行，條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）。
   - TR-2 延後。
 - **未驗證**：qualified V5 是 **UNRESOLVED**，installed package 是 **UNVERIFIED**（entrypoint 尚未 re-pin），equivalence 是 `unproven`。manifest 模式 MOT text 相等只是 diagnostic，不是 parity。`distribution.status=local-only`。
 

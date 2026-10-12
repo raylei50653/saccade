@@ -11,7 +11,7 @@ passed 8/8. The #585 hardening followed in [#586](https://github.com/raylei50653
 (merge `793c5d56ad6be2d0f85c98112dc63ae7948f4bec`). The status after merge is written only in
 [CC-536-01-02 S2-2 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-2): the per-object scope is `loaded_buffer` for all three objects, but MB-41 stays **OPEN**,
 S2-2 stays **PARTIAL** and the aggregate scope stays `hashed_before_load`. The check under the
-owner's conditional approval of 2026-10-12 kept MB-41 open: TorchScript deserialization can read
+owner's conditional approval of 2026-10-12 kept MB-41 open: the head's TorchScript can read
 unverified external bytes ([MB-41 condition check](model_bundle_mb41_549.md), gap G-1). The rest of this page is the candidate record as reviewed.
 
 **Status (as reviewed): Draft implementation candidate. Not merged.** Until it is merged and main CI passes:
