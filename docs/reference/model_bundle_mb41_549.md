@@ -1,0 +1,146 @@
+<!-- doc-status: active -->
+<!-- doc-promotion: none -->
+<!-- doc-date: 2026-10-12 -->
+<!-- doc-module: cross -->
+
+# #549 MB-41: condition check for the aggregate `loaded_buffer` (outcome: OPEN)
+
+**Outcome: condition 2 is not met. MB-41 stays OPEN, and the aggregate
+`load_verification.byte_scope` stays `hashed_before_load`.** No runtime change is landed.
+
+The status is written only in
+[CC-536-01-02 S2-2 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-2).
+This page records:
+
+- the owner's conditions;
+- what was checked and how;
+- the gap that keeps MB-41 open, with its evidence;
+- the minimal follow-up.
+
+## Authorization
+
+The owner gave a conditional approval in session on 2026-10-12. It approves, in principle,
+closing MB-41 and promoting the aggregate `byte_scope` to `loaded_buffer`, but only after three
+conditions are confirmed:
+
+1. Operator, head and engine cover every load file that
+   [contract 4.1](../architecture/model_bundle_contract_549.md#load-verification) requires.
+2. Each file's loaded bytes are the bytes whose hash was verified, and there is no unverified
+   alternative load path.
+3. The corresponding tests, negative controls and journal consistency checks all pass.
+
+If any condition fails, MB-41 stays OPEN, and the owner wants the gap, the evidence and the
+minimal follow-up listed. A historical owner hold is not a reason. Qualified V5, package
+admission and `distribution.status` keep their states.
+
+## How it was checked
+
+The check used a candidate implementation on branch `feat/549-mb41-aggregate-loaded-buffer`.
+It is pushed for reference but **not proposed for merge**. Its commits:
+
+- `69476d4b`: the change.
+  - `aggregate_load_byte_scope` gives `loaded_buffer` only in manifest mode, and only when all
+    three per-object scopes are `loaded_buffer`.
+  - Legacy mode keeps `hashed_before_load`.
+  - `RunCompletion` refuses `loaded_buffer` for a legacy run or a failed load.
+- `1d3c76af`: the coordinate republication. Only the implementation axis changes,
+  `942e0e3c…` → `78741f99…`, and `--mode attested` exits 0.
+- `0032ab38`: the documentation.
+
+An independent read-only Codex review then covered `03b6a82d..0032ab38`. It found no blocker
+in the writer logic, the coordinate or the status words. It found **one major issue**, which
+this page reproduces below.
+
+## Results
+
+| Condition | Result | Evidence |
+|:--|:--|:--|
+| 1. Load files covered | **Met** for the three files that contract 4.1 names. In the shipping tree, `dlopen(`, `torch::jit::load(` and the `TRTEngine` constructors appear only at `detector_host.cpp` (head from a stream, engine from a pointer/size) and `operator_loader.cpp` (`/proc/self/fd/<M>`). Each runtime builds one `DetectorHost`. The pathname loaders under `src/perception/` are not reachable from shipping code. | `git grep` over `shipping/`, `src/`, `include/` |
+| 2. Loaded bytes = hashed bytes, no unverified alternative path | **Not met.** The outer bytes hold: head and engine come from one immutable hashed buffer, and the operator comes from a sealed, read-back memfd whose mapping is checked. **But loading the head can read bytes that were never hashed** (gap G-1 below). | `repro_from_file.log`, `codex_review_r1.md`. Outer-byte controls: `verified_model_bytes`, `model_bundle_gate_b`, `operator_loader` ctests and the N03 auditor suite |
+| 3. Tests, negative controls, journal consistency | **Not met as a whole.** Everything that exists passes on the candidate, but there is no negative control for G-1, so the controls do not cover condition 2. | Candidate runs below |
+
+Candidate runs (local, gpu0 lease; CI runs neither GPU nor real-binary CLI tests):
+
+- shipping ctest 22/22;
+- the 12 CLI suites of the #584 chain: 656 passed, 0 skipped;
+- five CPU mutants and one end-to-end CLI mutant, all caught;
+- full pre-push 5671 passed. Its one failure (`test_dali_pipeline`) was a missing worktree
+  dataset link; it passes (12/12) once the link exists.
+
+## Gap G-1: TorchScript deserialization can read external, unverified bytes
+
+**Mechanism.** LibTorch runs a scripted `__setstate__` while it deserializes a module. That
+method can call `torch.from_file(path, …)`. The C++ `torch::jit::load(std::istream&)` that
+Gate B uses goes through the same import code, so Gate B is affected too. The bytes read this
+way:
+
+- are not part of the hashed archive;
+- are not among the head's parameters or buffers;
+- are read before any graph check of Gate B runs.
+
+**Reproduction** (`repro_from_file.py`, Torch 2.11, entirely in memory):
+
+1. Save a module whose `__setstate__` reads a sidecar file containing `60.0`.
+2. Load it from an in-memory buffer (archive sha256 `1dd5b309…`). It restores `w = [60.0]`.
+3. Rewrite the sidecar to `7.0` and load **the same archive bytes** again. It restores
+   `w = [7.0]`.
+
+The parameter and buffer lists are empty in both loads.
+
+**Scope.**
+
+- **Production head N02** (`mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt`, sha256
+  `1663ec97…`) is not affected. Diagnostic `scan_head.py`: none of the 102 archive code files
+  contains `__setstate__` or `from_file`, no loaded method is named `__setstate__`, and no node
+  kind contains `file`.
+- **The guarantee is still not met.** It must hold for every head that a manifest can bind,
+  including a self-consistent substitute at `checksum_matched`.
+- **Engine.** TensorRT's embedded host code needs an opt-in that this code does not enable.
+- **Operator.** It is a single compiled, reviewed digest (the N03 pin). What its own code does
+  at load time is fixed by that pin.
+
+## Minimal follow-up
+
+**F-1 (blocks MB-41): head closure in Gate B.** Gate B refuses (exit 2, `load_verification`
+failed) any head whose TorchScript can read bytes outside its archive. The repro becomes the
+negative control in the GPU ctest and the CLI suite.
+
+The design choice is the owner's:
+
+- **(a) Refuse any scripted `__setstate__`**, checked in the archive's code entries **before**
+  `torch::jit::load`. That is the earliest point; after the load, the external read has already
+  happened. Narrow and simple.
+- **(b) An op allowlist over every method of every submodule**, bound to the lineage or the
+  manifest. Stronger, but it is a new contract field.
+- **(c) A denylist of known file-reading ops.** Least work, but it can never be shown complete.
+
+**F-2 (after F-1): land the candidate.** Rebase `69476d4b` onto F-1 and recapture the
+coordinate. Rerun the shipping ctest, the CLI suites, the mutants and pre-push, then close MB-41
+in the status writer.
+
+**Unchanged by this check:**
+
+- the S2-2 label (PARTIAL);
+- legacy mode (`hashed_before_load`, contract 4.1);
+- V5 **UNRESOLVED** (driver `617.42` ≠ `616.92`);
+- installed package **UNVERIFIED**;
+- `distribution.status=local-only`;
+- `equivalence=unproven`.
+
+## Raw evidence
+
+All files are local-only, under `results/549_mb41/` (gitignored).
+
+| File | SHA-256 |
+|:--|:--|
+| `review/codex_prompt_r1.md` | `5f6e46598cf485b46b0f3cca91a50bb93f3f19b2bd69dac05626a78d47b2147e` |
+| `review/codex_review_r1.md` | `ea58e2b82b52961151812abe2623cc5c954cf269ed98cae144a33074a24b7049` |
+| `review/repro_from_file.py` | `515be846f51a43c6272d53393b92e54058f8c3998ffbacb9a83d11a1541357d2` |
+| `review/repro_from_file.log` | `534ca8ae2f281776c44360a67d3bfa1d56655f0bc783c89b2db6d65878190514` |
+| `review/scan_head.py` | `fdd17673696d9e71ae50d5209c7a6dc7a29d0113e2fc8d7fe24b409c5b68ecec` |
+| `review/production_head_scan.log` | `b019305789472a3ef2b80859a321ecc557e9b0dd609df95763661252d39d63a5` |
+| `ctest_shipping.log` (candidate) | `c957ee162bf3e38a5e03ecc538cc901528f517e507d9f33af1efad8b20463859` |
+| `cli_suites_69476d4b.log` (candidate) | `8b8bf2a6552f66ea3d1413152c45723f94783d3ac33cd3c284dbbb3182f6d718` |
+| `mutation_cpu.log` (candidate) | `ff72d29891f108db911c1deae183f7ed1c28fdbe6ee45ae6fe2670759875ee71` |
+| `mutation_cli.log` (candidate) | `a12328b05c0ce1e8b5174579ec788c454f3f2d28f882b4197403bebb6135e76a` |
+| `coordinate_capture.log` (candidate) | `40036e54ed1ac4b5a938dfdb8e40c99608da7aaa95425d2bfa43c4c853e25b67` |
