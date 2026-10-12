@@ -11,8 +11,9 @@ the logic in the ordinary pytest job:
   (one exec, no Python / Triton opens, the reference's loaded set) -- ELF
   readers replaced by fakes;
 * the SM list in ``shipping/CMakeLists.txt`` is the one the checker expects;
-* ``shipping/cmake/install_model_root.cmake`` copies the bound files and refuses
-  one whose sha256 is not the recorded one, and an attestation whose operator
+* ``shipping/cmake/install_model_root.cmake`` installs validated text snapshots,
+  hashes copied binaries before publishing them, refuses source replacements
+  that would install unvalidated bytes (#585), and an attestation whose operator
   library is not the runtime's N03 pin (#549 S2-2, P-N03 rev 3d; skips without
   ``cmake``).
 """
@@ -523,12 +524,14 @@ def _fake_repo(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     return repo, defs
 
 
-def _install(defs: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def _install(
+    defs: dict[str, str], script: Path = INSTALL_SCRIPT
+) -> subprocess.CompletedProcess[str]:
     cmake = shutil.which("cmake")
     if cmake is None:
         pytest.skip("cmake not available")
     return subprocess.run(
-        [cmake, *(f"-D{k}={v}" for k, v in defs.items()), "-P", str(INSTALL_SCRIPT)],
+        [cmake, *(f"-D{k}={v}" for k, v in defs.items()), "-P", str(script)],
         capture_output=True,
         text=True,
     )
@@ -549,6 +552,156 @@ def test_install_model_root_copies_the_bound_files(tmp_path: Path) -> None:
         "models/yolo/head.pt",
         "models/yolo/lineage.json",
     ]
+    for installed in dest.rglob("*"):
+        if installed.is_file():
+            assert (
+                installed.read_bytes()
+                == (
+                    Path(defs["SACCADE_REPO_ROOT"]) / installed.relative_to(dest)
+                ).read_bytes()
+            )
+
+
+def _install_with_source_replacement(
+    tmp_path: Path,
+    defs: dict[str, str],
+    victim: str,
+    timing: str,
+    read_trigger: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Interpose on the real CMake file command at a deterministic I/O boundary.
+    The install script itself has no test hook and all reads/copies/hashes
+    still use CMake's built-in command (available as ``_file``)."""
+    wrapper = tmp_path / "mutate_install.cmake"
+    replacement = tmp_path / "replacement"
+    replacement.write_bytes(b"replaced during install\n")
+    marker = tmp_path / "mutation-fired"
+    wrapper.write_text(
+        """
+function(_replace_source)
+    _file(READ "${MUTATION_REPLACEMENT}" _replacement)
+    _file(WRITE "${MUTATE_SOURCE}" "${_replacement}")
+    _file(WRITE "${MUTATION_MARKER}" "${MUTATION_TIMING}")
+endfunction()
+
+function(file)
+    if(ARGV0 STREQUAL "READ" OR ARGV0 STREQUAL "SHA256")
+        _file("${ARGV0}" "${ARGV1}" "${ARGV2}")
+        set("${ARGV2}" "${${ARGV2}}" PARENT_SCOPE)
+        get_property(_read_snapshot GLOBAL PROPERTY MUTATION_SNAPSHOT)
+        if(ARGV0 STREQUAL "READ" AND MUTATION_TIMING STREQUAL "after_read"
+           AND (ARGV1 STREQUAL MUTATION_READ_TRIGGER OR ARGV1 STREQUAL _read_snapshot))
+            _replace_source()
+        endif()
+    elseif(ARGV0 STREQUAL "COPY_FILE" OR ARGV0 STREQUAL "RENAME")
+        if(ARGV0 STREQUAL "COPY_FILE" AND ARGV1 STREQUAL MUTATE_SOURCE
+           AND MUTATION_TIMING STREQUAL "before_copy")
+            _replace_source()
+        endif()
+        _file(${ARGV})
+        if(ARGV0 STREQUAL "COPY_FILE" AND ARGV1 STREQUAL MUTATION_READ_TRIGGER)
+            set_property(GLOBAL PROPERTY MUTATION_SNAPSHOT "${ARGV2}")
+        endif()
+        if(ARGV3 STREQUAL "RESULT")
+            set("${ARGV4}" "${${ARGV4}}" PARENT_SCOPE)
+        endif()
+        if(ARGV0 STREQUAL "COPY_FILE" AND ARGV1 STREQUAL MUTATE_SOURCE
+           AND MUTATION_TIMING STREQUAL "after_copy")
+            _replace_source()
+        endif()
+    elseif(ARGV0 STREQUAL "WRITE")
+        _file(WRITE "${ARGV1}" "${ARGV2}")
+    else()
+        _file(${ARGV})
+    endif()
+endfunction()
+
+include("${INSTALL_SCRIPT}")
+"""
+    )
+    r = _install(
+        {
+            **defs,
+            "INSTALL_SCRIPT": str(INSTALL_SCRIPT),
+            "MUTATE_SOURCE": str(Path(defs["SACCADE_REPO_ROOT"]) / victim),
+            "MUTATION_TIMING": timing,
+            "MUTATION_READ_TRIGGER": str(
+                Path(defs["SACCADE_REPO_ROOT"]) / (read_trigger or victim)
+            ),
+            "MUTATION_REPLACEMENT": str(replacement),
+            "MUTATION_MARKER": str(marker),
+        },
+        script=wrapper,
+    )
+    assert marker.exists(), (r.stdout, r.stderr)
+    assert marker.read_text() == timing
+    return r
+
+
+@pytest.mark.parametrize(
+    "victim",
+    [
+        "configs/shipping/config.json",
+        "configs/shipping/att.json",
+        "models/yolo/lineage.json",
+    ],
+)
+def test_install_model_root_installs_the_validated_text_snapshot(
+    tmp_path: Path, victim: str
+) -> None:
+    repo, defs = _fake_repo(tmp_path)
+    source = repo / victim
+    doc = json.loads(source.read_bytes())
+    doc["note"] = "preserve ; ${literal}, 中文 and \\n"
+    snapshot = json.dumps(doc, ensure_ascii=False).encode() + b"\r\n"
+    source.write_bytes(snapshot)
+    if victim == "models/yolo/lineage.json":
+        att_path = repo / "configs/shipping/att.json"
+        att = json.loads(att_path.read_bytes())
+        att["frozen_lineage"]["sha256"] = _sha(snapshot)
+        att_path.write_text(json.dumps(att))
+    # Config has no content validator; replace it after the attestation read,
+    # when the snapshot must already have been captured for this install.
+    r = _install_with_source_replacement(
+        tmp_path,
+        defs,
+        victim,
+        "after_read",
+        read_trigger="configs/shipping/att.json" if "config.json" in victim else victim,
+    )
+    assert r.returncode == 0, r.stderr
+    assert source.read_bytes() != snapshot
+    assert (Path(defs["SACCADE_MODEL_ROOT_DEST"]) / victim).read_bytes() == snapshot
+
+
+@pytest.mark.parametrize(
+    "victim", ["models/yolo/head.pt", "models/yolo/backbone.engine", "build/libop.so"]
+)
+@pytest.mark.parametrize("timing", ["before_copy", "after_copy"])
+@pytest.mark.parametrize("existing", [False, True])
+def test_install_model_root_checks_the_copied_bytes(
+    tmp_path: Path, victim: str, timing: str, existing: bool
+) -> None:
+    repo, defs = _fake_repo(tmp_path)
+    snapshot = (repo / victim).read_bytes()
+    if existing:
+        r = _install(defs)
+        assert r.returncode == 0, r.stderr
+    r = _install_with_source_replacement(tmp_path, defs, victim, timing)
+    dest = Path(defs["SACCADE_MODEL_ROOT_DEST"])
+    installed = dest / victim
+    assert (repo / victim).read_bytes() != snapshot
+    assert not list(dest.rglob(".saccade-install-*"))
+    if timing == "before_copy":
+        assert r.returncode != 0, r.stdout
+        assert "sha256" in r.stderr and victim in r.stderr
+        if existing:
+            assert installed.read_bytes() == snapshot
+        else:
+            assert not installed.exists()
+    else:
+        assert r.returncode == 0, r.stderr
+        assert installed.read_bytes() == snapshot
 
 
 @pytest.mark.parametrize(
@@ -560,6 +713,9 @@ def test_install_model_root_refuses_a_changed_file(tmp_path: Path, victim: str) 
     r = _install(defs)
     assert r.returncode != 0
     assert "sha256" in r.stderr and victim in r.stderr
+    dest = Path(defs["SACCADE_MODEL_ROOT_DEST"])
+    assert not (dest / victim).exists()
+    assert not list(dest.rglob(".saccade-install-*"))
 
 
 def test_install_model_root_refuses_another_lineage(tmp_path: Path) -> None:
@@ -568,6 +724,47 @@ def test_install_model_root_refuses_another_lineage(tmp_path: Path) -> None:
     lineage.write_text(lineage.read_text() + " ")
     r = _install(defs)
     assert r.returncode != 0 and "lineage.json" in r.stderr
+    dest = Path(defs["SACCADE_MODEL_ROOT_DEST"])
+    assert not (dest / "models/yolo/lineage.json").exists()
+    assert not list(dest.rglob(".saccade-install-*"))
+
+
+@pytest.mark.parametrize(
+    "victim", ["models/yolo/lineage.json", "configs/shipping/att.json"]
+)
+@pytest.mark.parametrize("content", [b"{", b"{}"])
+def test_install_model_root_removes_snapshots_when_metadata_is_invalid(
+    tmp_path: Path, victim: str, content: bytes
+) -> None:
+    repo, defs = _fake_repo(tmp_path)
+    (repo / victim).write_bytes(content)
+    r = _install(defs)
+    assert r.returncode != 0
+    assert "invalid metadata" in r.stderr
+    dest = Path(defs["SACCADE_MODEL_ROOT_DEST"])
+    assert not list(dest.rglob(".saccade-install-*"))
+    assert not any(p.is_file() for p in dest.rglob("*"))
+
+
+@pytest.mark.parametrize(
+    "victim",
+    [
+        "configs/shipping/config.json",
+        "models/yolo/lineage.json",
+        "configs/shipping/att.json",
+    ],
+)
+def test_install_model_root_removes_snapshots_when_a_text_source_is_missing(
+    tmp_path: Path, victim: str
+) -> None:
+    repo, defs = _fake_repo(tmp_path)
+    (repo / victim).unlink()
+    r = _install(defs)
+    assert r.returncode != 0
+    assert "does not exist" in r.stderr
+    dest = Path(defs["SACCADE_MODEL_ROOT_DEST"])
+    assert not list(dest.rglob(".saccade-install-*"))
+    assert not any(p.is_file() for p in dest.rglob("*"))
 
 
 @pytest.mark.parametrize(
@@ -586,7 +783,9 @@ def test_install_model_root_refuses_an_operator_that_is_not_the_n03_pin(
     r = _install(defs)
     assert r.returncode != 0
     assert "is not the runtime's N03 pin" in r.stderr, r.stderr
-    assert not (Path(defs["SACCADE_MODEL_ROOT_DEST"]) / "build/libop.so").exists()
+    dest = Path(defs["SACCADE_MODEL_ROOT_DEST"])
+    assert not (dest / "build/libop.so").exists()
+    assert not list(dest.rglob(".saccade-install-*"))
 
 
 @pytest.mark.parametrize("built", [("e" * 64, "2"), (_sha(b"op"), "3")])

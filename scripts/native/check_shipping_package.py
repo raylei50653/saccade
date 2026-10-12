@@ -116,9 +116,9 @@ RUNTIME_IDENTITY = "docs/reference/runtime_identity.generated.json"
 # The runtime's N03 pin (#549 S2-2, P-N03 rev 3d): the one operator library the
 # entrypoint loads; the packaged operator must be it at the source commit.
 N03_OPERATOR_PIN = "shipping/n03_operator_pin.json"
-# A source commit whose shipping CMake names the pin compiles it into the
-# runtime; from then on the pin must be readable (read_n03_pin).
-N03_PIN_BUILD_MARKER = b"n03_operator_pin.json"
+# Only this last main before rev 3d (#584's base) and its ancestors may omit
+# the pin. All other commits require it, regardless of CMake text (#585).
+N03_PIN_PRE_REV3D_MAIN = "74f2f5cb1a3db8a1f42da48d533e3322f243d138"
 # The GPUs the package runs on: the operator library and the backbone engine
 # are sm_120 only (owner decision C-D2); the entrypoint carries more SASS.
 SUPPORTED_SM = ("sm_120",)
@@ -646,16 +646,30 @@ def authentication(requested: bool, verified: bool | None) -> dict[str, Any]:
 
 def read_n03_pin(repo_file: Callable[[str], bytes], commit: str) -> bytes | None:
     """The runtime's N03 pin text at `commit` (P-N03 rev 3d), or None for a
-    source commit whose shipping CMake compiles no pin (before rev 3d). Once
-    the build compiles the pin, a pin that cannot be read refuses: a failed
-    read is never taken for an older commit."""
-    if N03_PIN_BUILD_MARKER not in repo_file("shipping/CMakeLists.txt"):
-        return None
+    proven ancestor of the last pre-rev-3d main (including that main). Other
+    commits require a readable pin; unknown commits, incomplete history and
+    git errors refuse rather than granting the historical exception."""
+    try:
+        if _git("rev-parse", "--is-shallow-repository").strip() != "false":
+            raise PackageError(
+                "cannot determine N03 pin requirement from a shallow repository; fetch full history"
+            )
+        try:
+            _git("merge-base", "--is-ancestor", commit, N03_PIN_PRE_REV3D_MAIN)
+        except subprocess.CalledProcessError as e:
+            if e.returncode != 1:  # 1 means a known non-ancestor, not a git error.
+                raise
+        else:
+            return None
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise PackageError(
+            f"cannot determine N03 pin requirement at {commit[:12]}: git ancestry check failed"
+        ) from e
     try:
         return repo_file(N03_OPERATOR_PIN)
-    except subprocess.CalledProcessError as e:
+    except (OSError, subprocess.CalledProcessError) as e:
         raise PackageError(
-            f"{N03_OPERATOR_PIN} cannot be read at {commit[:12]}, whose build compiles it"
+            f"{N03_OPERATOR_PIN} cannot be read at {commit[:12]}, which requires the N03 pin"
         ) from e
 
 
