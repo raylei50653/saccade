@@ -24,9 +24,9 @@
   - D5 的不變式在逐物件層面：engine 和 head 從已 hash 的 buffer 載入（#582）；N03 依 owner 接受的 P-N03 rev 3d，以 compiled pin、sealed memfd 與 mapping 核對載入，auditor 不放寬，改以 kernel 的 mapping 記錄辨識物件（#584）。這個技術是 owner 另外接受的，不是本 ADR 批准的。
   - manifest 模式的 TRT、LibTorch、CUDA 版本 gate（Gate A），以及 SM gate 和 TRT I/O dtype 比對（Gate B）（#582）。
   - install 只寫入驗證過的 snapshot（#586）。
+  - D5 的整體宣稱：manifest 模式的 `load_verification.byte_scope` 由三個逐物件 scope 推導，三個都是 `loaded_buffer` 時寫 `loaded_buffer`（MB-41，[證據](../reference/model_bundle_mb41_549.md)）；legacy 模式依契約 4.1 維持 `hashed_before_load`。
 - **仍是 accepted target、未實作或待裁決**：
   - D1 的 package 拆分，以及 D4 的 installed launcher 預設改成 `expected_source_verified`，兩者都屬 S2-3。
-  - D5 的整體宣稱：`load_verification.byte_scope` 仍固定 `hashed_before_load`；提升為 `loaded_buffer` 與 MB-41 結案依 owner 條件式批准，另以獨立 PR 處理。
   - TR-2 延後。
 - **未驗證**：qualified V5 是 **UNRESOLVED**，installed package 是 **UNVERIFIED**（entrypoint 尚未 re-pin），equivalence 是 `unproven`。manifest 模式 MOT text 相等只是 diagnostic，不是 parity。`distribution.status=local-only`。
 
@@ -138,7 +138,7 @@ flowchart LR
 
 **S2-1 之後的對應**：GA2（VL0、VL1）和 T3（VL2）已有 source-level 實作。GB2 只實作了兩件事：從 resolved bindings 取路徑，以及寫 `load_verification`；「載入已 hash 的 bytes」和 SM／TRT／dtype 都屬 S2-2，仍未實作。N-M1 到 N-M5 的拆分發行流程尚未建立，屬 S2-3。這些都不是驗證宣稱，見[實作狀態](#implementation-status)。
 
-**S2-2 之後的對應**：GB2 的「載入已 hash 的 bytes」在三個物件各自成立，SM／dtype 比對與 GA2 的版本 gate 也已有 source-level 實作；整體 `byte_scope` 仍是 `hashed_before_load`（S2-2 PARTIAL）。N-M1 到 N-M5 仍未建立。見[實作狀態](#implementation-status)。
+**S2-2 之後的對應**：GB2 的「載入已 hash 的 bytes」在三個物件各自成立，SM／dtype 比對與 GA2 的版本 gate 也已有 source-level 實作；manifest 模式的整體 `byte_scope` 為 `loaded_buffer`（MB-41）；S2-2 標籤仍是 PARTIAL。N-M1 到 N-M5 仍未建立。見[實作狀態](#implementation-status)。
 
 **目標的信任根（D2）**：可信的 expected identity 是 allowlist 中 state 為 `approved` 的 entry，以 bundle manifest 檔案的 sha256 為鍵。allowlist 檔隨 runtime package 出貨，它的 sha256 在建置時編進 entrypoint。entrypoint 由 [entrypoint pin](../../shipping/entrypoint_pin.json) 釘住，並納入 runtime package 的 digest 和簽章。要讓 runtime 對替換的模型報出 `expected_source_verified`，就得連 pinned entrypoint 一起換掉，光換模型 bundle 做不到。這回答了 CC-536-01-02 要求的判準：expected 來源能不能和模型被同一個 caller 一起替換。
 

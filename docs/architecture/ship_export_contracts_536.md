@@ -15,12 +15,11 @@
   - Gate A（N-T2）；
   - legacy N-T3 `checksum_matched`（見 [CC-536-01-02 實作狀態](#cc-536-01-02-status)）；
   - #549 S2-1 的 manifest 模式 N-T3。這包括 `expected_source_verified` 的判定機制（只有 manifest 模式、且 production allowlist 有 approved entry 時可達；production allowlist 是空的）、`--require-identity` flag（預設 `none`），以及 Gate B `load_verification`（整體 `byte_scope` 最多 `hashed_before_load`）。見 [CC-536-01-02 S2-1 實作狀態](#cc-536-01-02-status-s2-1)。
-  - #549 S2-2 的 Gate B 強化：engine、head、N03 operator 各自從核對過的 bytes 載入（逐物件 `loaded_buffer`），以及 manifest 模式的版本、SM 與 TRT I/O gate。S2-2 仍是 **PARTIAL**。見 [CC-536-01-02 S2-2 實作狀態](#cc-536-01-02-status-s2-2)。
+  - #549 S2-2 的 Gate B 強化：engine、head、N03 operator 各自從核對過的 bytes 載入（逐物件 `loaded_buffer`），manifest 模式的整體 `load_verification.byte_scope=loaded_buffer`（MB-41），以及 manifest 模式的版本、SM 與 TRT I/O gate。S2-2 標籤仍是 **PARTIAL**（是否改變由 owner 決定）。見 [CC-536-01-02 S2-2 實作狀態](#cc-536-01-02-status-s2-2)。
 
 CC-536-01-02 其餘部分仍只是 `accepted target`，整張卡沒有完成：
 
 - 正式 shipping policy 要求 `expected_source_verified`，也就是 installed launcher 預設（S2-3）；
-- 整體 `load_verification.byte_scope=loaded_buffer` 與 MB-41 結案（S2-2）：逐物件已具備，提升整體值依 owner 條件式批准，另以獨立 PR 核對條件後處理。
 
 source-level implemented 不代表 runtime、GPU、installed package 或 production qualification 已完成。需求批准不等於設計批准，設計批准也不等於實作已驗證。
 
@@ -222,12 +221,11 @@ flowchart TB
   - **Gate A（N-T2）**：本段以下先記。
   - **legacy N-T3 `checksum_matched`**：見下方 [legacy identity（S2-1a）](#cc-536-01-02-status-n-t3)。
   - **manifest 模式 N-T3**：包括認可 expected 來源（TR-1b runtime allowlist）、`expected_source_verified` 判定、`--require-identity`，以及 Gate B `load_verification`。見下方 [S2-1](#cc-536-01-02-status-s2-1)。
-  - **Gate B 強化（S2-2，PARTIAL）**：engine、head、N03 各自從核對過的 bytes 載入；manifest 模式的版本、SM 與 TRT I/O gate。見下方 [S2-2](#cc-536-01-02-status-s2-2)。
+  - **Gate B 強化（S2-2，PARTIAL）**：engine、head、N03 各自從核對過的 bytes 載入，manifest 模式的整體 `byte_scope=loaded_buffer`（MB-41）；manifest 模式的版本、SM 與 TRT I/O gate。見下方 [S2-2](#cc-536-01-02-status-s2-2)。
 
   **沒有實作**的部分：
 
   - 強制 policy，也就是 installed launcher 預設要求 `expected_source_verified`（#549 S2-3）；
-  - 整體 `load_verification.byte_scope=loaded_buffer`（#549 S2-2）：逐物件已具備，整體值仍固定 `hashed_before_load`，提升與 MB-41 結案依 owner 條件式批准，另以獨立 PR 處理。
 
   production allowlist 是空的，所以目前沒有任何 shipping bundle 能達到 `expected_source_verified`。CC-536-01-02 整張卡仍是 `accepted target`。
 
@@ -318,7 +316,7 @@ flowchart TB
     - **Install 與 package（#586）**：
       - install 只寫入驗證過的 snapshot：config、attestation、lineage 各讀一次，用同一份 bytes 驗證後發布；binary 先複製到目的地的暫存檔，hash 相符才發布。
       - package checker 只對 `74f2f5cb` 與可證明的祖先免除 N03 pin；其他 commit 都要求可讀的 pin，unknown commit 與 shallow repository 一律拒絕。
-    - **Byte scope**：report 與 probe 的 `artifact_byte_scopes` 中，三個物件都是 `loaded_buffer`（逐物件診斷）。journal 與 report 的整體 `load_verification.byte_scope` **仍固定是 `hashed_before_load`**。格式仍是 journal v3／report v5。
+    - **Byte scope**：report 與 probe 的 `artifact_byte_scopes` 中，三個物件都是 `loaded_buffer`（逐物件診斷）。#582／#584／#586 時，journal 與 report 的整體 `load_verification.byte_scope` 仍固定是 `hashed_before_load`；MB-41 的變更（見下方）之後，manifest 模式改由三個逐物件 scope 推導。格式仍是 journal v3／report v5。
     - **寫入者與失敗語義**不變：identity 只由 Gate A 寫入。可捕捉的 Gate B 失敗 exit 2，寫 `failed`／null scope，保留 identity。auditor 拒絕（`_exit(127)`）與 SIGKILL 讓 journal 維持 `running`、`load_verification` 為 null。
   - **CI**：三個 PR 的 PR head 與 merge 後的 main 都是 8/8 SUCCESS，每個 run 的 headSha 都等於對應的 head 或 merge SHA。
     - #582：PR head [CI 38126463978](https://github.com/raylei50653/saccade/actions/runs/38126463978)＋[C++ 38126463979](https://github.com/raylei50653/saccade/actions/runs/38126463979)；main [CI 38128008627](https://github.com/raylei50653/saccade/actions/runs/38128008627)＋[C++ 38128008608](https://github.com/raylei50653/saccade/actions/runs/38128008608)。
@@ -336,8 +334,14 @@ flowchart TB
     - #586：focused pytest 168 passed，包括讀取與複製邊界之間的 source mutation。
   - **Checkpoint**：#582 已寫在 [#549](https://github.com/raylei50653/saccade/issues/549#issuecomment-6107622014) 與 [#536](https://github.com/raylei50653/saccade/issues/536#issuecomment-6107623660)。#584 與 #586 由本段補記。
   - **未驗證／未宣稱**：
-    - **MB-41 仍 OPEN，S2-2 仍 PARTIAL。** 三個載入物件現在都從核對過的 bytes 載入（source-level），也就是 [#549 契約 4.1](model_bundle_contract_549.md#load-verification) 的逐物件條件已經具備。但整體 `byte_scope` 仍固定 `hashed_before_load`。
-    - **Owner 條件式批准（2026-10-12，session 內）**：原則上批准關閉 MB-41，並把整體 `byte_scope` 提升為 `loaded_buffer`。執行前必須確認三件事：operator、head、engine 涵蓋契約 4.1 要求的全部載入檔案；每個檔案實際載入的 bytes 就是 hash 驗證的 bytes，而且沒有未驗證的替代載入路徑；對應測試、負控制與 journal 一致性檢查全部通過。符合後以獨立小 PR 只改整體記錄與 MB-41 狀態；任一條件未滿足就維持 OPEN，並列出缺失、證據與最小後續任務。V5、package admission 與 `distribution.status` 維持原狀。本段只記錄這個決定，不做條件判定；在獨立 PR merge 之前，MB-41 仍 OPEN、S2-2 仍 PARTIAL。
+    - **MB-41**：#582／#584／#586 時仍 OPEN；三個載入物件都已從核對過的 bytes 載入（source-level），但整體 `byte_scope` 仍固定 `hashed_before_load`。
+    - **Owner 條件式批准（2026-10-12，session 內）**：原則上批准關閉 MB-41，並把整體 `byte_scope` 提升為 `loaded_buffer`。執行前必須確認三件事：operator、head、engine 涵蓋契約 4.1 要求的全部載入檔案；每個檔案實際載入的 bytes 就是 hash 驗證的 bytes，而且沒有未驗證的替代載入路徑；對應測試、負控制與 journal 一致性檢查全部通過。符合後以獨立小 PR 只改整體記錄與 MB-41 狀態；任一條件未滿足就維持 OPEN，並列出缺失、證據與最小後續任務。V5、package admission 與 `distribution.status` 維持原狀。本段只記錄這個決定；條件判定見下一項。
+    - **MB-41 結案（source-level，隨該變更 merge 生效）**：三個條件逐項核對都符合，證據見 [MB-41 evidence page](../reference/model_bundle_mb41_549.md)。
+      - 條件 1：shipping 只有三個載入點（head、engine、operator），正是契約 4.1 列出的三個檔案。
+      - 條件 2：head 與 engine 從 hash 過的同一個不可變 buffer 載入；operator 從讀回核對過的 sealed memfd 載入，並核對 mapping。binary 沒有以路徑載入的 fallback，整體值只由驗證後設定的逐物件 scope 推導。
+      - 條件 3：shipping ctest 22/22；CLI suites 656 passed、0 skipped；五個 CPU mutant 與一個端到端 mutant 都被抓到；runtime coordinate 只有 implementation 軸改變（`942e0e3c…` → `78741f99…`），attested 檢查 exit 0。
+      - 結果：`aggregate_load_byte_scope` 只在 manifest 模式、且三個逐物件 scope 都是 `loaded_buffer` 時給 `loaded_buffer`；legacy 模式依契約 4.1 維持 `hashed_before_load`，`RunCompletion` 拒絕 legacy 或失敗載入的 `loaded_buffer`。
+      - 不變：S2-2 標籤（PARTIAL；S2-2 的四列 MB-41、MB-43..45 都已 source-level 實作，標籤是否改變由 owner 在合併時決定）、V5、installed package、`distribution.status`、`equivalence`。merge SHA 與 main CI 在 merge 後回寫。
     - Qualified GPU parity（V5）**`UNRESOLVED`**：host driver 是 `617.42`，要求 `616.92`，負控制 `caught=false`。MB-52（新 loader 下的 A_L parity）未取得 qualification。
     - Installed package **`UNVERIFIED`**。[entrypoint pin](../../shipping/entrypoint_pin.json) 仍是 `e0eab2f7` 建置的 entrypoint（`fbab8b79…`），比 N03 pin 舊；`check_shipping_bundle.py` 的 log 工具還不理解 memfd 載入（§17.9）。兩者都要等 package re-pin。
     - Runtime equivalence `unproven`；`distribution.status=local-only`。
@@ -417,6 +421,6 @@ Owner 欄寫的是 ledger 的 CAP accountable owner，以及語義的去向。ev
   1. Export safety：F1、frozen stem 保護、staging 與 publication commit、失敗注入測試（[#559](https://github.com/raylei50653/saccade/pull/559) merged，見 [CC-536-08-02 實作狀態](#cc-536-08-02-status)）；
   2. Completion：`run_id`、lock、journal、逐檔 temp→rename 的 txt、report 新 format，MOT 位元組不變，並檢查 `saccade_track_measurement`；狀態轉換的細節由 #537 擁有（[#562](https://github.com/raylei50653/saccade/pull/562) merged，見 [CC-536-01-01 實作狀態](#cc-536-01-01-status)；package re-pin 為[另行授權並驗證的切片](../reference/native_runtime_package_repin_536.md)）；
   3. Preflight：sha256 與輸入檢查移到 GPU 初始化之前，並用負控制證明不碰 CUDA（[#565](https://github.com/raylei50653/saccade/pull/565) merged；#565 本身只含 Gate A，該切片的 `identity.level` 維持 null，legacy N-T3 由 #572 加上（見第 4 項），見 [CC-536-01-02 實作狀態](#cc-536-01-02-status)；package re-pin 見[本機 package 驗證](../reference/native_runtime_package_repin_536.md)）；
-  4. Identity integration：等 #549 S1 決定可信來源後，才加上 `expected_source_verified` 與強制 policy。legacy `checksum_matched` 觀測已由 #549 S2-1a 先行（[#572](https://github.com/raylei50653/saccade/pull/572) merged，source-level，見 [N-T3 實作狀態](#cc-536-01-02-status-n-t3)）。#549 S2-1 已加上 manifest 模式、`expected_source_verified` 判定與 `--require-identity`（[#576](https://github.com/raylei50653/saccade/pull/576) merged，source-level，見 [CC-536-01-02 S2-1 實作狀態](#cc-536-01-02-status-s2-1)）。#549 S2-2 已讓 engine、head、N03 各自從核對過的 bytes 載入，並加上 manifest 模式的版本、SM 與 TRT I/O gate（[#582](https://github.com/raylei50653/saccade/pull/582)、[#584](https://github.com/raylei50653/saccade/pull/584)、[#586](https://github.com/raylei50653/saccade/pull/586) merged，source-level，PARTIAL，見 [CC-536-01-02 S2-2 實作狀態](#cc-536-01-02-status-s2-2)）。強制 policy（installed launcher 預設，S2-3）、整體 `loaded_buffer` 與 MB-41 結案（S2-2）、approved allowlist 內容仍需各自的授權或裁決。
+  4. Identity integration：等 #549 S1 決定可信來源後，才加上 `expected_source_verified` 與強制 policy。legacy `checksum_matched` 觀測已由 #549 S2-1a 先行（[#572](https://github.com/raylei50653/saccade/pull/572) merged，source-level，見 [N-T3 實作狀態](#cc-536-01-02-status-n-t3)）。#549 S2-1 已加上 manifest 模式、`expected_source_verified` 判定與 `--require-identity`（[#576](https://github.com/raylei50653/saccade/pull/576) merged，source-level，見 [CC-536-01-02 S2-1 實作狀態](#cc-536-01-02-status-s2-1)）。#549 S2-2 已讓 engine、head、N03 各自從核對過的 bytes 載入，並加上 manifest 模式的版本、SM 與 TRT I/O gate（[#582](https://github.com/raylei50653/saccade/pull/582)、[#584](https://github.com/raylei50653/saccade/pull/584)、[#586](https://github.com/raylei50653/saccade/pull/586) merged，source-level，PARTIAL，見 [CC-536-01-02 S2-2 實作狀態](#cc-536-01-02-status-s2-2)）。強制 policy（installed launcher 預設，S2-3）、approved allowlist 內容仍需各自的授權或裁決。MB-41 與 manifest 模式的整體 `loaded_buffer` 見 [S2-2 實作狀態](#cc-536-01-02-status-s2-2)。
 - 除了第 4 項，這一批不需要等其餘 19 項 REQ，也不需要先完成 #549 S1。
 - 其他 profile（public-library、eval、online-service）、B2 設定與控制面、C／D／E 的視圖，之後沿用同一份圖源與 ID 規則擴充，不另開一份總圖。
