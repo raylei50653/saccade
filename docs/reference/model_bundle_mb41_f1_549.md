@@ -9,8 +9,10 @@
 after the load, using a runtime-owned allowlist. All five G-1 controls are refused (exit 2,
 `load_verification` failed), and N02 is admitted. The loader-default and NamedTuple class-kind
 findings were fixed; the completed independent read-only re-review has no findings. Those results
-cover F-1 alone and do not verify the new integration. On merged main, **MB-41 stays OPEN** and
-aggregate `load_verification.byte_scope` remains `hashed_before_load` pending final-head landing.
+cover F-1 alone and do not verify the new integration. **F-1 + F-2 landed on main** with
+[#591](https://github.com/raylei50653/saccade/pull/591) merge `c78f1319`: MB-41 is CLOSED within the bounded condition-2 declaration,
+and manifest aggregate `load_verification.byte_scope` is `loaded_buffer` only when all three
+objects report it. See [Landing on main](#landing-on-main-2026-10-12).
 
 The status is written only in
 [CC-536-01-02 S2-2 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-2).
@@ -27,9 +29,9 @@ The gap itself is in [MB-41 condition check](model_bundle_mb41_549.md#gap-g-1-th
 The [confirmed #590 Owner decision](https://github.com/raylei50653/saccade/issues/590#issuecomment-6123060172)
 supersedes the separate-F-2 plan below. [#591](https://github.com/raylei50653/saccade/pull/591)
 now prepares F-1 + F-2 together; [#592](https://github.com/raylei50653/saccade/pull/592) must be
-recaptured and independently reviewed against the integrated content. Both remain Draft and
-unmerged. Requirement decision, implementation candidate, local verification and merged status
-are separate claims.
+recaptured and independently reviewed against the integrated content. Requirement decision,
+implementation candidate, local verification and merged status are separate claims; the
+landing is recorded in [Landing on main](#landing-on-main-2026-10-12).
 
 MB-41 condition 2 is now: **「能成功載入的 head，其載入 bytes 等於 hash 過的 bytes，
 且通過 runtime 擁有的准入政策；其他 head 一律 exit 2。」** F-1 is a fail-closed admission
@@ -269,10 +271,10 @@ is evidence for the findings below, not a completed `NO BLOCKER` verdict.
 
 ## Merged baseline and remaining scope
 
-- **Main MB-41 OPEN; aggregate `hashed_before_load`.** F-1 + F-2 in #591 is the unmerged
-  candidate for scoped MB-41 closure and manifest aggregate promotion after final validation,
-  independent implementation/coordinate review, required CI and Owner final-head merge authorization.
-  Old F-1 heads and the old #592 coordinate remain historical evidence only.
+- **Main: MB-41 CLOSED within the bounded condition-2 declaration.** F-1 + F-2 landed with #591
+  (see [Landing on main](#landing-on-main-2026-10-12)). Manifest aggregate is `loaded_buffer` only
+  for a successful load in which all three per-object scopes are `loaded_buffer`; legacy stays
+  `hashed_before_load`. Old F-1 heads and the old #592 coordinate remain historical evidence only.
 - **Unchanged:** S2-2 PARTIAL. The legacy mode §4.1 contract. V5 **UNRESOLVED**. The installed
   package **UNVERIFIED** (the entrypoint pin predates F-1). `distribution.status=local-only`.
   `equivalence=unproven`.
@@ -369,7 +371,7 @@ canonical-plus-archive review boundary; it does not authorize merge into main.
 | `compare_final_coordinate.py` | `f51f88775baaf5f28a8fdc4f757313aba2fb08e8336b553d6c503c923da15839` |
 
 
-## Integrated F-1 + F-2 verification (2026-10-12, unmerged)
+## Integrated F-1 + F-2 verification (2026-10-12)
 
 **Chosen path: F-1 + F-2.** The eight-file `69476d4b` candidate contributed seven necessary
 file changes as `ebef9c7c`; its `verified_model_bytes.hpp` comment was already corrected by F-1.
@@ -467,3 +469,21 @@ All integration files below are local-only in `results/549_f1/integration_202610
 | `source_review_43397451.md` | `0f0bfda0f629ee17852b9f396bca402c6c122e92d83754ae2a7eb5f406d10cc9` |
 | `coordinate_candidate_review_43397451.json` | `2fad81f0d05f4ea3182ae5f1a3868869249930a2ad387d57b82d58944cca87f6` |
 | `local_validation_final_43397451.json` | `98fd72442106d45bde76dfade437d745297ba3730bd1a1138fe8f04d03992169` |
+
+## Landing on main (2026-10-12)
+
+The Owner authorized merging the final heads, implementation
+`306efa4c1257801007b89e6fcd91e8e24cc87072` and coordinate `03bffa1e5bd24466b1bc3dadf135ff7cb4a4fbf6`.
+[#591](https://github.com/raylei50653/saccade/pull/591) merged as merge commit `c78f1319b4170f31cf172b1861f7c8dcc2155f0e`, parents `5da12874` + `306efa4c`; its tree
+`323fd98a7355e623adb3416cc2dc9fb76f6efd2f` equals both reviewed delivery trees. The reviewed
+coordinate bytes landed atomically with it. [#592](https://github.com/raylei50653/saccade/pull/592) was closed without merging and
+stays the two-file coordinate review record. Required checks at the merge SHA: [main CI 7/7](https://github.com/raylei50653/saccade/actions/runs/38249645847) + [main C++ 1/1](https://github.com/raylei50653/saccade/actions/runs/38249645844), SUCCESS.
+
+Within the bounded condition-2 declaration of
+[contract 4.1](../architecture/model_bundle_contract_549.md#mb41-head-admission), **MB-41 is CLOSED**.
+Manifest aggregate `load_verification.byte_scope` is `loaded_buffer` only for a successful load in
+which the operator, head and engine each report `loaded_buffer`; failed loads have no byte scope
+and legacy mode stays `hashed_before_load`. Remote CI does not run GPU or real-entrypoint CLI; that
+evidence is the local integration check above. Unchanged: S2-2 **PARTIAL**, V5 **UNRESOLVED**,
+installed package **UNVERIFIED** (the entrypoint pin predates F-1), `distribution.status=local-only`,
+`equivalence=unproven`. No package re-pin, S2-3 or release is part of this landing.

@@ -20,7 +20,7 @@
 CC-536-01-02 其餘部分仍只是 `accepted target`，整張卡沒有完成：
 
 - 正式 shipping policy 要求 `expected_source_verified`，也就是 installed launcher 預設（S2-3）；
-- 整體 `load_verification.byte_scope=loaded_buffer` 與 MB-41 結案（S2-2）：main 仍是 OPEN／`hashed_before_load`。方向已由 [#590 Owner 最終裁決](https://github.com/raylei50653/saccade/issues/590#issuecomment-6123060172) 確認，採 [#591](https://github.com/raylei50653/saccade/pull/591) F-1＋F-2 有界整合與 [#592](https://github.com/raylei50653/saccade/pull/592) coordinate 獨立審查，未合併候選及這次驗證狀態見下方 [canonical 段落](#cc-536-01-02-status-s2-2)。
+- S2-2 的其餘部分（S2-2 仍 PARTIAL）。MB-41 已依 [#590 Owner 最終裁決](https://github.com/raylei50653/saccade/issues/590#issuecomment-6123060172) 的有界宣告結案：[#591](https://github.com/raylei50653/saccade/pull/591) F-1＋F-2 合併後，manifest 模式整體 `load_verification.byte_scope` 在三項物件 scope 都成立時為 `loaded_buffer`，見下方 [canonical 段落](#cc-536-01-02-status-s2-2)。
 
 source-level implemented 不代表 runtime、GPU、installed package 或 production qualification 已完成。需求批准不等於設計批准，設計批准也不等於實作已驗證。
 
@@ -227,7 +227,6 @@ flowchart TB
   **main 尚未合併**的部分：
 
   - 強制 policy，也就是 installed launcher 預設要求 `expected_source_verified`（#549 S2-3）；
-  - 整體 `load_verification.byte_scope=loaded_buffer`（#549 S2-2）：main 的整體值仍是 `hashed_before_load`，MB-41 OPEN。#590 已確認有界契約與 F-1＋F-2 整合方向；#591 是未合併候選，既有歷史證據與本次驗證分開，見 [S2-2 canonical 狀態](#cc-536-01-02-status-s2-2)。
 
   production allowlist 是空的，所以目前沒有任何 shipping bundle 能達到 `expected_source_verified`。CC-536-01-02 整張卡仍是 `accepted target`。
 
@@ -293,10 +292,11 @@ flowchart TB
     - caller 若能寫 runtime prefix，就能連 entrypoint 一起換掉，這只能靠 package digest 與簽章發現（ADR 028 §3）。
     - F3、durability、網路／WSL 的限制照舊。
 - <a id="cc-536-01-02-status-s2-2"></a>**Gate B loaded bytes 與相容性 gate（#549 S2-2）`implemented`（source-level），S2-2 仍為 PARTIAL**：
-  - **Merge**（三個 PR 依序合併，皆為 merge commit，merge tree 與 head tree 相同）：
+  - **Merge**（四個 PR 依序合併，皆為 merge commit，merge tree 與 head tree 相同）：
     1. [#582](https://github.com/raylei50653/saccade/pull/582)：engine／head 從 buffer 載入與相容性 gate。merge `74f2f5cb1a3db8a1f42da48d533e3322f243d138`，parents `f63c9da41f2aa034a76311ab14a62ab69ec8c540`＋reviewed head `1f428c740f045c7c627667d82e75d7ba97af79d8`。coordinate review [#581](https://github.com/raylei50653/saccade/pull/581)（`79ffd527`）是它的祖先，隨之落地。
     2. [#584](https://github.com/raylei50653/saccade/pull/584)：N03 從 sealed memfd 載入（P-N03 rev 3d）。merge `4a79e50f4484fefa4d3f270a406eac016b229412`，parents `74f2f5cb`＋head `c73ff7c1fcd24c8c18b84b04180cca417be3703e`。
     3. [#586](https://github.com/raylei50653/saccade/pull/586)：修正 [#585](https://github.com/raylei50653/saccade/issues/585)。install 寫入驗證過的 snapshot，N03 pin 的例外改以 ancestry 判定。merge `793c5d56ad6be2d0f85c98112dc63ae7948f4bec`，parents `4a79e50f`＋head `e513986d739c5fd85815998f822b43177fa6c346`。
+    4. [#591](https://github.com/raylei50653/saccade/pull/591)：MB-41 F-1 head admission＋F-2 整體 scope（[#590 有界宣告](model_bundle_contract_549.md#mb41-head-admission)）。merge `c78f1319b4170f31cf172b1861f7c8dcc2155f0e`，parents `5da12874`＋Owner 授權的 head `306efa4c1257801007b89e6fcd91e8e24cc87072`，merge tree `323fd98a`。coordinate review [#592](https://github.com/raylei50653/saccade/pull/592)（`03bffa1e`，同 tree）未合併、關閉，其審查 bytes 隨 #591 atomic co-land。merge SHA 的 [main CI 7/7](https://github.com/raylei50653/saccade/actions/runs/38249645847)＋[main C++ 1/1](https://github.com/raylei50653/saccade/actions/runs/38249645844) SUCCESS。
   - **依據**：
     - 設計：[ADR 028 D5](../decisions/028-model-bundle-runtime-separation.md#decision-549-s1)（只接受不變式）、[#549 契約](model_bundle_contract_549.md)。
     - N03 技術：owner 在 session 中接受 P-N03 rev 3c（D-N03-1..6），之後再接受 rev 3d 修訂（O-N03-1..3），見 [offline admission proposal](../reference/model_bundle_s2_2_n03_offline_proposal_549.md)。設計與威脅模型在 Draft [#583](https://github.com/raylei50653/saccade/pull/583)，未 merge。
@@ -329,14 +329,14 @@ flowchart TB
     - #582：Codex 審過 implementation、coordinate 與最終 head，最後沒有 actionable findings。
     - #584：rev 3d 兩輪 Codex review，修正在 `8f6dbdcc`、`2fbd437e`、`8b020ec0`。owner 的 PR review 找到一項 P2（package checker 讀 pin 時 fail-open），於 `c73ff7c1` 修正；P3（install 的 TOCTOU，早於 #584）轉成 #585。
     - #586：審查找到一項（建立目錄失敗時繞過 snapshot 清理），於 `9764a6c8` 修正。
-  - **Runtime coordinate**：只有 implementation 軸改變：`1f50133b…`（S2-1）→ `bc378f68…`（#582）→ `5eb66833…`（#584）→ `942e0e3c…`（#586）。其餘四軸不變，`equivalence.state=unproven`。
+  - **Runtime coordinate**：只有 implementation 軸改變：`1f50133b…`（S2-1）→ `bc378f68…`（#582）→ `5eb66833…`（#584）→ `942e0e3c…`（#586）→ `c0a319fa…`（#591，coordinate 審查 #592）。其餘四軸不變，`equivalence.state=unproven`。
   - **本機證據**（只引用，不是 CI，也不是 qualified parity）：
     - #582：CPU ctest 12/12、GPU ctest 19/19；engine／head 從 buffer 載入（MB-41 的 engine／head 部分）、MB-43..45、MB-58、MB-60..62 的正負控制。
     - #584：GPU replay `gpu_8b020ec0240d`，七序列／5316 frames，raw section EXACT（no-trace detector `NOT_RUN`），MOT 與 trace hash 等於 #582 的 replay。replay observer 直接量到 operator 只從一個 memfd 映射，且其 bytes 是 N03。auditor 負控制 37/37，CLI suites 617 passed。
     - #586：focused pytest 168 passed，包括讀取與複製邊界之間的 source mutation。
   - **Checkpoint**：#582 已寫在 [#549](https://github.com/raylei50653/saccade/issues/549#issuecomment-6107622014) 與 [#536](https://github.com/raylei50653/saccade/issues/536#issuecomment-6107623660)。#584 與 #586 由本段補記。
   - **未驗證／未宣稱**：
-    - **main：MB-41 仍 OPEN，S2-2 仍 PARTIAL。** 三個載入物件都從核對過的 bytes 載入（source-level），逐物件 `artifact_byte_scopes` 三項都是 `loaded_buffer`；整體仍是 `hashed_before_load`。下列歷史證據不認證 #591 的新整合版本。
+    - **main：MB-41 依有界宣告 CLOSED（上方 Merge 第 4 項），S2-2 仍 PARTIAL。** 三個載入物件都從核對過的 bytes 載入（source-level）；manifest 模式成功載入且三項逐物件 scope 都是 `loaded_buffer` 時，整體為 `loaded_buffer`，legacy 維持 `hashed_before_load`。遠端 CI 不跑 GPU 與真 entrypoint CLI，這部分只有本機證據（[F-1／F-2 紀錄](../reference/model_bundle_mb41_f1_549.md#landing-on-main-2026-10-12)）。下列歷史證據不認證整合版本。
     - **歷史 Owner 條件式批准（2026-10-12，session 內）**：原則上批准關閉 MB-41，並把整體 `byte_scope` 提升為 `loaded_buffer`。當時要求 operator、head、engine 涵蓋契約 4.1 全部載入檔案；各檔案實際載入 bytes 等於 hash 過的 bytes，沒有未驗證的替代路徑；對應測試、負控制與 journal 一致性檢查全部通過。下列核對保留其當時的範圍；條件 2 與整合路徑已由後述 #590 最終裁決更新。
     - **歷史條件核對（2026-10-12）：MB-41 維持 OPEN。** 證據見 [MB-41 條件核對](../reference/model_bundle_mb41_549.md)，不是本次 F-1＋F-2 的驗證。
       - 條件 1 符合：shipping 只有 head、engine、operator 三個載入點，正是契約 4.1 列出的三個檔案。
@@ -347,7 +347,7 @@ flowchart TB
     - **需求已裁決（[#590 最終裁決](https://github.com/raylei50653/saccade/issues/590#issuecomment-6123060172)）**：MB-41 條件 2 改為「能成功載入的 head，其載入 bytes 等於 hash 過的 bytes，且通過 runtime 擁有的准入政策；其他 head 一律 exit 2。」適用於兩個 shipping entrypoint 的 Gate B head admission；aggregate `loaded_buffer` 只適用於 manifest 模式且三項逐物件 scope 都成立的成功載入。F-1 保留 N02 所需功能、綁 LibTorch `2.11.0+cu130` 的 runtime-owned fail-closed 准入政策；操作 allowlist 不是來源認證，不提升 Gate A identity，也不宣稱任意 TorchScript 安全。LibTorch 行為假設、既有 ctest 的 N02／五個 G-1 維護義務與退場條款見 [#549 有界契約](model_bundle_contract_549.md#mb41-head-admission)。
     - **候選已實作，採 F-1＋F-2**：[#591](https://github.com/raylei50653/saccade/pull/591) 保留 F-1，移植 `69476d4b` 的必要變更。manifest 成功載入且三個物件的 scope 全為 `loaded_buffer` 時，候選 writer 才給 aggregate `loaded_buffer`；legacy 保持 `hashed_before_load`，failed load 不得提升。舊候選的 coordinate、舊完成狀態與舊測試結果不移植為新驗證。
       - **本次本地驗證與獨立審查**：新整合版本的受測 head／內容、ctest、GPU／Gate B、兩個 entrypoint CLI、mutation controls、完整 pre-push、required remote CI 與唯讀審查分層記在 [F-1／F-2 紀錄](../reference/model_bundle_mb41_f1_549.md)。本段不把下列舊 head 的 PASS 當作本次 PASS，也不把 skipped／unavailable 算作通過。
-      - **尚未合併**：[#592](https://github.com/raylei50653/saccade/pull/592) 必須對內容收斂後的新候選 fresh capture，依 [coordinate runbook §3.2](../reference/runbooks/runtime_identity_republication.md#32-review-boundary-與-landing-的關係) 保留獨立 stacked review surface；審後併入 #591，準備 atomic co-land。仍待 Owner 綁定最終 implementation／coordinate head 的 merge 授權；Owner 授權本身不提升 main 狀態；最終 head 實際合併且該 merge 的 required main CI 通過後，才可回寫 MB-41 結案與 manifest aggregate `loaded_buffer`。
+      - **已合併**（見上方 main 狀態；以下保留合併前的流程紀錄）：[#592](https://github.com/raylei50653/saccade/pull/592) 必須對內容收斂後的新候選 fresh capture，依 [coordinate runbook §3.2](../reference/runbooks/runtime_identity_republication.md#32-review-boundary-與-landing-的關係) 保留獨立 stacked review surface；審後併入 #591，準備 atomic co-land。仍待 Owner 綁定最終 implementation／coordinate head 的 merge 授權；Owner 授權本身不提升 main 狀態；最終 head 實際合併且該 merge 的 required main CI 通過後，才可回寫 MB-41 結案與 manifest aggregate `loaded_buffer`。
       - **退路與維護**：F-2 若需擴大工程，依 #590 改採 F-1 單獨落地、MB-41 以明列限制結案、aggregate 維持 `hashed_before_load`，逐物件 scopes 保留權威；不另排獨立 F-2。此退路不豁免 F-1 驗證。長期只沿用既有 ctest，在升級 LibTorch／新增 op 的同一 PR 更新政策與測試；F-1 成本超過價值時可移除並同步降低宣告。
     - **歷史 F-1 候選（source-level，`c9f8b053` 的驗證與審查）**：Gate B 在 `torch::jit::load` 前後各做一次 head admission（[F-1 紀錄](../reference/model_bundle_mb41_f1_549.md)）。載入前只看核對過的 bytes：ZIP 格式、record 白名單、以 TorchScript parser 解析每個 code record；只接受以 `Module` 為 base 的 class，先拒絕 NamedTuple、Enum、Interface、ModuleInterface、沒有 base 及其他 class kind，再套用 Module metadata 例外；不得定義 `__setstate__`、任何參數預設值或 class constant 等會求值的 class-body 值；逐 opcode 讀 pickle 並限制 GLOBAL（不得有 custom class 或 code 未定義的 class）。N02 的 106 個 class declaration 全部是 Module。載入後逐一走訪 compilation unit 的每個 function（含巢狀 block 與 Subgraph，不跑任何 pass）：每個 node 必須是 N02 的 28 個審查過的 operator 之一，或是靜態解析到 head 自己 function 的呼叫。
       - **審查與修正**：前幾次獨立審查因 model capacity 或 content-risk 錯誤中斷，沒有完整的無阻斷結論。第一個部分結果指出 LibTorch 載入時會執行參數預設值、`Final` class constants 和 NamedTuple defaults，於 `a90ef994` 加入拒絕與第五種 G-1 `default` 控制。後續獨立靜態審查指出 `a90ef994` 的 blocker：Module metadata 例外也套用到 NamedTuple 的 `__parameters__`／`__buffers__` 欄位，仍可能在載入時求值。source fix `c9f8b053` 先限定 Module class kind，新增六個無副作用的 class-kind 負控制與 K16；最終獨立唯讀 re-review 在 `c9f8b053364562efdc80349e710590aa8cc74134` 完成，No findings／NO BLOCKER；審查者獨立跑過 CPU ctest 82 checks／0 failures。這不是 GitHub APPROVED review，也不授予 merge 權限。
