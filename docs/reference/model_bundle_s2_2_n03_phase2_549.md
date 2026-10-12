@@ -86,8 +86,11 @@ legal operator library:
   snapshot it copies against to be that pin. A pinned entrypoint (`SACCADE_SHIPPING_ENTRYPOINT`)
   is not checked: the current one predates the pin until a package re-pin.
   The package checker compares the packaged operator with the pin at the source commit
-  (`check_n03_pin`). Once that commit's shipping CMake compiles the pin, a pin that cannot be read
-  refuses (`read_n03_pin`); only a commit whose build compiles no pin has none to check.
+  (`check_n03_pin`). After #585, `read_n03_pin` permits no pin only for
+  `74f2f5cb1a3db8a1f42da48d533e3322f243d138` (the last pre-rev-3d main) and its
+  proven ancestors (`git merge-base --is-ancestor`). Every other commit requires
+  a readable pin, regardless of its CMake text; unknown commits, unavailable
+  history and shallow repositories refuse.
 - `saccade_track`'s POST_BUILD (`cmake/check_n03_pin.cmake`) requires the pin's digest in the
   binary, and `saccade_shipping_n03_pin_test` requires the generated pin to equal the record.
 - One loader object: CPU tests link a fixture pin

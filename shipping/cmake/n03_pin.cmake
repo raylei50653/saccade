@@ -4,9 +4,11 @@
 #
 #   saccade_read_n03_pin(<pin file> <out sha256> <out bytes>)
 #       a 64-hex sha256 and a positive byte count, or FATAL_ERROR;
-#   saccade_require_attested_n03_pin(<sha256> <bytes> <attestation JSON text> <context>)
+#   saccade_require_attested_n03_pin(<sha256> <bytes> <attestation JSON text> <context> [<out error>])
 #       the realization attestation's op_library must be that pin (the caller
 #       passes the text it read, so it checks the snapshot it uses).
+#       With <out error>, return the refusal text (empty on success) so the
+#       install caller can clean up its temporary snapshots before refusing.
 #
 # Script mode (tests): cmake -DPIN=<pin file> -DATTESTATION=<attestation> -P n03_pin.cmake
 function(saccade_read_n03_pin pin_file out_sha out_bytes)
@@ -23,10 +25,16 @@ function(saccade_read_n03_pin pin_file out_sha out_bytes)
 endfunction()
 
 function(saccade_require_attested_n03_pin sha bytes attestation context)
+    set(_error "")
     string(JSON _att_sha ERROR_VARIABLE _e1 GET "${attestation}" op_library sha256)
     string(JSON _att_bytes ERROR_VARIABLE _e2 GET "${attestation}" op_library bytes)
     if(_e1 OR _e2 OR NOT _att_sha STREQUAL sha OR NOT _att_bytes STREQUAL bytes)
-        message(FATAL_ERROR "${context}: the attestation's op_library (${_att_sha}, ${_att_bytes} bytes) is not the runtime's N03 pin (${sha}, ${bytes} bytes; shipping/n03_operator_pin.json)")
+        set(_error "${context}: the attestation's op_library (${_att_sha}, ${_att_bytes} bytes) is not the runtime's N03 pin (${sha}, ${bytes} bytes; shipping/n03_operator_pin.json)")
+    endif()
+    if(ARGC GREATER 4)
+        set(${ARGV4} "${_error}" PARENT_SCOPE)
+    elseif(_error)
+        message(FATAL_ERROR "${_error}")
     endif()
 endfunction()
 

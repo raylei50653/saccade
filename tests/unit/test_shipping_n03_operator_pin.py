@@ -10,9 +10,10 @@ install refuse a pin that is not the tracked realization attestation's
 * ``shipping/cmake/n03_pin.cmake`` (the rule configure and install apply)
   refuses a pin of another digest or size than the attestation's, and a
   malformed pin (skips without ``cmake``);
-* the package checker refuses a packaged operator that is not the pin, and,
-  end to end through ``manifest_head`` on a fake source commit, an unreadable
-  pin once the commit's build compiles it (never taken for an older commit);
+* the package checker grants the no-pin exception only to proven ancestors
+  of the last pre-rev-3d main, with real-git history controls (#585); unknown
+  commits, shallow history and unreadable required pins refuse, including
+  end to end through ``manifest_head`` with synthetic source files;
 * where the build has the attested operator library, its bytes are the pin's.
 """
 
@@ -121,13 +122,127 @@ def test_the_package_checker_refuses_an_operator_that_is_not_the_pin() -> None:
             pkg.check_n03_pin("share/saccade/build/op.so", "e" * 64, bad)
 
 
-# ── manifest_head end to end, on a fake source commit ─────────────────────────
+# ── real-git history: only proven pre-rev-3d ancestors may omit the pin ────────
 
-_COMMIT = "1" * 40
 _OP_SHA = hashlib.sha256(b"op").hexdigest()
+_PIN = json.dumps({"sha256": _OP_SHA, "bytes": 2}).encode()
 
 
-def _source(cmake: bytes, pin: Any) -> dict[str, bytes]:
+@pytest.fixture
+def pin_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[ModuleType, dict[str, str], Path]:
+    repo = tmp_path / "history"
+    repo.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(repo), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    git("init", "-q", "--initial-branch=main")
+    git("config", "user.name", "N03 test")
+    git("config", "user.email", "n03-test@example.invalid")
+    git("config", "commit.gpgsign", "false")
+
+    def commit(label: str) -> str:
+        (repo / "history.txt").write_text(label)
+        git("add", ".")
+        git("commit", "-q", "-m", label)
+        return git("rev-parse", "HEAD")
+
+    commits = {"ancestor": commit("ancestor"), "boundary": commit("boundary")}
+    commits["descendant"] = commit("descendant without a pin")
+    (repo / "shipping").mkdir()
+    (repo / "shipping/n03_operator_pin.json").write_bytes(_PIN)
+    commits["pinned"] = commit("descendant with a pin")
+    git("switch", "-q", "-c", "sibling", commits["ancestor"])
+    commits["sibling"] = commit("sibling without a pin")
+    pkg = _package_checker()
+    monkeypatch.setattr(pkg, "REPO", repo)
+    monkeypatch.setattr(pkg, "N03_PIN_PRE_REV3D_MAIN", commits["boundary"])
+    return pkg, commits, repo
+
+
+@pytest.mark.parametrize("label", ["ancestor", "boundary"])
+def test_package_pin_exception_requires_proven_pre_rev_3d_ancestry(
+    pin_history: tuple[ModuleType, dict[str, str], Path], label: str
+) -> None:
+    pkg, commits, _ = pin_history
+    commit = commits[label]
+    assert pkg.read_n03_pin(lambda path: pkg._git_show(commit, path), commit) is None
+
+
+@pytest.mark.parametrize("label", ["descendant", "sibling"])
+def test_package_refuses_a_non_ancestor_without_a_readable_pin(
+    pin_history: tuple[ModuleType, dict[str, str], Path], label: str
+) -> None:
+    pkg, commits, _ = pin_history
+    commit = commits[label]
+    with pytest.raises(pkg.PackageError, match="cannot be read.*requires the N03 pin"):
+        pkg.read_n03_pin(lambda path: pkg._git_show(commit, path), commit)
+
+
+def test_package_reads_a_non_ancestors_pin(
+    pin_history: tuple[ModuleType, dict[str, str], Path],
+) -> None:
+    pkg, commits, _ = pin_history
+    commit = commits["pinned"]
+    assert pkg.read_n03_pin(lambda path: pkg._git_show(commit, path), commit) == _PIN
+
+
+def test_package_refuses_an_unknown_source_commit_even_with_a_readable_pin(
+    pin_history: tuple[ModuleType, dict[str, str], Path],
+) -> None:
+    pkg, _, _ = pin_history
+    with pytest.raises(pkg.PackageError, match="git ancestry check failed"):
+        pkg.read_n03_pin(lambda _: _PIN, "1" * 40)
+
+
+def test_package_refuses_an_unavailable_history_boundary(
+    pin_history: tuple[ModuleType, dict[str, str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pkg, commits, _ = pin_history
+    monkeypatch.setattr(pkg, "N03_PIN_PRE_REV3D_MAIN", "1" * 40)
+    with pytest.raises(pkg.PackageError, match="git ancestry check failed"):
+        pkg.read_n03_pin(lambda _: _PIN, commits["pinned"])
+
+
+def test_package_refuses_a_shallow_repository_even_with_both_commits_available(
+    pin_history: tuple[ModuleType, dict[str, str], Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pkg, commits, repo = pin_history
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "-q",
+            "--depth=3",
+            "--branch=main",
+            repo.as_uri(),
+            str(shallow),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    monkeypatch.setattr(pkg, "REPO", shallow)
+    assert pkg._git("rev-parse", "--is-shallow-repository").strip() == "true"
+    pkg._git("cat-file", "-e", f"{commits['boundary']}^{{commit}}")
+    with pytest.raises(pkg.PackageError, match="shallow repository"):
+        pkg.read_n03_pin(lambda _: _PIN, commits["pinned"])
+
+
+# ── manifest_head end to end: real history, synthetic source/package files ────
+
+
+def _source(pin: bytes | None) -> dict[str, bytes]:
     """The repository files manifest_head reads at the source commit, up to the
     N03 pin check (``pin`` None: no pin file)."""
     pkg = _package_checker()
@@ -141,7 +256,6 @@ def _source(cmake: bytes, pin: Any) -> dict[str, bytes]:
         ).encode(),
         "shipping/entrypoint_pin.json": json.dumps({"sha256": "c" * 64}).encode(),
         pkg.g2.ATTESTATION: json.dumps(att).encode(),
-        "shipping/CMakeLists.txt": cmake,
     }
     for role in pkg.TRACKED_ROLES:
         files.setdefault(pkg.MODEL_ROOT_ROLES[role], b"tracked " + role.encode())
@@ -151,15 +265,26 @@ def _source(cmake: bytes, pin: Any) -> dict[str, bytes]:
 
 
 def _manifest_head(
-    monkeypatch: pytest.MonkeyPatch, source: dict[str, bytes], op_sha: str = _OP_SHA
+    monkeypatch: pytest.MonkeyPatch,
+    pkg: ModuleType,
+    commit: str,
+    source: dict[str, bytes],
+    op_sha: str = _OP_SHA,
 ) -> str:
     """manifest_head's refusal (PackageError text) for a package whose model
     root matches `source`; the vendor object is missing on purpose, so a
     package that passes the N03 check fails at the next one."""
-    pkg = _package_checker()
+    import check_shipping_bundle as bundle
 
-    def show(commit: str, path: str) -> bytes:
-        assert commit == _COMMIT
+    monkeypatch.setattr(
+        bundle, "THIRD_PARTY_SET", pkg.REPO / "shipping/third_party_set.json"
+    )
+    monkeypatch.setattr(
+        bundle, "ENTRYPOINT_PIN", pkg.REPO / "shipping/entrypoint_pin.json"
+    )
+
+    def show(source_commit: str, path: str) -> bytes:
+        assert source_commit == commit
         if path not in source:
             raise subprocess.CalledProcessError(
                 128, ["git", "show", f"{commit}:{path}"]
@@ -174,52 +299,62 @@ def _manifest_head(
         files[f"{mr}/{path}"] = {"sha256": hashlib.sha256(source[path]).hexdigest()}
     files[f"{mr}/build/libsaccade_scan_torchop.so"] = {"sha256": op_sha}
     with pytest.raises(pkg.PackageError) as e:
-        pkg.manifest_head(_COMMIT, True, True, files)
+        pkg.manifest_head(commit, True, True, files)
     return str(e.value)
 
 
-_REV3D_CMAKE = (
-    b"set(SACCADE_N03_OPERATOR_PIN ${CMAKE_CURRENT_SOURCE_DIR}/n03_operator_pin.json)\n"
-)
-_PIN = json.dumps({"sha256": _OP_SHA, "bytes": 2}).encode()
-
-
 def test_manifest_head_passes_the_pinned_operator(
+    pin_history: tuple[ModuleType, dict[str, str], Path],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    error = _manifest_head(monkeypatch, _source(_REV3D_CMAKE, _PIN))
+    pkg, commits, _ = pin_history
+    error = _manifest_head(monkeypatch, pkg, commits["pinned"], _source(_PIN))
     assert error == "lib/vendor/libx.so.1 is not in the package"  # past the N03 check
 
 
-def test_manifest_head_refuses_an_unreadable_pin_once_the_build_compiles_it(
+@pytest.mark.parametrize("label", ["descendant", "sibling"])
+def test_manifest_head_refuses_an_unreadable_pin_outside_pre_rev_3d_history(
+    pin_history: tuple[ModuleType, dict[str, str], Path],
     monkeypatch: pytest.MonkeyPatch,
+    label: str,
 ) -> None:
-    error = _manifest_head(monkeypatch, _source(_REV3D_CMAKE, None))
+    pkg, commits, _ = pin_history
+    commit = commits[label]
+    error = _manifest_head(monkeypatch, pkg, commit, _source(None))
     assert error == (
-        f"shipping/n03_operator_pin.json cannot be read at {_COMMIT[:12]}, whose build compiles it"
+        f"shipping/n03_operator_pin.json cannot be read at {commit[:12]}, which requires the N03 pin"
     )
 
 
 @pytest.mark.parametrize("pin", [json.dumps({"sha256": "e" * 64}).encode(), b"{"])
 def test_manifest_head_refuses_an_operator_that_is_not_the_pin(
-    monkeypatch: pytest.MonkeyPatch, pin: bytes
+    pin_history: tuple[ModuleType, dict[str, str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+    pin: bytes,
 ) -> None:
-    error = _manifest_head(monkeypatch, _source(_REV3D_CMAKE, pin))
+    pkg, commits, _ = pin_history
+    error = _manifest_head(monkeypatch, pkg, commits["pinned"], _source(pin))
     assert "N03 pin" in error or "is not JSON" in error, error
 
 
+@pytest.mark.parametrize("label", ["ancestor", "boundary"])
 def test_manifest_head_skips_the_pin_before_rev_3d(
+    pin_history: tuple[ModuleType, dict[str, str], Path],
     monkeypatch: pytest.MonkeyPatch,
+    label: str,
 ) -> None:
-    """A source commit whose shipping CMake compiles no pin has none to check."""
-    error = _manifest_head(monkeypatch, _source(b"# before rev 3d\n", None))
+    pkg, commits, _ = pin_history
+    error = _manifest_head(monkeypatch, pkg, commits[label], _source(None))
     assert error == "lib/vendor/libx.so.1 is not in the package"
 
 
-def test_the_repository_build_compiles_the_pin() -> None:
-    pkg = _package_checker()
-    cmake = (REPO / "shipping" / "CMakeLists.txt").read_bytes()
-    assert pkg.N03_PIN_BUILD_MARKER in cmake
+def test_manifest_head_refuses_an_unknown_source_commit(
+    pin_history: tuple[ModuleType, dict[str, str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pkg, _, _ = pin_history
+    error = _manifest_head(monkeypatch, pkg, "1" * 40, _source(_PIN))
+    assert "git ancestry check failed" in error
 
 
 @pytest.mark.skipif(not OPERATOR.exists(), reason="no build/libsaccade_scan_torchop.so")
