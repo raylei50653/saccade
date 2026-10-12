@@ -414,7 +414,8 @@ def test_an_origin_needed_operator_is_refused_by_the_pin(prefix: Path) -> None:
 def test_a_wrong_sha256_is_refused_before_anything_is_mapped(prefix: Path) -> None:
     r = _audited(prefix, "saccade_track", "load", "0" * 64)
     assert r.returncode == 2, (r.stdout, r.stderr)
-    assert "sha256" in r.stdout and "memfd" not in r.stdout
+    assert f"sha256 {'0' * 64} is not the admitted N03 operator library's" in r.stdout
+    assert "memfd" not in r.stdout
 
 
 @pytest.mark.parametrize(

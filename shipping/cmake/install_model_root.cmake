@@ -12,11 +12,14 @@
 # (absolute build RUNPATH, sm_120 SASS only) are installed unchanged: it is the
 # enumerated exception to the tree's $ORIGIN-only RUNPATH rule (docs §16).
 # Its recorded sha256 and size must also be the runtime's N03 pin
-# (shipping/n03_operator_pin.json, P-N03 rev 3d): the install checks digests
-# only; the ELF admission ran once when that digest was accepted.
+# (P-N03 rev 3d): the pin this build compiled into the runtime
+# (SACCADE_N03_BUILT_PIN_*, from configure), which must still be
+# shipping/n03_operator_pin.json (a pin changed since the build needs a
+# rebuild first). The install checks digests only; the ELF admission ran once
+# when that digest was accepted.
 foreach(_v SACCADE_REPO_ROOT SACCADE_MODEL_ROOT_DEST SACCADE_SHIPPING_CONFIG
            SACCADE_SHIPPING_LINEAGE SACCADE_SHIPPING_ATTESTATION SACCADE_ATTESTED_OP_LIBRARY
-           SACCADE_N03_OPERATOR_PIN)
+           SACCADE_N03_OPERATOR_PIN SACCADE_N03_BUILT_PIN_SHA256 SACCADE_N03_BUILT_PIN_BYTES)
     if(NOT DEFINED ${_v} OR "${${_v}}" STREQUAL "")
         message(FATAL_ERROR "install_model_root.cmake: ${_v} is not set")
     endif()
@@ -58,13 +61,13 @@ string(JSON _att_lineage_sha GET "${_attestation}" frozen_lineage sha256)
 if(NOT _att_op_path STREQUAL _op_path)
     message(FATAL_ERROR "shipping model root: the attestation's op_library.path ${_att_op_path} is not the lineage's ${_op_path}")
 endif()
-file(READ "${SACCADE_N03_OPERATOR_PIN}" _n03_pin)
-string(JSON _pin_sha GET "${_n03_pin}" sha256)
-string(JSON _pin_bytes GET "${_n03_pin}" bytes)
-string(JSON _att_op_bytes GET "${_attestation}" op_library bytes)
-if(NOT _att_op_sha STREQUAL _pin_sha OR NOT _att_op_bytes STREQUAL _pin_bytes)
-    message(FATAL_ERROR "shipping model root: the attestation's op_library (${_att_op_sha}, ${_att_op_bytes} bytes) is not the runtime's N03 pin (${_pin_sha}, ${_pin_bytes} bytes; shipping/n03_operator_pin.json)")
+include("${CMAKE_CURRENT_LIST_DIR}/n03_pin.cmake")
+saccade_read_n03_pin("${SACCADE_N03_OPERATOR_PIN}" _pin_sha _pin_bytes)
+if(NOT _pin_sha STREQUAL SACCADE_N03_BUILT_PIN_SHA256 OR NOT _pin_bytes STREQUAL SACCADE_N03_BUILT_PIN_BYTES)
+    message(FATAL_ERROR "shipping model root: shipping/n03_operator_pin.json (${_pin_sha}, ${_pin_bytes} bytes) is not the pin this build compiled into the runtime (${SACCADE_N03_BUILT_PIN_SHA256}, ${SACCADE_N03_BUILT_PIN_BYTES} bytes); rebuild before installing")
 endif()
+saccade_require_attested_n03_pin("${SACCADE_N03_BUILT_PIN_SHA256}" "${SACCADE_N03_BUILT_PIN_BYTES}"
+    "${SACCADE_REPO_ROOT}/${SACCADE_SHIPPING_ATTESTATION}" "shipping model root")
 if(NOT _att_lineage_path STREQUAL SACCADE_SHIPPING_LINEAGE)
     message(FATAL_ERROR "shipping model root: the attestation binds ${_att_lineage_path}, not ${SACCADE_SHIPPING_LINEAGE}")
 endif()

@@ -14,7 +14,7 @@
 #
 # Nothing here reads the process environment (tests/unit/
 # test_shipping_config_loader_sources.py) or includes tracking/legacy_env.hpp.
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.19)  # string(JSON) at configure (n03_pin.cmake)
 project(saccade_shipping LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -68,20 +68,10 @@ set_target_properties(saccade_shipping_native_config PROPERTIES POSITION_INDEPEN
 set(SACCADE_N03_OPERATOR_PIN ${CMAKE_CURRENT_SOURCE_DIR}/n03_operator_pin.json)
 set(_saccade_n03_attestation ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SACCADE_N03_OPERATOR_PIN} ${_saccade_n03_attestation})
-file(READ ${SACCADE_N03_OPERATOR_PIN} _saccade_n03_pin)
-string(JSON SACCADE_N03_PIN_SHA256 GET "${_saccade_n03_pin}" sha256)
-string(JSON SACCADE_N03_PIN_BYTES GET "${_saccade_n03_pin}" bytes)
-string(LENGTH "${SACCADE_N03_PIN_SHA256}" _saccade_n03_pin_sha_length)
-if(NOT SACCADE_N03_PIN_SHA256 MATCHES "^[0-9a-f]+$" OR NOT _saccade_n03_pin_sha_length EQUAL 64 OR
-   NOT SACCADE_N03_PIN_BYTES MATCHES "^[1-9][0-9]*$")
-    message(FATAL_ERROR "shipping/n03_operator_pin.json: sha256 '${SACCADE_N03_PIN_SHA256}' / bytes '${SACCADE_N03_PIN_BYTES}' is not a pin")
-endif()
-file(READ ${_saccade_n03_attestation} _saccade_n03_att)
-string(JSON _saccade_n03_att_sha GET "${_saccade_n03_att}" op_library sha256)
-string(JSON _saccade_n03_att_bytes GET "${_saccade_n03_att}" op_library bytes)
-if(NOT _saccade_n03_att_sha STREQUAL SACCADE_N03_PIN_SHA256 OR NOT _saccade_n03_att_bytes STREQUAL SACCADE_N03_PIN_BYTES)
-    message(FATAL_ERROR "shipping/n03_operator_pin.json (${SACCADE_N03_PIN_SHA256}, ${SACCADE_N03_PIN_BYTES} bytes) is not the realization attestation's op_library (${_saccade_n03_att_sha}, ${_saccade_n03_att_bytes} bytes)")
-endif()
+include(cmake/n03_pin.cmake)
+saccade_read_n03_pin(${SACCADE_N03_OPERATOR_PIN} SACCADE_N03_PIN_SHA256 SACCADE_N03_PIN_BYTES)
+saccade_require_attested_n03_pin(${SACCADE_N03_PIN_SHA256} ${SACCADE_N03_PIN_BYTES} ${_saccade_n03_attestation}
+    "shipping/n03_operator_pin.json")
 configure_file(cmake/n03_operator_pin.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/generated/n03_operator_pin.cpp @ONLY)
 add_library(saccade_shipping_n03_pin STATIC ${CMAKE_CURRENT_BINARY_DIR}/generated/n03_operator_pin.cpp)
 target_include_directories(saccade_shipping_n03_pin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -643,6 +633,8 @@ if(TARGET saccade_tracking)
         set(SACCADE_SHIPPING_ATTESTATION configs/shipping/mamba_head_realization.attestation.json)
         set(SACCADE_ATTESTED_OP_LIBRARY \"${SACCADE_ATTESTED_OP_LIBRARY}\")
         set(SACCADE_N03_OPERATOR_PIN \"${SACCADE_N03_OPERATOR_PIN}\")
+        set(SACCADE_N03_BUILT_PIN_SHA256 \"${SACCADE_N03_PIN_SHA256}\")
+        set(SACCADE_N03_BUILT_PIN_BYTES \"${SACCADE_N03_PIN_BYTES}\")
         include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/install_model_root.cmake\")" COMPONENT shipping)
 
     if(ENABLE_NATIVE_TESTS)

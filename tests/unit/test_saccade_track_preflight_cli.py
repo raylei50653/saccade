@@ -270,7 +270,10 @@ def test_positive_control_passes_gate_a_then_initializes_cuda(
         assert all(s["state"] == "pending" for s in j["sequences"])
         assert not list((tmp_path / "out").glob("*.txt"))
     else:
-        assert "is not the admitted N03 operator library's" in message, message
+        standin = hashlib.sha256(STANDINS["op_library"]).hexdigest()
+        assert (
+            f"sha256 {standin} is not the admitted N03 operator library's" in message
+        ), message
         # Gate B's caught load failure (#549 S2-1, MB-58): load_verification
         # failed; Gate A's identity is unchanged by it.
         assert j["load_verification"] == {"status": "failed", "byte_scope": None}

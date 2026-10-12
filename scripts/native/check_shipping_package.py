@@ -641,6 +641,19 @@ def authentication(requested: bool, verified: bool | None) -> dict[str, Any]:
     }
 
 
+def check_n03_pin(op_file: str, op_sha256: str, pin_text: bytes | None) -> None:
+    """The packaged operator library must be the runtime's N03 pin at the
+    source commit (P-N03 rev 3d); ``pin_text`` is None for a source commit
+    before it."""
+    if pin_text is None:
+        return
+    pin = json.loads(pin_text)
+    if op_sha256 != pin.get("sha256"):
+        raise PackageError(
+            f"{op_file} is not the runtime's N03 pin ({N03_OPERATOR_PIN})"
+        )
+
+
 def manifest_head(
     commit: str,
     tree_clean: Any,
@@ -697,13 +710,10 @@ def manifest_head(
     if entry(op_file)["sha256"] != att["op_library"]["sha256"]:
         raise PackageError(f"{op_file} is not the attested operator library")
     try:
-        n03_pin: dict[str, Any] | None = json.loads(repo(N03_OPERATOR_PIN))
+        n03_pin: bytes | None = repo(N03_OPERATOR_PIN)
     except subprocess.CalledProcessError:
         n03_pin = None  # a source commit before P-N03 rev 3d: no runtime pin
-    if n03_pin is not None and entry(op_file)["sha256"] != n03_pin["sha256"]:
-        raise PackageError(
-            f"{op_file} is not the runtime's N03 pin ({N03_OPERATOR_PIN})"
-        )
+    check_n03_pin(op_file, entry(op_file)["sha256"], n03_pin)
     for e in set_["entries"]:
         if entry(f"{bundle.VENDOR}/{e['soname']}")["sha256"] != e["sha256"]:
             raise PackageError(

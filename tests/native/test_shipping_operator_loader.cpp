@@ -25,7 +25,7 @@
 //     SHA-256), another known size, or any request with no pin set is refused
 //     before anything is opened; bytes other than the pin's at the path are
 //     refused after the read; no refusal runs an operator constructor (the
-//     fixture's sentinel);
+//     fixture's sentinel, also when load() is attempted after the refusal);
 //   * registry: the same SHA-256 and path reuse the handle (also a request
 //     prepared while an identical one loaded); another path is refused, and so
 //     is another SHA-256 even when the pin changes after the load; the
@@ -246,6 +246,9 @@ int main(int argc, char** argv) {
             CHECK(again.reused() && again.load() == h);
             CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(b.string(), sha1); }),
                       "already loaded from " + a.string()));
+            // The pin's size is required before a reuse, too.
+            CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(a.string(), sha1, size1 + 1); }),
+                      "bytes is not the admitted N03 operator library's"));
             // Defense in depth: a pin change after the load does not admit a
             // second operator into the process.
             sh::testing::set_fixture_n03_pin(sha2, size1);
@@ -315,6 +318,16 @@ int main(int argc, char** argv) {
         CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(a.string(), sha1, 1); }),
                   ": 1 bytes is not the admitted N03 operator library's " + std::to_string(one.size())));
         CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(c.string(), sha1); }), "sha256 " + sha2 + " != " + sha1));
+        in_child("unknown_operator_never_constructed", [&] {
+            // Were the pin check absent, prepare would succeed and load()
+            // would run value 2's constructor (the sentinel).
+            try {
+                sh::VerifiedOperator op = sh::VerifiedOperator::prepare(c.string(), sha2, size1);
+                (void)op.load();
+            } catch (const sh::DetectorLoadError&) {
+            }
+            CHECK(std::getenv("SACCADE_OPERATOR_FIXTURE_CONSTRUCTED") == nullptr);
+        });
         in_child("no_pin_refuses_everything", [&] {
             sh::testing::set_fixture_n03_pin("", -1);
             CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(a.string(), sha1); }),

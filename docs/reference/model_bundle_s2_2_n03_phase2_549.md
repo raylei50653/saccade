@@ -77,8 +77,10 @@ legal operator library:
 
 - `shipping/n03_operator_pin.json` (`aa84cccd…`, 3,517,632 bytes, policy `n03-no-origin-v1`) is
   compiled at configure time into `saccade_shipping_n03_pin`, which the loader's library
-  `saccade_shipping_operator_loader` links. Configure and install refuse a pin that is not the
-  tracked realization attestation's `op_library`. The package checker compares the packaged
+  `saccade_shipping_operator_loader` links. Configure refuses a pin that is not the tracked
+  realization attestation's `op_library` (`cmake/n03_pin.cmake`). Install compares against the pin
+  this build compiled in, refuses a source pin changed since the build, and requires the
+  attestation to be that pin. The package checker (`check_n03_pin`) compares the packaged
   operator with the pin at the source commit.
 - `saccade_track`'s POST_BUILD (`cmake/check_n03_pin.cmake`) requires the pin's digest in the
   binary, and `saccade_shipping_n03_pin_test` requires the generated pin to equal the record.
@@ -88,7 +90,8 @@ legal operator library:
 - The `$ORIGIN` search-path rule and its layout rules moved unchanged to
   `saccade_shipping_n03_admission` and the CPU tool `saccade_n03_admission`, which no runtime
   target links or installs. The tool reads the candidate once, requires the pin's size and
-  SHA-256, applies the rule to the same buffer and prints an admission record. It runs when a
+  SHA-256, applies the rule to the same buffer and prints an admission record (any read error,
+  or bytes beyond the size `fstat` reported, refuses). It runs when a
   digest is accepted and in ctest; install and package compare digests only. A parser that
   accepts a hostile ELF no longer loads anything: only a reviewed, pinned digest reaches
   `dlopen`.

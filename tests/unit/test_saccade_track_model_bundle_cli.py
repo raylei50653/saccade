@@ -360,9 +360,11 @@ def test_standin_bundle_passes_gate_a_and_gate_b_records_the_failed_load(
     assert cuda, "the observer did not see cuInit after Gate A passed"
     j = _journal(tmp_path)
     assert j["state"] == "failed"
-    assert "is not the admitted N03 operator library's" in j["failure"]["message"], j[
-        "failure"
-    ]
+    standin_sha = _sha(b"operator library stand-in")
+    assert (
+        f"sha256 {standin_sha} is not the admitted N03 operator library's"
+        in j["failure"]["message"]
+    ), j["failure"]
     assert j["load_verification"] == LOAD_FAILED
     identity = j["identity"]
     assert identity["mode"] == "model_bundle" and identity["required"] == "none"

@@ -1,5 +1,6 @@
 // N03 admission tool (#549 S2-2, P-N03 rev 3d): reads a candidate operator
-// library once into an owned buffer and admits it against the pin
+// library once into an owned buffer (one descriptor, fstat's size, then end of
+// file; any read error refuses) and admits it against the pin
 // (saccade_shipping/n03_admission.hpp). CPU only; not installed and linked by
 // no runtime target.
 //
@@ -7,13 +8,13 @@
 //   exit 0: admitted, the record (JSON) on stdout;
 //   exit 2: refused or unreadable, the reason on stderr, no record;
 //   exit 77: --skip-if-missing and the library does not exist (ctest SKIP).
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <cerrno>
 #include <cstdio>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 
 #include "saccade_shipping/n03_admission.hpp"
@@ -24,14 +25,30 @@
 
 namespace {
 
+// The whole file, read once through one descriptor: exactly fstat's size,
+// then end of file; false on any open, stat or read error.
 bool read_whole(const std::string& path, std::string& out) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return false;
-    std::ostringstream o;
-    o << in.rdbuf();
-    if (in.bad()) return false;
-    out = o.str();
-    return true;
+    const int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return false;
+    struct stat st {};
+    bool ok = ::fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && st.st_size >= 0;
+    if (ok) {
+        out.assign(static_cast<std::size_t>(st.st_size), '\0');
+        std::size_t done = 0;
+        while (ok && done < out.size()) {
+            const ssize_t n = ::read(fd, out.data() + done, out.size() - done);
+            if (n < 0 && errno == EINTR) continue;
+            if (n <= 0) ok = false;
+            else done += static_cast<std::size_t>(n);
+        }
+        char extra = 0;
+        ssize_t n = 0;
+        while (ok && (n = ::read(fd, &extra, 1)) < 0 && errno == EINTR) {
+        }
+        if (n != 0) ok = false;  // an error, or more bytes than fstat said
+    }
+    ::close(fd);
+    return ok;
 }
 
 }  // namespace
