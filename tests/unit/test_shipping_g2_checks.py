@@ -562,6 +562,37 @@ def test_install_model_root_copies_the_bound_files(tmp_path: Path) -> None:
             )
 
 
+def test_install_model_root_cleans_snapshots_when_a_destination_directory_is_blocked(
+    tmp_path: Path,
+) -> None:
+    repo, defs = _fake_repo(tmp_path)
+    dest = Path(defs["SACCADE_MODEL_ROOT_DEST"])
+    config = dest / defs["SACCADE_SHIPPING_CONFIG"]
+    config.parent.mkdir(parents=True)
+    config.write_bytes(b"existing installed config")
+    blocker = dest / "models"
+    blocker.write_bytes(b"directory blocker")
+
+    refused = _install(defs)
+    assert refused.returncode != 0
+    assert config.read_bytes() == b"existing installed config"
+    assert blocker.read_bytes() == b"directory blocker"
+    assert not list(dest.rglob(".saccade-install-*"))
+    assert "cannot create" in refused.stderr
+    assert not (dest / defs["SACCADE_SHIPPING_ATTESTATION"]).exists()
+
+    blocker.unlink()
+    retried = _install(defs)
+    assert retried.returncode == 0, retried.stderr
+    assert not list(dest.rglob(".saccade-install-*"))
+    for installed in dest.rglob("*"):
+        if installed.is_file():
+            assert (
+                installed.read_bytes()
+                == (repo / installed.relative_to(dest)).read_bytes()
+            )
+
+
 def _install_with_source_replacement(
     tmp_path: Path,
     defs: dict[str, str],

@@ -55,7 +55,13 @@ function(_saccade_stage_copy src rel out)
         _saccade_refuse("shipping model root: ${src} does not exist")
     endif()
     get_filename_component(_dir "${SACCADE_MODEL_ROOT_DEST}/${rel}" DIRECTORY)
-    file(MAKE_DIRECTORY "${_dir}")
+    # MAKE_DIRECTORY would abort before _saccade_refuse can remove earlier
+    # snapshots. Use the CMake helper so its failure reaches that cleanup.
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E make_directory "${_dir}"
+        RESULT_VARIABLE _mkdir_result ERROR_VARIABLE _mkdir_error)
+    if(NOT _mkdir_result STREQUAL "0")
+        _saccade_refuse("shipping model root: cannot create ${_dir}: ${_mkdir_error}")
+    endif()
     string(RANDOM LENGTH 16 ALPHABET 0123456789abcdef _nonce)
     set(_tmp "${_dir}/.saccade-install-${_nonce}")
     file(COPY_FILE "${src}" "${_tmp}" RESULT _copy_error)
