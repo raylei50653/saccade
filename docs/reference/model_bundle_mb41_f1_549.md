@@ -5,10 +5,11 @@
 
 # #549 MB-41 F-1: TorchScript head admission in Gate B
 
-**Outcome:** Gate B refuses every G-1 head (exit 2, `load_verification` failed) before it can
-read bytes outside its hashed archive. The four G-1 reproductions are now negative controls, and
-N02 is still admitted. **MB-41 stays OPEN.** The aggregate `load_verification.byte_scope` stays
-`hashed_before_load` until F-2 lands as a separate PR.
+**Outcome (source-level, reviewed at `c9f8b053`):** Gate B checks a TorchScript head before and
+after the load, using a runtime-owned allowlist. All five G-1 controls are refused (exit 2,
+`load_verification` failed), and N02 is admitted. The loader-default and NamedTuple class-kind
+findings were fixed; the completed independent read-only re-review has no findings. **MB-41 stays OPEN.** The aggregate
+`load_verification.byte_scope` stays `hashed_before_load` until F-2 lands as a separate PR.
 
 The status is written only in
 [CC-536-01-02 S2-2 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-2).
@@ -39,7 +40,8 @@ The gap itself is in [MB-41 condition check](model_bundle_mb41_549.md#gap-g-1-th
   - no inference;
   - no unverified external read during the load.
 
-  N02 stays the positive control.
+  N02 stays the positive control. The fifth `default` control was added during implementation
+  review; the four controls above record the original owner decision.
 - **Out of scope:** the legacy §4.1 contract, aggregate promotion, MB-41 closure, a general
   analyzer, and V5, package admission and distribution status.
 - **Kept:** S2-2 PARTIAL. F-1 and F-2 stay separate.
@@ -67,9 +69,16 @@ the operator is mapped. It reads only the verified buffer.
    Any other record is refused. A code record name must spell a qualifier, so the file a class
    name resolves to is the file that was checked.
 3. **Code.** Every code record is parsed with LibTorch's TorchScript parser, using the importer's
-   own file grammar: the version line, then imports, classes and functions. No class may define
-   `__setstate__`, because the deserializer calls a class's `__setstate__` while it unpickles
-   (`import.cpp` `ObjLoaderFunc`). A record that does not parse is refused.
+   own file grammar: the version line, then imports, classes and functions. A record that does not
+   parse is refused.
+   - Only a class declared with the `Module` base is admitted. `NamedTuple`, `Enum`, `Interface`,
+     `ModuleInterface`, classes without a base and every other class kind are refused before any
+     Module metadata exception is applied. N02's 106 class declarations all have the `Module` base.
+   - No class may define `__setstate__`, because the deserializer calls it while it unpickles
+     (`import.cpp` `ObjLoaderFunc`).
+   - Any parameter default anywhere in a code record is refused. A Module body may hold only
+     methods, attribute annotations, `__parameters__` / `__buffers__` and `__annotations__` types.
+     Class constants and other class-body values are refused.
 4. **Pickles.** `data.pkl`, `constants.pkl` and each `.debug_pkl` are read opcode by opcode, using
    exactly the opcodes LibTorch's unpickler reads, starting from PROTO 2. Any other opcode, a
    truncated argument, or a malformed GLOBAL is refused. The GLOBALs allowed are:
@@ -80,7 +89,15 @@ the operator is mapped. It reads only the verified buffer.
    A registered custom class is refused, because its C++ `__setstate__` would run. So is a class
    the code does not define.
 
-**Deserialization also compiles the code.** The compiler's cleanup folds constants only for nodes
+**The importer evaluates defaults and constants.** LibTorch's `ScriptTypeParser::evaluateDefaults`
+compiles and runs parameter defaults, `Final` class constants and NamedTuple field defaults during
+the load. A hand-written code record can therefore read a sidecar through a parameter default
+even when its `forward` graph uses only admitted operators. `a90ef994` added the parameter-default
+and class-value refusals. The subsequent class-kind fix limits the body rules and metadata
+exceptions to the Module importer; other class importers are refused before the load.
+
+**Deserialization also compiles the code.** Apart from the evaluated values refused above, the
+compiler's cleanup folds constants only for nodes
 whose inputs and outputs are all immutable values (`ConstantPropagationImmutableTypes`, the
 `NoAliasDb` variant). `aten::from_file` returns a Tensor, so it never folds. The 59 registered
 operators that could fold with a string input are listed in `foldable_str_ops.txt` (raw evidence).
@@ -116,7 +133,9 @@ listed operator, so the list is not wider than the reviewed head:
 - **TorchScript plumbing:** `prim::Constant`, `GetAttr`, `ListConstruct`, `TupleConstruct`,
   `NumToTensor.Scalar`.
 
-None of them reads a file or any other external state.
+None of these reviewed operator implementations supplies a path for the head to read model bytes
+from an external file. This is a model-byte integrity boundary; it is not a claim that tensor
+execution observes no runtime state.
 
 The list was reviewed for `2.11.0+cu130`. Gate B passes the build's
 `SACCADE_LIBTORCH_BUILD_VERSION`, and any other value refuses every head. A head that needs
@@ -127,8 +146,9 @@ coordinate.
 
 - `serialization/import.cpp`: the ZIP/FlatBuffer dispatch, `ObjLoaderFunc` and `deserialize`;
 - `unpickler.cpp`: `run`, `readInstruction`, `readGlobal`;
-- `import_source.cpp`: `parseSourceIfNeeded` and `findNamedType`, which checks custom classes
-  first;
+- `import_source.cpp`: `parseSourceIfNeeded`, `findNamedType` (which checks custom classes first),
+  the Module class importer and `importNamedTuple`;
+- `frontend/script_type_parser.cpp`: `evaluateDefaults`, parameter schemas and class constants;
 - `import_export_helpers.cpp`: `qualifierToArchivePath`;
 - `passes/constant_propagation.cpp`;
 - `api/function_impl.cpp`: `optimized_graph`;
@@ -143,17 +163,24 @@ head reads a sidecar float with `aten::from_file`:
 - `setstate`: a scripted `__setstate__` reads it while the archive is deserialized;
 - `forward`: `forward` reads it;
 - `fork`: `forward` reads it through `fork`, so the read sits in the `prim::fork` Subgraph;
-- `flatbuffer`: the `setstate` head saved as FlatBuffer.
+- `flatbuffer`: the `setstate` head saved as FlatBuffer;
+- `default`: `forward` has a parameter default that reads the file during the load. The archive's
+  code record is edited by hand, because saving a module normally carries the already evaluated
+  value. This fifth G-1 control was added after the first interrupted review.
 
 Every test first shows the head really reads the file: under plain `torch::jit::load`, the value
 follows the sidecar, 60 then 7. It then removes the sidecar, so any read would fail with LibTorch's
 own error instead of the admission message.
 
-| Control | Where | Result |
+The table describes the controls and their final local results at source head `c9f8b053`.
+The earlier `a90ef994` logs are preserved separately as historical evidence.
+
+| Control | Where | Coverage and evidence |
 |:--|:--|:--|
-| [CPU ctest](../../tests/native/test_shipping_head_admission.cpp) | in process | `setstate` and `flatbuffer` refused before the load. `forward` and `fork` load without reading, then are refused. For `fork`, a block-only walk does not see `aten::from_file`; the Subgraph walk does. Single-change negatives: before the load, 9 (extra record, custom class, undefined class, other global in data and in debug ranges, opcode, protocol, truncation, top-level code); after the load, 5 (off-list operator, `prim::If`, an uncalled `from_file` method, an interface call, a call into another compilation unit). Another LibTorch build is refused before and after the load. N02 is admitted with exactly the 28 operators. 63 checks. |
-| [Gate B GPU ctest](../../tests/native/test_shipping_model_bundle_gate_b.cpp) | real `DetectorHost`, manifest mode | Each G-1 head is bound hash-consistently: the plan and resolved binding carry its path, size and sha256, so the rehash passes. `setstate` and `flatbuffer` are refused before the operator is mapped (`/proc/self/maps` has no memfd). `forward` and `fork` are refused after the load. `cross_root` (N02) still loads. 171 checks. |
-| [CLI suite](../../tests/unit/test_saccade_track_model_bundle_cli.py) `test_g1_head_is_refused_by_the_head_admission` | both entrypoints, install-shaped prefix | The real bundle with the head replaced and the lineage, attestation and manifest rebound. Gate A: `checksum_matched`, head binding `matched`. Then exit 2, journal `failed`, `load_verification` `{failed, null}`, the F-1 message, every sequence `pending`, no MOT output, and the sidecar never created. 8 tests. |
+| [CPU ctest](../../tests/native/test_shipping_head_admission.cpp) | in process | `setstate`, `flatbuffer` and `default` are refused before the load. `forward` and `fork` load without reading, then are refused. For `fork`, a block-only walk does not see `aten::from_file`; the Subgraph walk does. There are 17 single-change pre-load negatives: the original 9, class constant, literal parameter default, two NamedTuple reserved-name fields, a class without a base, Enum, Interface and ModuleInterface. The five post-load scanner negatives remain: off-list operator, `prim::If`, an uncalled `from_file` method, an interface call and a call into another compilation unit. The interface archive is also refused before the load; its post-load scanner control loads it directly to exercise that scanner separately. Another LibTorch build is refused before and after the load. N02 is the positive control with exactly the 28 operators. Final `c9f8b053`: 82 checks, 0 failures. |
+| [Gate B GPU ctest](../../tests/native/test_shipping_model_bundle_gate_b.cpp) | real `DetectorHost`, manifest mode | Each G-1 head is bound hash-consistently: the plan and resolved binding carry its path, size and sha256, so the rehash passes. `setstate`, `flatbuffer` and `default` are refused before the operator is mapped (`/proc/self/maps` has no memfd). `forward` and `fork` are refused after the load. `cross_root` (N02) is the positive control. Final `c9f8b053`: 175 checks, 0 failures; N02 loads. |
+| [CLI suite](../../tests/unit/test_saccade_track_model_bundle_cli.py) `test_g1_head_is_refused_by_the_head_admission` | both entrypoints, install-shaped prefix | The real bundle with the head replaced and the lineage, attestation and manifest rebound. Gate A: `checksum_matched`, head binding `matched`. Then exit 2, journal `failed`, `load_verification` `{failed, null}`, the F-1 message, every sequence `pending`, no MOT output, and the sidecar never created. 10 G-1 tests (5 heads × 2 entrypoints). Final `c9f8b053`: four CLI files, 82 passed, including all 10 G-1 controls. |
+| shipping ctest | all shipping and N03 ctests | Final `c9f8b053`: 23/23 passed. |
 
 **Mutants.** Each mutant disables one check. The named test must fail, and the file is restored
 from git afterwards.
@@ -173,8 +200,35 @@ from git afterwards.
 | K10 | Gate B without the pre-load admission | GPU ctest |
 | K11 | Gate B without the post-load admission | GPU ctest |
 | K12 | the entrypoint without the post-load admission | CLI test |
+| K13 | the parameter-default check | CPU ctest |
+| K14 | the class-body value check | CPU ctest |
+| K15 | the entrypoint without the parameter-default check | CLI test |
+| K16 | the Module class-kind guard | CPU ctest |
 
-All 13 are caught.
+Historical `a90ef994`: all 16 mutants K1–K15 (including K5a and K5b) were caught: 12 CPU,
+2 GPU and 2 CLI. K16 was added for the class-kind fix. The final 17-mutant run (13 CPU, 2 GPU,
+2 CLI) caught all 17; the historical result does not cover that fix.
+
+## Independent review
+
+Earlier reviews were interrupted by model-capacity or content-risk errors. Their partial output
+is evidence for the findings below, not a completed `NO BLOCKER` verdict.
+
+- **First finding, fixed in `a90ef994`:** the importer runs parameter defaults, `Final` class
+  constants and NamedTuple defaults during the load. The pre-load scan had not refused them.
+  The fix added parameter-default and class-value refusals, the fifth G-1 `default` control,
+  literal-default and class-constant negatives, and K13–K15.
+- **Subsequent independent static review, blocker at `a90ef994`:** Module metadata exceptions
+  were applied to every class kind. A NamedTuple field named `__parameters__` or `__buffers__`
+  could pass that scan even though the NamedTuple importer evaluates it during the load. The
+  source fix `c9f8b053` checks that the class base is `Module` before applying any body or metadata
+  exception. Six harmless class-kind regressions and K16 cover the refusal rule.
+- **Final review at `c9f8b053364562efdc80349e710590aa8cc74134`: No findings / NO BLOCKER.**
+  The independent reviewer checked the full F-1 source diff against `5da12874`, the local
+  LibTorch 2.11.0 importer and graph/call traversal, and independently ran the existing CPU
+  admission ctest (82 checks, 0 failures). GPU, CLI and shipping results above were run by the
+  implementer. This is a completed source review, not a GitHub APPROVED review, remote CI,
+  installed-package verification or merge authorization.
 
 ## What this does not change
 
@@ -190,9 +244,10 @@ All 13 are caught.
 
 ## Known limits
 
-- **Admitted heads:** only heads that use N02's 28 operators, with no control flow, no custom
-  class and no interface. This is the owner's narrow scope; a broader head is refused, not
-  analyzed.
+- **Admitted heads:** only Module class declarations using N02's 28 operators, with no control
+  flow, custom class, interface, parameter default or class constant. NamedTuple, Enum and classes
+  without the Module base are refused. This is the owner's narrow scope; a broader head is
+  refused, not analyzed.
 - **LibTorch dependency:** the pre-load guarantee relies on LibTorch 2.11.0's deserializer as
   reviewed above. The version binding refuses other builds; it does not re-verify the library's
   bytes. Package admission does that.
@@ -205,5 +260,42 @@ All 13 are caught.
 
 All files are local-only, under `results/549_f1/` (gitignored).
 
+**Historical evidence at `a90ef994`, before the class-kind fix.** These hashes record the existing
+logs; they do not certify the final source tree.
+
 | File | SHA-256 |
 |:--|:--|
+| `head_admission_ctest_a90ef994.log` | `288cdd07156237a4514ac13924fa9a3a36348741f468c3279f435fb83a91828f` |
+| `gate_b_ctest_a90ef994.log` | `075bdd20f7d497426873709e4a410dbaaad7aa958b570f934353be3c9f50f8b4` |
+| `cli_suites_a90ef994.log` | `9bf9e264025d05787655a97df0760620c19bf4609e3cb6a13c63662cfef8856e` |
+| `shipping_ctest_a90ef994.log` | `41adf249870e6926b7636842656dfd8d82b4a51f28c78b65ea55c098c5c30ac3` |
+| `mutants.log` (16-mutant run) | `5abfe7efab2a0a6049b3e881311f4f897dbd83045f7a04d788912cd1a5dd91ce` |
+
+**Supporting operator review evidence.**
+
+| File | SHA-256 |
+|:--|:--|
+| `foldable_str_ops.txt` | `7969abeb5974e79135fa982f4f3fa6ead4000e5bc3aa907ab17155eed9322df0` |
+| `foldable_str_ops.py` | `c483bfdbb0e5950261e0b286315aadac4cb4953effc01d986caab2205632cc9f` |
+
+**Final source evidence after the class-kind fix (`c9f8b053`).** The files below bind the local
+tests, mutation controls and completed independent source re-review. Fresh coordinate evidence
+is recorded after capture. The final coordinate-branch pre-push log hash and delivery head are
+recorded in the Draft PR and #549 checkpoint after that run, so this page does not imply that
+the implementation-only branch has a current publication or a remote CI pass.
+The existing coordinate candidate was captured at `2621b016`, before either review fix. The
+complete pre-push at that same head had 5687 passed and 4 coordinate-related failures; it is
+historical evidence, not final acceptance. Publication follows the
+[runtime coordinate runbook §3.2](runbooks/runtime_identity_republication.md#32-review-boundary-與-landing-的關係)
+with a separate stacked coordinate PR containing canonical and archive files only.
+
+| File | SHA-256 |
+|:--|:--|
+| `head_admission_ctest_c9f8b053.log` | `4e1f795e67f7ea1c15aded2251bdd20d58005974df463de66d34fc8714e38caa` |
+| `gate_b_ctest_c9f8b053.log` | `f9f2f6789779fe6fe19d8ed599775626af06816373326ea4d87876ec078bab3a` |
+| `cli_suites_c9f8b053.log` | `d3ceca2a771a3b933e3391bd0c82cc31cdca53cbdde61b3e10e691a9f584cd62` |
+| `shipping_ctest_c9f8b053.log` | `32a931aef137e4bf5db8e456039a9d9388ad067487567d7a69041237f3bfd029` |
+| `mutants_c9f8b053.log` | `cc787b932bab1e864af57001abd2a4f1574a1f21af70332d52c8597931016523` |
+| `mutants_c9f8b053.py` | `000c58cd8efa815f9cb0e00032835bebaa49cf3047ddadbe422c7cbba6570918` |
+| `review/codex_static_a90ef994.md` | `05e1a313acefe0dbeb032fc46316a7dcd56800b80e6bd63b6bb889e6c2792bcc` |
+| `review/codex_final_c9f8b053.md` | `995041707207ca1a0283598f5cc21958a62aad34564db06a5c4c6e831726ffb3` |
