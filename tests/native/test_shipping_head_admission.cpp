@@ -18,7 +18,9 @@
 //       pickle, code outside a def or class;
 //     - after the load: an operator off the list (aten::sin), control flow
 //       (prim::If), a from_file method that forward never calls, a call
-//       through a module interface (it does not resolve statically).
+//       through a module interface (it does not resolve statically), and a
+//       call into another compilation unit (it resolves, but not to one of
+//       the head's own functions).
 //   * Another LibTorch build refuses every head, before and after the load.
 //   * Positive controls: a small head, the same head rewritten, and N02.
 //     N02 uses exactly the reviewed list, so the list is no wider than the
@@ -343,6 +345,21 @@ int main(int argc, char** argv) {
         post_case("interface_call", interface_call(),
                   "function __torch__.Caller.forward makes a call that does not resolve to the head's own functions: "
                   "prim::CallMethod one on __torch__.OneInterface");
+
+        {
+            // In memory, each Module has its own compilation unit: outer's
+            // call resolves to inner's method, which is not outer's own.
+            torch::jit::Module inner("__torch__.Inner");
+            inner.define("def forward(self, x: Tensor) -> Tensor:\n    return x\n");
+            torch::jit::Module outer("__torch__.Outer");
+            outer.register_module("inner", inner);
+            outer.define("def forward(self, x: Tensor) -> Tensor:\n    return self.inner.forward(x)\n");
+            const std::string e = module_error(outer);
+            std::fprintf(stderr, "foreign_function: %s\n", e.c_str());
+            CHECK(e == kPrefix +
+                           "function __torch__.Outer.forward makes a call that does not resolve to the head's own "
+                           "functions: prim::CallMethod forward on __torch__.Inner");
+        }
 
         // ── N02: admitted, and its operators are exactly the list ───────
         const fs::path n02 = repo / "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt";

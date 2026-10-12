@@ -342,7 +342,7 @@ struct Walk {
     static std::string describe(torch::jit::Node* n) {
         std::string d = n->kind().toQualString();
         if (n->kind() == c10::prim::CallMethod) d += " " + n->s(c10::attr::name);
-        if (!n->inputs().empty()) d += " on " + n->input(0)->type()->repr_str();
+        if (!n->inputs().empty()) d += " on " + n->input(0)->type()->annotation_str();
         return d;
     }
 };
