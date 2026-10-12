@@ -3,13 +3,14 @@
 <!-- doc-date: 2026-10-12 -->
 <!-- doc-module: cross -->
 
-# #549 MB-41 F-1: TorchScript head admission in Gate B
+# #549 MB-41 F-1 + F-2: head admission and aggregate byte scope
 
-**Outcome (source-level, reviewed at `c9f8b053`):** Gate B checks a TorchScript head before and
+**Historical F-1 outcome (source-level, reviewed at `c9f8b053`):** Gate B checks a TorchScript head before and
 after the load, using a runtime-owned allowlist. All five G-1 controls are refused (exit 2,
 `load_verification` failed), and N02 is admitted. The loader-default and NamedTuple class-kind
-findings were fixed; the completed independent read-only re-review has no findings. **MB-41 stays OPEN.** The aggregate
-`load_verification.byte_scope` stays `hashed_before_load` until F-2 lands as a separate PR.
+findings were fixed; the completed independent read-only re-review has no findings. Those results
+cover F-1 alone and do not verify the new integration. On merged main, **MB-41 stays OPEN** and
+aggregate `load_verification.byte_scope` remains `hashed_before_load` pending final-head landing.
 
 The status is written only in
 [CC-536-01-02 S2-2 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-2).
@@ -21,13 +22,48 @@ This page records:
 
 The gap itself is in [MB-41 condition check](model_bundle_mb41_549.md#gap-g-1-the-heads-torchscript-can-read-external-unverified-bytes).
 
-## Owner decision (2026-10-12, in session)
+## Confirmed bounded closeout decision (2026-10-12)
+
+The [confirmed #590 Owner decision](https://github.com/raylei50653/saccade/issues/590#issuecomment-6123060172)
+supersedes the separate-F-2 plan below. [#591](https://github.com/raylei50653/saccade/pull/591)
+now prepares F-1 + F-2 together; [#592](https://github.com/raylei50653/saccade/pull/592) must be
+recaptured and independently reviewed against the integrated content. Both remain Draft and
+unmerged. Requirement decision, implementation candidate, local verification and merged status
+are separate claims.
+
+MB-41 condition 2 is now: **「能成功載入的 head，其載入 bytes 等於 hash 過的 bytes，
+且通過 runtime 擁有的准入政策；其他 head 一律 exit 2。」** F-1 is a fail-closed admission
+policy for N02's required functionality, bound to LibTorch `2.11.0+cu130`. Its operation allowlist
+does not authenticate a source or promise arbitrary TorchScript safety. The importer, unpickler,
+constant-folding and graph behavior assumptions listed below remain limits of this scoped claim.
+
+The existing ctests are the maintenance obligation: N02 must load and all five G-1 controls must
+be refused. A LibTorch upgrade or a new head operation updates the policy and these tests in the
+same PR, using the existing coordinate and validation flow. There is no separate standing security
+review or evidence ledger. If maintaining F-1 costs more than its value, the Owner decision permits
+removing it while narrowing the declared guarantee and returning aggregate scope to
+`hashed_before_load`.
+
+F-2 candidate `69476d4b` was transplanted onto the latest F-1 branch as `ebef9c7c`; only one
+aggregate-comment conflict needed resolution. No candidate-branch coordinate or status publication
+was imported. After successful Gate B, the manifest aggregate is `loaded_buffer` only when all
+three per-object scopes are `loaded_buffer`; every other case and legacy mode use
+`hashed_before_load`. Gate A identity and caught/uncaught failure semantics are retained.
+If bounded integration or coordinate adaptation required larger engineering, the authorized
+fallback would be F-1 alone, MB-41 closed by declaring limits, aggregate `hashed_before_load`,
+and `artifact_byte_scopes` authoritative per object, with no independently scheduled F-2.
+
+This direction decision does not promote main's MB-41/aggregate state or authorize merge,
+package re-pin or release. S2-2 remains governed by its canonical status; V5 **UNRESOLVED**,
+installed package **UNVERIFIED**, `distribution.status=local-only`, `equivalence=unproven`.
+
+## Original F-1 implementation authorization (historical, 2026-10-12)
 
 - **F-1 approved:** a runtime-owned allowlist, fail-closed. The scope is what N02 needs, not a
   general TorchScript analyzer.
 - **Before the load:** accept only fully validated ZIP TorchScript. Refuse FlatBuffer, scripted
   `__setstate__`, unsupported custom classes and unknown restore mechanisms. If the pre-load check
-  cannot show the deserialization path is safe, refuse the archive. Do not rely on the post-load
+  cannot establish the reviewed admission conditions, refuse the archive. Do not rely on the post-load
   scan to catch load-time side effects.
 - **After the load:** check every method, submodule, scripted function, nested block, Subgraph and
   call relation. Refuse unresolvable indirect calls, custom operations and graph structures.
@@ -44,7 +80,8 @@ The gap itself is in [MB-41 condition check](model_bundle_mb41_549.md#gap-g-1-th
   review; the four controls above record the original owner decision.
 - **Out of scope:** the legacy §4.1 contract, aggregate promotion, MB-41 closure, a general
   analyzer, and V5, package admission and distribution status.
-- **Kept:** S2-2 PARTIAL. F-1 and F-2 stay separate.
+- **Historical scope:** S2-2 PARTIAL. The original F-1 authorization kept F-2 separate;
+  #590 now brings the bounded aggregate change into #591.
 
 ## Design
 
@@ -230,14 +267,12 @@ is evidence for the findings below, not a completed `NO BLOCKER` verdict.
   implementer. This is a completed source review, not a GitHub APPROVED review, remote CI,
   installed-package verification or merge authorization.
 
-## What this does not change
+## Merged baseline and remaining scope
 
-- **MB-41 OPEN.** The aggregate `byte_scope` stays `hashed_before_load`. F-2 (a separate PR) does
-  the rest:
-  1. rebase the candidate `69476d4b` onto F-1;
-  2. recapture the coordinate;
-  3. rerun the full verification;
-  4. decide on the promotion.
+- **Main MB-41 OPEN; aggregate `hashed_before_load`.** F-1 + F-2 in #591 is the unmerged
+  candidate for scoped MB-41 closure and manifest aggregate promotion after final validation,
+  independent implementation/coordinate review, required CI and Owner final-head merge authorization.
+  Old F-1 heads and the old #592 coordinate remain historical evidence only.
 - **Unchanged:** S2-2 PARTIAL. The legacy mode §4.1 contract. V5 **UNRESOLVED**. The installed
   package **UNVERIFIED** (the entrypoint pin predates F-1). `distribution.status=local-only`.
   `equivalence=unproven`.
@@ -258,7 +293,10 @@ is evidence for the findings below, not a completed `NO BLOCKER` verdict.
 
 ## Raw evidence
 
-All files are local-only, under `results/549_f1/` (gitignored).
+All files are local-only (gitignored). Historical F-1 files remain under
+`results/549_f1/` in the original `.claude/worktrees/docs-549-s2-2-status-writeback`
+worktree. New integration evidence uses `results/549_f1/integration_20261012/` in the
+root WSL workspace; old logs and the pinned operator are preserved.
 
 **Historical evidence at `a90ef994`, before the class-kind fix.** These hashes record the existing
 logs; they do not certify the final source tree.
@@ -300,9 +338,10 @@ with a separate stacked coordinate PR containing canonical and archive files onl
 | `review/codex_static_a90ef994.md` | `05e1a313acefe0dbeb032fc46316a7dcd56800b80e6bd63b6bb889e6c2792bcc` |
 | `review/codex_final_c9f8b053.md` | `995041707207ca1a0283598f5cc21958a62aad34564db06a5c4c6e831726ffb3` |
 
-## Fresh runtime coordinate candidate
+## Historical F-1 runtime coordinate candidate
 
-Captured from clean tree `e02b030410905158b2192d5b1f7e09beb43f2854` with `--run-probe` and
+This candidate belongs to F-1 alone and cannot verify F-1 + F-2. It was captured from
+clean tree `e02b030410905158b2192d5b1f7e09beb43f2854` with `--run-probe` and
 `--require-complete`. Only the probe targets `saccade_tracking_ext` and
 `saccade_scan_plugin` were built in `build/runtime_identity`. The pinned shipping
 operator in `build/libsaccade_scan_torchop.so` remained

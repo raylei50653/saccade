@@ -3,10 +3,18 @@
 <!-- doc-date: 2026-10-12 -->
 <!-- doc-module: cross -->
 
-# #549 MB-41: condition check for the aggregate `loaded_buffer` (outcome: OPEN)
+# #549 MB-41: historical condition check and bounded F-1/F-2 closeout candidate
 
-**Outcome: condition 2 is not met. MB-41 stays OPEN, and the aggregate
-`load_verification.byte_scope` stays `hashed_before_load`.** No runtime change is landed.
+**Main remains MB-41 OPEN, with aggregate `load_verification.byte_scope=hashed_before_load`.**
+The original condition check below found G-1 and is retained as historical evidence.
+The [final owner ruling in #590](https://github.com/raylei50653/saccade/issues/590#issuecomment-6123060172)
+has settled the bounded requirement and the F-1/F-2 integration path in
+[#591](https://github.com/raylei50653/saccade/pull/591), with independent coordinate review in
+[#592](https://github.com/raylei50653/saccade/pull/592). The integrated implementation is a candidate;
+its local verification, remote CI, independent review and merge status are recorded separately in
+[F-1/F-2 evidence](model_bundle_mb41_f1_549.md). Old head and coordinate results do not verify this
+candidate. Main status can be promoted only after the owner-authorized final heads actually
+merge and the required main CI passes at that merge SHA.
 
 The status is written only in
 [CC-536-01-02 S2-2 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-2).
@@ -15,28 +23,34 @@ This page records:
 - the owner's conditions;
 - what was checked and how;
 - the gap that keeps MB-41 open, with its evidence;
-- the minimal follow-up.
+- the bounded closeout already decided by the owner.
 
 ## Authorization
 
-The owner gave a conditional approval in session on 2026-10-12. It approves, in principle,
-closing MB-41 and promoting the aggregate `byte_scope` to `loaded_buffer`, but only after three
-conditions are confirmed:
+The owner first gave a conditional approval in session on 2026-10-12. The final #590 ruling
+replaces the broad head guarantee with bounded condition 2 below. Closing MB-41 and promoting
+the manifest-mode aggregate remain subject to applicable verification and final-head merge
+authorization:
 
 1. Operator, head and engine cover every load file that
    [contract 4.1](../architecture/model_bundle_contract_549.md#load-verification) requires.
-2. Each file's loaded bytes are the bytes whose hash was verified, and there is no unverified
-   alternative load path.
+2. 「能成功載入的 head，其載入 bytes 等於 hash 過的 bytes，且通過 runtime 擁有的准入政策；其他 head 一律 exit 2。」
+   This is the N02-scoped, fail-closed admission contract for LibTorch `2.11.0+cu130`, not a
+   guarantee that arbitrary TorchScript is safe or from a trusted source. Scope, LibTorch
+   behavior assumptions and maintenance terms are authoritative in
+   [contract 4.1](../architecture/model_bundle_contract_549.md#mb41-head-admission).
 3. The corresponding tests, negative controls and journal consistency checks all pass.
 
-If any condition fails, MB-41 stays OPEN, and the owner wants the gap, the evidence and the
-minimal follow-up listed. A historical owner hold is not a reason. Qualified V5, package
+Under the chosen F-1/F-2 path, if any condition fails, MB-41 stays OPEN; the gap, evidence and
+minimal follow-up must be listed. A historical owner hold is not a reason. Qualified V5, package
 admission and `distribution.status` keep their states.
 
-## How it was checked
+## Historical check
 
-The check used a candidate implementation on branch `feat/549-mb41-aggregate-loaded-buffer`.
-It is pushed for reference but **not proposed for merge**. Its commits:
+The original check used a candidate on `feat/549-mb41-aggregate-loaded-buffer`.
+That old branch is retained for reference; only the necessary `69476d4b` implementation changes
+are integrated into #591. Its old coordinate publication and documentation do not accompany
+the new integration. The historical commits were:
 
 - `69476d4b`: the change.
   - `aggregate_load_byte_scope` gives `loaded_buffer` only in manifest mode, and only when all
@@ -51,7 +65,7 @@ An independent read-only Codex review then covered `03b6a82d..0032ab38`. It foun
 in the writer logic, the coordinate or the status words. It found **one major issue**, which
 this page reproduces below.
 
-## Results
+## Historical results
 
 | Condition | Result | Evidence |
 |:--|:--|:--|
@@ -59,7 +73,7 @@ this page reproduces below.
 | 2. Loaded bytes = hashed bytes, no unverified alternative path | **Not met.** The outer bytes hold: head and engine come from one immutable hashed buffer, and the operator comes from a sealed, read-back memfd whose mapping is checked. **But the head's TorchScript can read bytes that were never hashed**, both while it loads and while it runs (gap G-1 below). | `repro_from_file.log`, `repro_forward_from_file.log`, `codex_review_r1.md`. Outer-byte controls: `verified_model_bytes`, `model_bundle_gate_b`, `operator_loader` ctests and the N03 auditor suite |
 | 3. Tests, negative controls, journal consistency | **Not met as a whole.** The shipping ctest, the CLI suites and the mutants pass on the candidate (below), but there is no negative control for G-1, so the controls do not cover condition 2. | Candidate runs below |
 
-Candidate runs (local, gpu0 lease; CI runs neither GPU nor real-binary CLI tests):
+Historical candidate runs (local, gpu0 lease; CI runs neither GPU nor real-binary CLI tests):
 
 - shipping ctest 22/22;
 - the 12 CLI suites of the #584 chain: 656 passed, 0 skipped;
@@ -116,49 +130,47 @@ forward graph contains `aten::from_file`.
   `1663ec97…`) is not affected. Diagnostic `scan_head.py`: none of the 102 archive code files
   contains `__setstate__` or `from_file`, no loaded method is named `__setstate__`, and no node
   kind contains `file`.
-- **The guarantee is still not met.** It must hold for every head that a manifest can bind,
-  including a self-consistent substitute at `checksum_matched`.
+- **At that check, the broad guarantee was not met.** It had been read as covering every head
+  a manifest could bind, including a self-consistent substitute at `checksum_matched`. #590
+  replaces that declaration with the runtime-owned admission contract above.
 - **Engine.** TensorRT's embedded host code needs an opt-in that this code does not enable.
 - **Operator.** It is a single compiled, reviewed digest (the N03 pin). What its own code does
   at load time is fixed by that pin.
 
-## Minimal follow-up
+## Bounded closeout decided in #590
 
-**F-1 (blocks MB-41): head closure in Gate B.** Gate B refuses (exit 2, `load_verification`
-failed) any head whose TorchScript can read bytes outside its archive. All four repros become
-negative controls in the GPU ctest and the CLI suite: `__setstate__`, `forward`, `fork` and
-FlatBuffer.
+**Chosen candidate path: F-1 plus F-2 in #591.** The admission policy remains limited to N02's
+required TorchScript features and LibTorch `2.11.0+cu130`. The runtime owns it, and the manifest
+or lineage cannot extend its operation allowlist. Passing this allowlist does not authenticate
+source or change Gate A identity. The guarantee relies on the reviewed LibTorch importer,
+unpickler, default/constant evaluation, constant propagation and graph/call behavior described
+in [F-1 design](model_bundle_mb41_f1_549.md#design); the version binding does not re-verify
+LibTorch's library bytes. Other builds or unsupported head functionality fail closed.
 
-A refusal after the load still meets the MB-41 row ("the loaded bytes are the hashed bytes, or
-exit 2"), as long as it exits 2 with `failed`/null before any inference. It cannot undo a read
-that already happened during deserialization. G-1a therefore has to be closed before the load.
+The integrated candidate includes the necessary `69476d4b` writer and test changes. Its aggregate
+becomes `loaded_buffer` only for a successful manifest-mode load with all three object scopes
+`loaded_buffer`. Legacy stays `hashed_before_load`; caught failure stays exit 2 with failed/null
+scope, and uncaught auditor/process termination retains its existing null/running limit.
+Per-object `artifact_byte_scopes` retain authority for their own scopes.
 
-What F-1 has to meet:
+After code and contracts are settled, #592 needs one fresh capture and independent review for
+the integrated content under the [coordinate runbook](runbooks/runtime_identity_republication.md).
+Its review surface stays separate and the implementation/coordinate prepare for atomic co-land.
+Existing ctest, GPU/Gate B, both entrypoint CLI, mutation controls, full pre-push and required
+remote CI must be bound to the actual tested head/content. The old runs on this page remain historical,
+and this page does not declare the integrated candidate locally verified or merged.
 
-- **Before `torch::jit::load`:**
-  - accept only the ZIP TorchScript format, and refuse FlatBuffer and anything unrecognized;
-  - refuse any scripted `__setstate__` (module or class) found in the archive's code entries.
-- **After the load, over every method of every submodule and class:**
-  - traverse nested blocks **and** graph-valued attributes (`Subgraph`) and called functions;
-  - refuse any executable path the walk cannot resolve.
-- **The policy that decides which ops are allowed:**
-  - **(a)** A denylist (`aten::from_file` and similar) is a **mitigation only**. It can never be
-    shown complete, so on its own it does not establish condition 2. MB-41 would stay OPEN.
-  - **(b)** An op allowlist establishes condition 2 only if the runtime owns it: built in and
-    reviewed, like the N03 pin or the TR-1b allowlist. A list carried in the caller-controlled
-    lineage or manifest could authorize `aten::from_file` itself at `checksum_matched`.
+**Maintenance and exit.** Keep the existing ctest obligations: N02 loads and all five G-1
+controls are refused. A LibTorch upgrade or new head op updates the policy and tests in the same
+PR. No standing security re-review or new evidence ledger is required. If F-1 costs more to
+maintain than it is worth, it may be removed under #590 with the guarantee and declarations
+lowered together and aggregate returned to `hashed_before_load`.
 
-The owner approved F-1 on 2026-10-12: option (b), a runtime-owned allowlist, fail-closed and
-narrowed to what N02 needs. It is implemented in
-[F-1: TorchScript head admission](model_bundle_mb41_f1_549.md). MB-41 stays OPEN until F-2.
-
-**F-2 (after F-1): land the candidate.** Only after F-1 establishes condition 2 with option (b)
-or an equivalent runtime-owned policy, not merely when its tests pass:
-
-1. Rebase `69476d4b` onto F-1.
-2. Recapture the coordinate.
-3. Rerun the shipping ctest, the CLI suites, the mutants and pre-push.
-4. Close MB-41 in the status writer.
+If integrating F-2 or adapting its coordinate/contracts requires an engineering expansion,
+#590's fallback is F-1 alone, MB-41 closed through explicit limits, permanent aggregate
+`hashed_before_load` and authoritative per-object scopes. The concrete reason must be recorded;
+F-1 still needs its verification, and no independent F-2 is scheduled. This fallback has not
+been selected for the present F-1/F-2 candidate.
 
 **Unchanged by this check:**
 

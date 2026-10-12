@@ -593,8 +593,14 @@ void case_load_verification_rules(const fs::path& base) {
         // failed load has no byte scope; a refused claim writes nothing.
         sh::RunCompletion rc(sh::new_run_id(), "fake_track", sh::RunOutputs{c.p.out, c.p.report, c.p.trace, kSeqs});
         sh::run_preflight(c.gate_a, rc);
-        CHECK(logic_error([&] { rc.record_load_verification(true, sh::LoadByteScope::LoadedBuffer); }));
-        CHECK(logic_error([&] { rc.record_load_verification(false, sh::LoadByteScope::LoadedBuffer); }));
+        const bool legacy_refused = logic_error([&] { rc.record_load_verification(true, sh::LoadByteScope::LoadedBuffer); });
+        CHECK(legacy_refused);
+        // A guard mutant has already written a record. Keep its assertion
+        // failure observable instead of throwing on the next writer call.
+        if (!legacy_refused) return;
+        const bool failed_refused = logic_error([&] { rc.record_load_verification(false, sh::LoadByteScope::LoadedBuffer); });
+        CHECK(failed_refused);
+        if (!failed_refused) return;
         CHECK(is_null(journal(c.p), "load_verification"));
         rc.record_load_verification(true, sh::LoadByteScope::HashedBeforeLoad);
         check_load_verified(journal(c.p));

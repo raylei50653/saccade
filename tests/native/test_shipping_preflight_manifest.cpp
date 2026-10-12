@@ -468,7 +468,11 @@ void check_manifest_load_scope(const Fixture& fx, const fs::path& dir) {
                              sh::RunOutputs{b.out, b.report, b.trace, kSeqs}, true, b.required);
         sh::run_preflight(inputs_of(b), rc);
         const JsonValue sealed = rc.identity();
-        CHECK(logic_error([&] { rc.record_load_verification(false, sh::LoadByteScope::LoadedBuffer); }));
+        const bool failed_refused = logic_error([&] { rc.record_load_verification(false, sh::LoadByteScope::LoadedBuffer); });
+        CHECK(failed_refused);
+        // Preserve an ordinary assertion failure for a removed-guard mutant;
+        // a second record would throw and obscure the tested refusal rule.
+        if (!failed_refused) continue;
         CHECK(is_null(sh::parse_strict_json(read_file(b.out / sh::kRunJournalName)), "load_verification"));
         rc.record_load_verification(true, scope);
         const JsonValue j = sh::parse_strict_json(read_file(b.out / sh::kRunJournalName));
