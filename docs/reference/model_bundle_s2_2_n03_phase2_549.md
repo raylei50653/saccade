@@ -17,6 +17,8 @@ The #549, #536 and #550 checkpoints are written back only after merge and main C
 Authorization (owner, in session): P-N03 rev 3c ACCEPT, D-N03-5 SELECTED, D-N03-6 NOT SELECTED,
 Phase 2 implementation authorized, merge **not** authorized. In session the owner also chose to
 apply D-N03-5 strictly in both modes, with the root derived from the kernel mapping (see Design).
+On 2026-10-12 the owner accepted P-N03 rev 3d (O-N03-1..3) and authorized its implementation,
+local evidence, push and a Draft PR; merge is still **not** authorized.
 
 The design, threat model and Phase 1 research evidence are in Draft
 [#583](https://github.com/raylei50653/saccade/pull/583) (`docs/reference/model_bundle_s2_2_n03_549.md`
@@ -130,23 +132,23 @@ P-N03 rev 3c rule is applied verbatim apart from comments; see §17.9.
 
 ## Evidence
 
-Raw evidence is under `results/549_s2_2_n03_phase2/` (gitignored, local-only). The last completed
-historical runs are bound to clean head `c5510fdd` (code `0e09a85d`), before the r4 fix in
-`4e49864a`; they are not final evidence for current head `1d0ffa1e`. The r4 chain has completed
-CPU, GPU-native ctest and CLI checks, but its seven-sequence replay chain is partial (see the
-offline proposal). The retained earlier runs at `e598d2f6`, `492bb3d3` and `85086d59` also predate
-later review fixes. The evidence JSON retains the historical bindings.
+Raw evidence is under `results/549_s2_2_n03_phase2/` (gitignored, local-only). The final runs are
+bound to clean head `8b020ec0` (the frozen rev 3d source; chain `verify_chain_r3d.sh`, output
+`verify_chain_8b020ec0.out`). Runs at `c5510fdd`, `1d0ffa1e` (partial r4 chain), `85086d59`,
+`492bb3d3` and `e598d2f6` are historical rev 3c evidence. Hashes are in the evidence JSON.
 
 | Acceptance condition | Control | Result |
 |:--|:--|:--|
-| 1. Fixed source, verified bytes, readback | CPU `saccade_shipping_operator_loader_test`, fork-isolated cases: load; registry reuse, overlapping identical requests and refusals; rename and in-place writes after prepare and after load; wrong SHA-256 or size; symlinked file or directory; directory, FIFO, relative and missing paths; `$ORIGIN` in `DT_RUNPATH`/`DT_RPATH` and non-ELF refused, absolute RUNPATH accepted; the D-N03-5 path function. GPU: `gate_b` `foreign_operator` and `detector_s2` refusals | 53 checks, 30/30 repeated runs; GPU native ctest 5/5 |
-| 2. Seals and mapping identity | CPU: `F_SEAL_FUTURE_WRITE` without `F_SEAL_WRITE` fails the seal check; descriptor reuse through `load()` is refused and poisons the process; that control fails when the post-check is removed (mutation run). GPU replay observer: the live memfd read through `/proc/<pid>/fd` | seals `0x2f` (four seals plus the exec seal); mapped device and inode = the open memfd's; memfd SHA-256 = attested N03 `aa84cccd…` (manifest mode and launcher) |
-| 3. Auditor negative controls | `tests/unit/test_shipping_n03_auditor.py`: production host and auditor on a real loader (launcher and direct exec) and a forger, including a memfd sealed with `F_SEAL_FUTURE_WRITE` and a host `$ORIGIN` refusal; the production auditor's `mapping_from_fd` on boundary texts (65,535/8,191-byte records with and without newline, oversized earlier records with decoys at each continuation start, `PATH_MAX`) | 37/37. The first 20 cases against main's auditor: 13 fail (every bypass, source-forgery, post-hash race, FD and alias case) |
-| 3. Legitimate objects kept | existing auditor/launcher regressions; vDSO and vendor in every positive; WSL overlayfs `libcuda.so.1` in every GPU run | 14/14 and all GPU positives |
-| 4. Full production verification | GPU replay: shipping trace/no-trace, measurement double-buffer and serial, 7 sequences / 5,316 frames each; 7 negative controls; manifest mode 7 sequences; policy refusal; launcher legacy run; surface checks | raw sections EXACT (no-trace detector NOT_RUN); MOT/trace hashes equal to the #582 replay; negative controls differ in their expected sections; manifest MOT equals legacy; all reports `loaded_buffer` ×3 with aggregate `hashed_before_load` |
+| 1. Fixed source, verified bytes, readback | CPU `saccade_shipping_operator_loader_test` (the runtime's loader object with a fixture pin), fork-isolated cases: load; registry reuse, overlapping identical requests and refusals; rename and in-place writes after prepare and after load; symlinked file or directory; directory, FIFO, relative and missing paths; the D-N03-5 path function. GPU: `gate_b` `foreign_operator` and `detector_s2` refusals | 47 checks, 30/30 repeated runs; GPU native ctest 8/8 |
+| 1a. Pin (rev 3d) | CPU: a self-consistent request for another operator, another known size (also before a registry reuse), bytes other than the pin's at the path, no pin set; a constructor sentinel with `load()` attempted after the refusal. Mutation: the SHA pin check disabled. Real loader: the auditor suite's unknown-digest cases. CLI: stand-in bundles (legacy and manifest mode) refused with the pin diagnostic, Gate A identity kept | all refused before anything is opened; sentinel never set; the mutation fails 3 checks (`mutation_pin_check_removed_2fbd437e.log`); `saccade_shipping_n03_pin_test` 2/2; both `saccade_track` builds carry the pin digest and no admission strings |
+| 1b. Admission (rev 3d) | `saccade_shipping_n03_admission_test`: `$ORIGIN`/`${ORIGIN}` under all five tags, non-ELF, split dynamic, unterminated, oversized `DT_STRSZ`, two `PT_DYNAMIC`, overlap, zero-size, wrap; pin pairing (digest, size, policy, malformed pin). `saccade_n03_admission` on the real N03; configure/install/package pin rules (`n03_pin.cmake`, install fixtures, `check_n03_pin`) | 32 checks, 0 failures; record `n03_admission_record_8b020ec0.json` `admitted` for `aa84cccd…`; pin-rule controls in the CLI suites |
+| 2. Seals and mapping identity | CPU: `F_SEAL_FUTURE_WRITE` without `F_SEAL_WRITE` fails the seal check; descriptor reuse through `load()` is refused and poisons the process (fails with the post-check removed, rev 3c mutation run). GPU replay observer: the live memfd read through `/proc/<pid>/fd` | seals `0x2f` (four seals plus the exec seal); mapped device and inode = the open memfd's; memfd SHA-256 = the pin `aa84cccd…` (manifest mode and launcher) |
+| 3. Auditor negative controls | `tests/unit/test_shipping_n03_auditor.py`: production host (with a pin naming the stand-in) and auditor on a real loader (launcher and direct exec) and a forger, including a memfd sealed with `F_SEAL_FUTURE_WRITE`; the production auditor's `mapping_from_fd` on boundary texts (65,535/8,191-byte records with and without newline, oversized earlier records with decoys at each continuation start, `PATH_MAX`) | 37/37. Rev 3c run of the first 20 cases against main's auditor: 13 fail (every bypass, source-forgery, post-hash race, FD and alias case) |
+| 3. Legitimate objects kept | existing auditor/launcher regressions; vDSO and vendor in every positive; WSL overlayfs `libcuda.so.1` in every GPU run | in the CLI suites; all GPU positives |
+| 4. Full production verification | GPU replay `gpu_8b020ec0240d`: shipping trace/no-trace, measurement double-buffer and serial, 7 sequences / 5,316 frames each; 7 negative controls; manifest mode 7 sequences; policy refusal; launcher legacy run; surface checks | raw sections EXACT (no-trace detector NOT_RUN); MOT/trace hashes equal to the #582 replay; negative controls differ in their expected sections; manifest MOT equals legacy; all reports `loaded_buffer` ×3 with aggregate `hashed_before_load` |
 | 4. Load identity measured directly | replay observer on manifest mode and the launcher run | no operator path mapped; operator segments from one memfd whose bytes are N03 |
 | Failure states | launcher with a foreign model root; this entrypoint under another prefix's auditor; SIGKILL during load (CLI test) | exit 2 `failed`/null scope, identity kept, D-N03-5 message; exit 127 `running`/null, `operator library mapped from another path`; SIGKILL `running`/null |
-| CLI suites | preflight, completion, schedule, model-bundle, measurement surface, parity harness, bundle checks, G2, N03 auditor | 517 passed, 0 skipped (GPU lease); before the test fixes, 5 build-tree operator runs failed |
+| CLI suites | preflight, completion, schedule, model-bundle, measurement surface, parity harness, bundle checks, G2, N03 auditor, N03 pin, headline publication install, package | 617 passed, 0 skipped (GPU lease) |
 
 Qualification: anchor and oracle rows refuse this host (driver 617.42 ≠ 616.92), so formal
 verdicts are **UNRESOLVED** and negative controls are `caught=false`. Section equality is a local
@@ -161,7 +163,7 @@ package or re-pin. `build/runtime_identity` has no shipping `TORCH_CUDA_ARCH_LIS
 ## Independent review
 
 Read-only Codex reviews; prompts, logs and outputs are in `results/549_s2_2_n03_phase2/review/`.
-Round 1 (`85eeb2af`) found no blocker. Its findings and their resolution in `492bb3d3`:
+Rounds 1–4 reviewed rev 3c; the rev 3d rounds follow them. Round 1 (`85eeb2af`) found no blocker. Its findings and their resolution in `492bb3d3`:
 
 | Severity | Finding | Resolution |
 |:--|:--|:--|
@@ -204,6 +206,33 @@ nothing.
 | minor | the `DT_NEEDED` control relied on the linker keeping an unused dependency | `--no-as-needed` |
 | minor | malformed-ELF refusal still described as complete | the validated properties are listed; other ELF checks stay `dlopen`'s |
 
+**Rev 3d.** The parser's completeness was out of scope by design (proposal §3): it moved
+unchanged and no longer guards the runtime.
+
+Round 1 (`1d0ffa1e..cbd8f60c`) found no blocker and no runtime pin bypass. Its findings and
+their resolution in `8f6dbdcc` and `2fbd437e`:
+
+| Severity | Finding | Resolution |
+|:--|:--|:--|
+| major | the G2 and headline-publication install fixtures lacked the new pin input | pins and attestation sizes in both fixtures |
+| minor | admission could accept a prefix after a buffered read error | one descriptor: `fstat`'s size, then end of file; any error refuses |
+| minor | install compared live source records, not the built runtime's pin | compared against the pin this build compiled in |
+| minor | `string(JSON)` at configure under a declared CMake 3.18 | shipping CMake minimum 3.19 |
+| minor | binding/package controls did not exercise the refusals; four controls passed with their check removed or moved | behavioral rule, install and `check_n03_pin` controls; exact pin diagnostics; size refusal before reuse; sentinel with `load()` attempted |
+
+Round 2 (`cbd8f60c..2fbd437e`) found no blocker or major. Resolution in `8b020ec0`:
+
+| Severity | Finding | Resolution |
+|:--|:--|:--|
+| minor | a reconfigure without a rebuild could still pair this build's `saccade_track` with another operator at install | install requires that executable, when the tree takes it, to carry the pin's digest |
+| minor (new) | install validated a second read of the attestation, copied against the first | one snapshot: the rule takes the text install already read |
+| minor (accepted) | `manifest_head`'s and configure's calls into the pin rules are checked by a source assertion and the shared helper, not end to end | not built: the failure needs the call removed while its text stays, and an end-to-end `manifest_head` fixture costs more than it prevents |
+
+The source was frozen at `8b020ec0` after self-review of the round 2 diff; the final chain and the
+coordinate capture ran on it. The coordinate review of `bc4e77cd` found nothing: the archive is the
+outgoing canonical, the canonical is the candidate, only the implementation axis moved (nine added,
+nine modified), equivalence stays unproven.
+
 ## Known limits and residuals
 
 - **Package checkers.** `check_shipping_bundle.py` `sources` (the `LD_DEBUG` `calling init` path)
@@ -219,13 +248,16 @@ nothing.
 - **Provenance.** It is an audit-time observation on the auditor side. D-N03-5 adds the host-side
   binding of where the source is opened. The chunked auditor comparison is not a single-instant
   snapshot; byte identity does not depend on it.
-- **Runtime identity.** Historical commit `456f948e` published a fresh `--run-probe` capture of
-  `0e09a85d`, moving only the implementation axis: `bc378f68…` → `671bc0a9…`, 303 → 305 files.
-  Its attested check passed for that source. After the r4 fix, `1d0ffa1e` reverted that publication
-  and its outgoing archive; the current source has no final coordinate publication. Earlier
-  republications `91a0037c` and `001ecec4` were also reverted before any push. Their local capture
-  records remain historical evidence. A new publication must follow the fresh-capture,
-  independent-review and append-only-archive runbook. Probe equality does not establish equivalence.
+- **Runtime identity.** `bc4e77cd` publishes a fresh `--run-probe` capture after a complete
+  Release build of `8b020ec0`, moving only the implementation axis: `bc378f68…` → `5eb66833…`,
+  303 → 312 files (nine added, nine modified shipping files, relative to main's canonical). The
+  outgoing canonical bytes are archived append-only
+  (`runtime_identity.2026-10-12.bc378f688f9cd71b.json`) and the attested check passes. Probe
+  equality does not establish equivalence. The rev 3c republications (`91a0037c`, `001ecec4`,
+  `456f948e`) were reverted before any push; their capture records remain historical evidence.
+- **Pinned entrypoint.** The entrypoint the package carries (`shipping/entrypoint_pin.json`,
+  `fbab8b79…`) predates the pin and does not enforce it; an installed package is protected only
+  after an entrypoint re-pin, which is outside this authorization.
 - **Not covered:**
   - the installed package and launcher acceptance (no re-pin);
   - another GPU, driver 616.92 and V5 qualification;
