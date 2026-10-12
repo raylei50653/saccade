@@ -1,0 +1,9 @@
+{
+  "schema": "saccade.n03_operator_pin/v1",
+  "reading": "The one N03 operator library the runtime loads (#549 S2-2, P-N03 rev 3d, owner decision O-N03-2). shipping/CMakeLists.txt compiles these values into the loader's pin (n03_operator_pin.cpp.in); the runtime reads neither this file nor a caller attestation to decide what it accepts. Configure and install refuse a pin that is not the tracked realization attestation's op_library. A new digest needs a new admission record (saccade_n03_admission), review, this file updated and the runtime rebuilt; deploying it needs a package re-pin. Admission is the ELF search-path rule only: it does not vouch for how the object's DT_NEEDED dependencies resolve.",
+  "sha256": "aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4",
+  "bytes": 3517632,
+  "admission_policy": "n03-no-origin-v1",
+  "attestation": "configs/shipping/mamba_head_realization.attestation.json",
+  "decision": "docs/reference/model_bundle_s2_2_n03_offline_proposal_549.md"
+}

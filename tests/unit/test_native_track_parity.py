@@ -755,6 +755,14 @@ def _run_track_cmd(
         return _Done()
 
     monkeypatch.setattr(T.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        T,
+        "stage_runtime_prefix",
+        lambda binary, root, out: (
+            out / "runtime_prefix" / "libexec" / binary.name,
+            out / "runtime_prefix" / "share" / "saccade",
+        ),
+    )
     args = T.argparse.Namespace(
         model_root=Path("."),
         track_binary=Path("bin/x"),
@@ -767,6 +775,31 @@ def _run_track_cmd(
     return seen[0]
 
 
+def test_stage_runtime_prefix_lays_out_the_runtime_package(tmp_path: Path) -> None:
+    """#549 S2-2 D-N03-5: the build entrypoint runs as <prefix>/libexec/<name>,
+    whose runtime package's operator library is a real file at
+    <prefix>/share/saccade/build/...; the models are linked in."""
+    root = tmp_path / "root"
+    (root / "build").mkdir(parents=True)
+    (root / "models" / "yolo").mkdir(parents=True)
+    (root / "build" / "libsaccade_scan_torchop.so").write_bytes(b"op")
+    binary = tmp_path / "bin" / "saccade_track"
+    binary.parent.mkdir()
+    binary.write_bytes(b"elf")
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "runtime_prefix").mkdir()  # a previous run's prefix is replaced
+    exe, share = T.stage_runtime_prefix(binary, root, out)
+    assert exe == out / "runtime_prefix" / "libexec" / "saccade_track"
+    assert share == out / "runtime_prefix" / "share" / "saccade"
+    assert exe.read_bytes() == b"elf"
+    op = share / "build" / "libsaccade_scan_torchop.so"
+    assert op.read_bytes() == b"op" and not op.is_symlink()
+    assert not op.parent.is_symlink() and not share.is_symlink()
+    assert (share / "models").is_symlink()
+    assert (share / "models").resolve() == (root / "models").resolve()
+
+
 def test_shipping_command_line_has_no_developer_option(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -777,6 +810,12 @@ def test_shipping_command_line_has_no_developer_option(
         mutation="none",
         schedule="double_buffer",
         max_frames=None,
+    )
+    # #549 S2-2 D-N03-5: the entrypoint runs from an install-shaped prefix whose
+    # share/saccade is its model root (the runtime package's operator library).
+    assert cmd[0] == str(tmp_path / "runtime_prefix" / "libexec" / "x")
+    assert cmd[cmd.index("--model-root") + 1] == str(
+        tmp_path / "runtime_prefix" / "share" / "saccade"
     )
     options = {a for a in cmd if a.startswith("--")}
     assert options == {

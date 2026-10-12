@@ -11,8 +11,11 @@
 // pin) gives the plan, then:
 //   * cross_root:  DetectorHost(plan, "", stream) loads the three files; the
 //                  load report's hashes are the manifest's and the operator
-//                  library mapped into this process is the runtime root's copy
-//                  (by /proc/self/maps), not the repository's;
+//                  library runs from the sealed memfd made from the runtime
+//                  root's copy (by /proc/self/maps; neither the runtime root's
+//                  nor the repository's path is mapped);
+//   * foreign_operator (D-N03-5): a plan naming another operator file than its
+//                  binding, or none, is refused before anything is read;
 //   * replaced (MB-55): a member is replaced after Gate A (same size, one byte
 //                  flipped): the load refuses it at the resolved path before
 //                  loading anything (DetectorLoadError, sha256 mismatch);
@@ -127,6 +130,8 @@ sh::DetectorPlan gate_a(const Layout& l) {
     in.runtime_build = sh::native_runtime_build();
     sh::PreflightResult r = sh::run_preflight(in, completion);
     CHECK(r.detector.resolved != nullptr);
+    // D-N03-5: the caller of Gate B names the runtime package's operator.
+    r.detector.runtime_operator_path = (l.runtime / "build/libsaccade_scan_torchop.so").string();
     return r.detector;
 }
 
@@ -154,6 +159,15 @@ bool mapped(const std::string& path) {
     std::string line;
     while (std::getline(maps, line)) {
         if (line.size() >= path.size() && line.compare(line.size() - path.size(), path.size(), path) == 0) return true;
+    }
+    return false;
+}
+
+bool mapped_memfd() {
+    std::ifstream maps("/proc/self/maps");
+    std::string line;
+    while (std::getline(maps, line)) {
+        if (line.find("/memfd:saccade-n03:src-fd=") != std::string::npos) return true;
     }
     return false;
 }
@@ -194,6 +208,7 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "replaced: %s\n", e.c_str());
             CHECK(e.find("shipping detector load: head artifact " + head.string() + " sha256 ") == 0);
             CHECK(!mapped(plan.resolved->op_library.absolute_path));  // refused before dlopen
+            CHECK(!mapped_memfd());
         }
         {
             const Layout l = make_layout(repo, base / "unsupported_sm");
@@ -208,6 +223,23 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "unsupported_sm: %s\n", e.c_str());
             CHECK(e.find("GPU SM") != std::string::npos);
             CHECK(!mapped(plan.resolved->op_library.absolute_path));
+            CHECK(!mapped_memfd());
+        }
+        {
+            // D-N03-5: the runtime package's operator is the only one; a plan
+            // naming another file (the repository's identical build) or none
+            // is refused before anything is read or mapped.
+            const Layout l = make_layout(repo, base / "foreign_operator");
+            sh::DetectorPlan plan = gate_a(l);
+            plan.runtime_operator_path = fs::canonical(repo / "build/libsaccade_scan_torchop.so").string();
+            const std::string e = load_error(plan, "", stream);
+            std::fprintf(stderr, "foreign_operator: %s\n", e.c_str());
+            CHECK(e == "shipping detector load: operator library " + plan.resolved->op_library.absolute_path +
+                           " is not the runtime package's " + plan.runtime_operator_path + " (D-N03-5)");
+            plan.runtime_operator_path.clear();
+            CHECK(load_error(plan, "", stream) ==
+                  "shipping detector load: no runtime package operator library was named (D-N03-5)");
+            CHECK(!mapped_memfd());
         }
         {
             const Layout l = make_layout(repo, base / "model_root");
@@ -239,11 +271,16 @@ int main(int argc, char** argv) {
             CHECK(rep.backbone_engine_sha256 == r.backbone_engine.sha256);
             CHECK(rep.head_artifact_byte_scope == "loaded_buffer");
             CHECK(rep.backbone_engine_byte_scope == "loaded_buffer");
-            CHECK(rep.op_library_byte_scope == "hashed_before_load");
+            CHECK(rep.op_library_byte_scope == "loaded_buffer");
             CHECK(!rep.gpu_sm.empty());
-            CHECK(mapped(r.op_library.absolute_path));
+            // The operator runs from the sealed memfd made from the runtime
+            // root's copy (#549 S2-2); neither path is mapped.
+            CHECK(rep.op_library_mapped.rfind("/memfd:saccade-n03:src-fd=", 0) == 0);
+            CHECK(mapped_memfd());
+            CHECK(!mapped(r.op_library.absolute_path));
             CHECK(!mapped(fs::canonical(repo / "build/libsaccade_scan_torchop.so").string()));
-            std::fprintf(stderr, "cross_root: loaded %s\n", r.op_library.absolute_path.c_str());
+            std::fprintf(stderr, "cross_root: loaded %s from %s\n", r.op_library.absolute_path.c_str(),
+                         rep.op_library_mapped.c_str());
 
             // MB-41/MB-58: actual LibTorch and TensorRT deserialization after
             // deterministic post-hash replacement loads the original buffers.

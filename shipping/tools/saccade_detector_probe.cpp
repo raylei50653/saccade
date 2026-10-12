@@ -185,7 +185,11 @@ Options parse_args(int argc, char** argv) {
 int run(const Options& opt) {
     const sh::ResolvedShippingConfig cfg = sh::load_resolved_shipping_config_file(opt.config);
     const sh::IngestPlan ingest_plan = sh::plan_ingest(cfg);
-    const sh::DetectorPlan plan = sh::plan_detector_files(cfg, {opt.lineage, opt.attestation});
+    sh::DetectorPlan plan = sh::plan_detector_files(cfg, {opt.lineage, opt.attestation});
+    // A developer tool, not installed: it names the plan's own operator under
+    // its model root (D-N03-5 binds the shipping entrypoints, track_driver.hpp).
+    // The operator is still read once, hashed and loaded from a sealed memfd.
+    plan.runtime_operator_path = sh::resolve_model_path(opt.model_root, plan.op_library.path);
     const sh::DetectorMutation mutation = sh::parse_detector_mutation(opt.mutation);
     const std::filesystem::path seq_dir(opt.sequence);
     const sh::SequenceInput input = sh::read_sequence_input(seq_dir, opt.max_frames);

@@ -80,7 +80,7 @@ import subprocess
 import sys
 import tarfile
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_shipping_tree as g2  # noqa: E402
@@ -113,6 +113,12 @@ READING = (
     "trusted comment."
 )
 RUNTIME_IDENTITY = "docs/reference/runtime_identity.generated.json"
+# The runtime's N03 pin (#549 S2-2, P-N03 rev 3d): the one operator library the
+# entrypoint loads; the packaged operator must be it at the source commit.
+N03_OPERATOR_PIN = "shipping/n03_operator_pin.json"
+# A source commit whose shipping CMake names the pin compiles it into the
+# runtime; from then on the pin must be readable (read_n03_pin).
+N03_PIN_BUILD_MARKER = b"n03_operator_pin.json"
 # The GPUs the package runs on: the operator library and the backbone engine
 # are sm_120 only (owner decision C-D2); the entrypoint carries more SASS.
 SUPPORTED_SM = ("sm_120",)
@@ -638,6 +644,37 @@ def authentication(requested: bool, verified: bool | None) -> dict[str, Any]:
     }
 
 
+def read_n03_pin(repo_file: Callable[[str], bytes], commit: str) -> bytes | None:
+    """The runtime's N03 pin text at `commit` (P-N03 rev 3d), or None for a
+    source commit whose shipping CMake compiles no pin (before rev 3d). Once
+    the build compiles the pin, a pin that cannot be read refuses: a failed
+    read is never taken for an older commit."""
+    if N03_PIN_BUILD_MARKER not in repo_file("shipping/CMakeLists.txt"):
+        return None
+    try:
+        return repo_file(N03_OPERATOR_PIN)
+    except subprocess.CalledProcessError as e:
+        raise PackageError(
+            f"{N03_OPERATOR_PIN} cannot be read at {commit[:12]}, whose build compiles it"
+        ) from e
+
+
+def check_n03_pin(op_file: str, op_sha256: str, pin_text: bytes | None) -> None:
+    """The packaged operator library must be the runtime's N03 pin at the
+    source commit (P-N03 rev 3d); ``pin_text`` is None for a source commit
+    before it (read_n03_pin)."""
+    if pin_text is None:
+        return
+    try:
+        pin = json.loads(pin_text)
+    except ValueError as e:
+        raise PackageError(f"{N03_OPERATOR_PIN} is not JSON") from e
+    if not isinstance(pin, dict) or op_sha256 != pin.get("sha256"):
+        raise PackageError(
+            f"{op_file} is not the runtime's N03 pin ({N03_OPERATOR_PIN})"
+        )
+
+
 def manifest_head(
     commit: str,
     tree_clean: Any,
@@ -693,6 +730,7 @@ def manifest_head(
             raise PackageError(f"{mr}/{path} is not {path} at {commit[:12]}")
     if entry(op_file)["sha256"] != att["op_library"]["sha256"]:
         raise PackageError(f"{op_file} is not the attested operator library")
+    check_n03_pin(op_file, entry(op_file)["sha256"], read_n03_pin(repo, commit))
     for e in set_["entries"]:
         if entry(f"{bundle.VENDOR}/{e['soname']}")["sha256"] != e["sha256"]:
             raise PackageError(

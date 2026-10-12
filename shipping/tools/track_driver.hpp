@@ -65,6 +65,7 @@
 
 #include "saccade_shipping/detector_plan.hpp"
 #include "saccade_shipping/native_runtime_build.hpp"
+#include "saccade_shipping/operator_loader.hpp"
 #include "saccade_shipping/preflight.hpp"
 #include "saccade_shipping/run_completion.hpp"
 #include "saccade_shipping/serial_runtime.hpp"
@@ -198,11 +199,15 @@ inline PreflightResult preflight(const Options& o, const char* entrypoint, RunCo
 // Gate B: builds the runtime from Gate A's result -- the detector load hashes
 // and loads the three files (manifest mode: from the resolved bindings only)
 // -- then records load_verification: verified, or failed when the load throws
-// DetectorLoadError. Any other failure leaves it null.
+// DetectorLoadError. Any other failure leaves it null. The operator library is
+// only the runtime package's of this entrypoint (D-N03-5, both modes): where
+// the kernel maps <prefix>/libexec/<entrypoint>, <prefix>/share/saccade/build/
+// libsaccade_scan_torchop.so (operator_loader.hpp).
 template <class Runtime>
 std::unique_ptr<Runtime> load_runtime(const Options& o, PreflightResult& pre, RunCompletion& completion) {
     std::unique_ptr<Runtime> rt;
     try {
+        pre.detector.runtime_operator_path = entrypoint_runtime_operator_path();
         rt = std::make_unique<Runtime>(pre.config, std::move(pre.detector), o.legacy_model_root());
     } catch (const DetectorLoadError&) {
         try {

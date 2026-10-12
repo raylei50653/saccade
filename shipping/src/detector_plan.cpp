@@ -320,9 +320,15 @@ DetectorPlan plan_detector_files(const ResolvedShippingConfig& cfg, const Detect
     const std::string lineage_text = read_file(in.lineage_path);
     const JsonValue lineage = parse_strict_json(lineage_text);
     const std::string lineage_sha = sha256_hex(lineage_text.data(), lineage_text.size());
-    if (in.attestation_path.empty()) return plan_detector(cfg, lineage, lineage_sha, nullptr);
-    const JsonValue att = parse_strict_json(read_file(in.attestation_path));
-    return plan_detector(cfg, lineage, lineage_sha, &att);
+    DetectorPlan plan;
+    if (in.attestation_path.empty()) {
+        plan = plan_detector(cfg, lineage, lineage_sha, nullptr);
+    } else {
+        const JsonValue att = parse_strict_json(read_file(in.attestation_path));
+        plan = plan_detector(cfg, lineage, lineage_sha, &att);
+    }
+    plan.runtime_operator_path = in.runtime_operator_path;
+    return plan;
 }
 
 }  // namespace saccade::shipping

@@ -27,6 +27,14 @@ namespace sh = saccade::shipping;
 
 namespace {
 
+// D-N03-5: the detector load opens only the operator its caller names. These
+// runs name the model root's attested build (build/libsaccade_scan_torchop.so,
+// the plan's own path), as a developer runtime package would.
+std::string operator_path(const std::string& model_root) {
+    return (std::filesystem::path(model_root) / "build/libsaccade_scan_torchop.so").string();
+}
+
+
 constexpr int kFrames = 40;
 int failures = 0;
 
@@ -42,7 +50,7 @@ struct Paths {
 
 std::unique_ptr<sh::SerialRuntime> make(const Paths& p, sh::RuntimeMutation m) {
     auto rt = std::make_unique<sh::SerialRuntime>(sh::load_resolved_shipping_config_file(p.config),
-                                                  sh::DetectorInputs{p.lineage, p.attestation},
+                                                  sh::DetectorInputs{p.lineage, p.attestation, operator_path(p.model_root)},
                                                   p.model_root);
     rt->set_mutation_for_measurement(m);
     return rt;

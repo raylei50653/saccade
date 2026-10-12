@@ -3,6 +3,8 @@
 
 #include <NvInfer.h>
 #include <dlfcn.h>
+#include <limits.h>
+#include <unistd.h>
 
 #include <ATen/ATen.h>
 #include <ATen/cuda/CUDAContext.h>
@@ -28,6 +30,7 @@
 
 #include "perception/trt_engine.hpp"
 #include "saccade_shipping/detector_s2.hpp"
+#include "saccade_shipping/operator_loader.hpp"
 #include "saccade_shipping/sha256.hpp"
 #include "saccade_shipping/verified_model_bytes.hpp"
 
@@ -42,10 +45,16 @@ namespace {
     throw std::runtime_error("shipping detector: " + what);
 }
 
-void check_sha(const std::string& what, const std::string& path, const std::string& want,
-               std::string& got) {
-    got = sha256_file_hex(path);
-    if (got != want) load_error(what + " " + path + " sha256 " + got + " != " + want);
+// An absolute, lexically normal spelling of `path` (relative against the
+// working directory; no symlink resolution: the operator open refuses links).
+std::string lexical_absolute(const std::string& path) {
+    std::filesystem::path p(path);
+    if (p.is_relative()) {
+        char cwd[PATH_MAX];
+        if (::getcwd(cwd, sizeof cwd) == nullptr) load_error("cannot read the working directory");
+        p = std::filesystem::path(cwd) / p;
+    }
+    return p.lexically_normal().string();
 }
 
 HeadRuntimeRequirements runtime_readback() {
@@ -267,10 +276,19 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
                                    "head supported contract", false);
     }
 
-    // 1. hashes before anything is loaded. Head/engine are owned immutable
-    // memory buffers; their loaders never reopen the paths after these hashes.
-    // The operator keeps its existing path load and auditor contract (N03).
-    check_sha("operator library", op_path, plan.op_library.sha256, m.report.op_library_sha256);
+    // 1. hashes before anything is loaded. The operator (D-N03-5) is only the
+    // runtime package's file the caller named; its plan binding must name the
+    // same file. It is read once, hashed, sealed into a memfd and read back
+    // (operator_loader.hpp); head/engine are owned immutable memory buffers.
+    // No loader reopens a path after these hashes.
+    if (plan.runtime_operator_path.empty()) load_error("no runtime package operator library was named (D-N03-5)");
+    const std::string legal_op = lexical_absolute(plan.runtime_operator_path);
+    if (lexical_absolute(op_path) != legal_op) {
+        load_error("operator library " + op_path + " is not the runtime package's " + legal_op + " (D-N03-5)");
+    }
+    VerifiedOperator op = VerifiedOperator::prepare(legal_op, plan.op_library.sha256,
+                                                    plan.resolved ? plan.resolved->op_library.bytes : -1);
+    m.report.op_library_sha256 = op.sha256();
     const VerifiedModelBytes head_bytes = VerifiedModelBytes::read(
         "head artifact", head_path, plan.head_artifact.sha256,
         plan.resolved ? plan.resolved->head_artifact.bytes : -1);
@@ -280,9 +298,11 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
     m.report.head_artifact_sha256 = head_bytes.sha256();
     m.report.backbone_engine_sha256 = engine_bytes.sha256();
 
-    // 2. the native scan operator.
-    m.op_handle = dlopen(op_path.c_str(), RTLD_NOW | RTLD_LOCAL);
-    if (m.op_handle == nullptr) load_error(std::string("dlopen ") + op_path + ": " + dlerror());
+    // 2. the native scan operator, from its sealed memfd (a registry reuse
+    // when this process already loaded the same verified operator).
+    m.op_handle = op.load();
+    m.report.op_library_byte_scope = "loaded_buffer";
+    m.report.op_library_mapped = op.mapped().path;
 
     // 3. runtime requirements, then the artifact (no device map).
     torch::jit::setGraphExecutorOptimize(plan.runtime.graph_executor_optimize);

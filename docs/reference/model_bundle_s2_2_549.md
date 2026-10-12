@@ -14,7 +14,10 @@ The governing contracts are [ADR 028 D5](../decisions/028-model-bundle-runtime-s
 [CC-536-01-02](../architecture/ship_export_contracts_536.md#cc-536-01-02), and #550.
 
 This candidate delivers engine/head buffer loading and compatibility gates. **S2-2 is incomplete**:
-N03 operator byte equality remains OPEN. Aggregate `load_verification.byte_scope` stays
+N03 operator byte equality remains OPEN. The N03 implementation (P-N03 rev 3c, owner decisions
+D-N03-1..6) is a separate Draft candidate, described in
+[model_bundle_s2_2_n03_phase2_549.md](model_bundle_s2_2_n03_phase2_549.md); until it is merged and
+main CI passes, the N03 statements below describe main. Aggregate `load_verification.byte_scope` stays
 `hashed_before_load`. The existing S2-1 checkpoint and its historical evidence retain their scope.
 The PR body records the final base/head, CI and independent read-only review.
 

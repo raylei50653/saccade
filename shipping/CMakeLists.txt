@@ -14,7 +14,7 @@
 #
 # Nothing here reads the process environment (tests/unit/
 # test_shipping_config_loader_sources.py) or includes tracking/legacy_env.hpp.
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.19)  # string(JSON) at configure (n03_pin.cmake)
 project(saccade_shipping LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -56,9 +56,36 @@ add_library(saccade_shipping_native_config STATIC
     src/sha256.cpp src/detector_plan.cpp src/schedule_plan.cpp src/model_compatibility.cpp
     src/verified_model_bytes.cpp)
 target_link_libraries(saccade_shipping_native_config PUBLIC
-    saccade_shipping_config saccade_tracker_params saccade_shipping_mot)
+    saccade_shipping_config saccade_tracker_params saccade_shipping_mot ${CMAKE_DL_LIBS})
 target_compile_options(saccade_shipping_native_config PRIVATE -Wall -Wextra -Wpedantic)
 set_target_properties(saccade_shipping_native_config PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# The one N03 operator library the runtime loads (#549 S2-2, P-N03 rev 3d):
+# shipping/n03_operator_pin.json, compiled into saccade_shipping_n03_pin. The
+# pin must be the tracked realization attestation's op_library (the two are
+# separate records: the attestation is reproduction evidence and a runtime
+# input, the pin is the acceptance); a change to either reconfigures.
+set(SACCADE_N03_OPERATOR_PIN ${CMAKE_CURRENT_SOURCE_DIR}/n03_operator_pin.json)
+set(_saccade_n03_attestation ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SACCADE_N03_OPERATOR_PIN} ${_saccade_n03_attestation})
+include(cmake/n03_pin.cmake)
+saccade_read_n03_pin(${SACCADE_N03_OPERATOR_PIN} SACCADE_N03_PIN_SHA256 SACCADE_N03_PIN_BYTES)
+file(READ ${_saccade_n03_attestation} _saccade_n03_attestation_text)
+saccade_require_attested_n03_pin(${SACCADE_N03_PIN_SHA256} ${SACCADE_N03_PIN_BYTES} "${_saccade_n03_attestation_text}"
+    "shipping/n03_operator_pin.json")
+configure_file(cmake/n03_operator_pin.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/generated/n03_operator_pin.cpp @ONLY)
+add_library(saccade_shipping_n03_pin STATIC ${CMAKE_CURRENT_BINARY_DIR}/generated/n03_operator_pin.cpp)
+target_include_directories(saccade_shipping_n03_pin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set_target_properties(saccade_shipping_n03_pin PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# The N03 sealed-memfd loader (#549 S2-2). It links the production pin; a
+# program gets another pin only by linking its own definition ahead of it
+# (the CPU loader test).
+add_library(saccade_shipping_operator_loader STATIC src/operator_loader.cpp)
+target_link_libraries(saccade_shipping_operator_loader PUBLIC
+    saccade_shipping_native_config saccade_shipping_n03_pin ${CMAKE_DL_LIBS})
+target_compile_options(saccade_shipping_operator_loader PRIVATE -Wall -Wextra -Wpedantic)
+set_target_properties(saccade_shipping_operator_loader PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Run completion of saccade_track (#536 CC-536-01-01): run id, <out> lock,
 # journal, temp -> rename, the complete commit point. CUDA-free.
@@ -203,6 +230,80 @@ add_executable(saccade_shipping_verified_model_bytes_test
 target_link_libraries(saccade_shipping_verified_model_bytes_test PRIVATE saccade_shipping_native_config)
 target_compile_options(saccade_shipping_verified_model_bytes_test PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME saccade_shipping_verified_model_bytes_test COMMAND saccade_shipping_verified_model_bytes_test)
+
+# N03 operator load (#549 S2-2): two stand-in operator objects (values 1, 2)
+# loaded through the sealed-memfd path on the real dynamic loader. CPU only.
+foreach(_saccade_fixture_value 1 2)
+    add_library(saccade_shipping_operator_fixture${_saccade_fixture_value} MODULE
+        ${SACCADE_REPO_ROOT}/tests/native/fixtures/operator_fixture.cpp)
+    target_compile_definitions(saccade_shipping_operator_fixture${_saccade_fixture_value} PRIVATE
+        SACCADE_OPERATOR_FIXTURE_VALUE=${_saccade_fixture_value})
+endforeach()
+# Search-path variants (value 1): $ORIGIN in DT_RUNPATH, $ORIGIN in DT_RPATH
+# (both refused), an absolute DT_RUNPATH (accepted).
+foreach(_saccade_fixture_kind origin_runpath origin_rpath absolute_runpath)
+    add_library(saccade_shipping_operator_fixture_${_saccade_fixture_kind} MODULE
+        ${SACCADE_REPO_ROOT}/tests/native/fixtures/operator_fixture.cpp)
+    target_compile_definitions(saccade_shipping_operator_fixture_${_saccade_fixture_kind} PRIVATE
+        SACCADE_OPERATOR_FIXTURE_VALUE=1)
+endforeach()
+set_target_properties(saccade_shipping_operator_fixture_origin_runpath PROPERTIES BUILD_RPATH "\$ORIGIN/../lib")
+target_link_options(saccade_shipping_operator_fixture_origin_runpath PRIVATE "LINKER:--enable-new-dtags")
+set_target_properties(saccade_shipping_operator_fixture_origin_rpath PROPERTIES BUILD_RPATH "\$ORIGIN")
+target_link_options(saccade_shipping_operator_fixture_origin_rpath PRIVATE "LINKER:--disable-new-dtags")
+set_target_properties(saccade_shipping_operator_fixture_absolute_runpath PROPERTIES BUILD_RPATH "/opt/saccade-none/lib")
+target_link_options(saccade_shipping_operator_fixture_absolute_runpath PRIVATE "LINKER:--enable-new-dtags")
+# The loader with a fixture pin (fixtures/n03_operator_fixture_pin.cpp, linked
+# ahead of the production one): the same loader object as the runtime's.
+add_executable(saccade_shipping_operator_loader_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_operator_loader.cpp
+    ${SACCADE_REPO_ROOT}/tests/native/fixtures/n03_operator_fixture_pin.cpp)
+target_include_directories(saccade_shipping_operator_loader_test PRIVATE ${SACCADE_REPO_ROOT}/tests/native/fixtures)
+target_link_libraries(saccade_shipping_operator_loader_test PRIVATE saccade_shipping_operator_loader)
+target_compile_options(saccade_shipping_operator_loader_test PRIVATE -Wall -Wextra -Wpedantic)
+add_dependencies(saccade_shipping_operator_loader_test
+    saccade_shipping_operator_fixture1 saccade_shipping_operator_fixture2)
+add_test(NAME saccade_shipping_operator_loader_test
+    COMMAND saccade_shipping_operator_loader_test
+            $<TARGET_FILE:saccade_shipping_operator_fixture1> $<TARGET_FILE:saccade_shipping_operator_fixture2>)
+
+# The production pin as compiled (generated) equals shipping/n03_operator_pin.json.
+add_executable(saccade_shipping_n03_pin_test ${SACCADE_REPO_ROOT}/tests/native/test_shipping_n03_pin.cpp)
+target_link_libraries(saccade_shipping_n03_pin_test PRIVATE saccade_shipping_operator_loader)
+target_compile_options(saccade_shipping_n03_pin_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_n03_pin_test COMMAND saccade_shipping_n03_pin_test ${SACCADE_N03_OPERATOR_PIN})
+
+# N03 admission (P-N03 rev 3d): the ELF search-path rule, offline. No runtime
+# target links saccade_shipping_n03_admission.
+add_library(saccade_shipping_n03_admission STATIC src/n03_admission.cpp)
+target_link_libraries(saccade_shipping_n03_admission PUBLIC saccade_shipping_native_config)
+target_compile_options(saccade_shipping_n03_admission PRIVATE -Wall -Wextra -Wpedantic)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/n03_admission.cpp)
+file(SHA256 ${CMAKE_CURRENT_SOURCE_DIR}/src/n03_admission.cpp SACCADE_N03_ADMISSION_SOURCE_SHA256)
+add_executable(saccade_n03_admission tools/saccade_n03_admission.cpp)
+target_link_libraries(saccade_n03_admission PRIVATE saccade_shipping_n03_admission)
+target_compile_definitions(saccade_n03_admission PRIVATE
+    SACCADE_N03_ADMISSION_SOURCE_SHA256="${SACCADE_N03_ADMISSION_SOURCE_SHA256}")
+target_compile_options(saccade_n03_admission PRIVATE -Wall -Wextra -Wpedantic)
+add_executable(saccade_shipping_n03_admission_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_n03_admission.cpp)
+target_link_libraries(saccade_shipping_n03_admission_test PRIVATE saccade_shipping_n03_admission)
+target_compile_options(saccade_shipping_n03_admission_test PRIVATE -Wall -Wextra -Wpedantic)
+add_dependencies(saccade_shipping_n03_admission_test
+    saccade_shipping_operator_fixture1 saccade_shipping_operator_fixture2
+    saccade_shipping_operator_fixture_origin_runpath saccade_shipping_operator_fixture_origin_rpath
+    saccade_shipping_operator_fixture_absolute_runpath)
+add_test(NAME saccade_shipping_n03_admission_test
+    COMMAND saccade_shipping_n03_admission_test
+            $<TARGET_FILE:saccade_shipping_operator_fixture1> $<TARGET_FILE:saccade_shipping_operator_fixture2>
+            $<TARGET_FILE:saccade_shipping_operator_fixture_origin_runpath>
+            $<TARGET_FILE:saccade_shipping_operator_fixture_origin_rpath>
+            $<TARGET_FILE:saccade_shipping_operator_fixture_absolute_runpath>)
+# The real N03 against the pin, where the build has it (skipped otherwise).
+add_test(NAME saccade_n03_admission_attested_operator
+    COMMAND saccade_n03_admission --pin ${SACCADE_N03_OPERATOR_PIN} --skip-if-missing
+            ${SACCADE_REPO_ROOT}/build/libsaccade_scan_torchop.so)
+set_tests_properties(saccade_n03_admission_attested_operator PROPERTIES SKIP_RETURN_CODE 77)
 
 if(TARGET saccade_tracking)
     # Measurement boundary (#465 Phase C PR-C2). Each runtime library below is
@@ -364,8 +465,8 @@ if(TARGET saccade_tracking)
         src/detector_host.cpp src/detector_s2.cu src/native_runtime_build.cpp)
     foreach(_v "" "_measurement")
         target_link_libraries(saccade_shipping_detector${_v} PUBLIC
-            saccade_shipping_native_config saccade_perception ${TORCH_LIBRARIES} CUDA::cudart
-            ${CMAKE_DL_LIBS})
+            saccade_shipping_operator_loader saccade_shipping_native_config saccade_perception ${TORCH_LIBRARIES}
+            CUDA::cudart ${CMAKE_DL_LIBS})
         target_include_directories(saccade_shipping_detector${_v} PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include ${SACCADE_REPO_ROOT}/include)
         target_compile_definitions(saccade_shipping_detector${_v} PRIVATE
@@ -421,6 +522,9 @@ if(TARGET saccade_tracking)
         COMMAND ${CMAKE_COMMAND} -DBINARY=$<TARGET_FILE:saccade_track>
                 -DSURFACE=${CMAKE_CURRENT_SOURCE_DIR}/measurement_surface.json
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_no_measurement_surface.cmake
+        COMMAND ${CMAKE_COMMAND} -DBINARY=$<TARGET_FILE:saccade_track>
+                -DPIN_SHA256=${SACCADE_N03_PIN_SHA256}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_n03_pin.cmake
         VERBATIM)
 
     # The shipping tree (#465 PR-12, bundled in Phase C PR-C1): `cmake --install
@@ -529,6 +633,10 @@ if(TARGET saccade_tracking)
         set(SACCADE_SHIPPING_LINEAGE models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json)
         set(SACCADE_SHIPPING_ATTESTATION configs/shipping/mamba_head_realization.attestation.json)
         set(SACCADE_ATTESTED_OP_LIBRARY \"${SACCADE_ATTESTED_OP_LIBRARY}\")
+        set(SACCADE_N03_OPERATOR_PIN \"${SACCADE_N03_OPERATOR_PIN}\")
+        set(SACCADE_N03_BUILT_PIN_SHA256 \"${SACCADE_N03_PIN_SHA256}\")
+        set(SACCADE_N03_BUILT_PIN_BYTES \"${SACCADE_N03_PIN_BYTES}\")
+        set(SACCADE_N03_BUILT_ENTRYPOINT \"$<$<NOT:$<BOOL:${SACCADE_SHIPPING_ENTRYPOINT}>>:$<TARGET_FILE:saccade_track>>\")
         include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/install_model_root.cmake\")" COMPONENT shipping)
 
     if(ENABLE_NATIVE_TESTS)

@@ -110,9 +110,14 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             "path": f"{FROZEN}.lineage.json",
             "sha256": _sha((root / f"{FROZEN}.lineage.json").read_bytes()),
         },
-        "op_library": {"path": "build/libop.so", "sha256": _sha(b"op")},
+        "op_library": {"path": "build/libop.so", "sha256": _sha(b"op"), "bytes": 2},
     }
     (root / ATTESTATION).write_text(json.dumps(att))
+    # the runtime's N03 pin (#549 S2-2, P-N03 rev 3d) the install requires
+    (root / "shipping").mkdir()
+    (root / "shipping/n03_operator_pin.json").write_text(
+        json.dumps({"sha256": _sha(b"op"), "bytes": 2})
+    )
     monkeypatch.setattr(T, "project_root", root)
     monkeypatch.setattr(T.trt_export, "project_root", root)
     return root
@@ -516,6 +521,9 @@ def _install(root: Path) -> subprocess.CompletedProcess[str]:
         "SACCADE_SHIPPING_LINEAGE": f"{FROZEN}.lineage.json",
         "SACCADE_SHIPPING_ATTESTATION": ATTESTATION,
         "SACCADE_ATTESTED_OP_LIBRARY": str(root / "build/libop.so"),
+        "SACCADE_N03_OPERATOR_PIN": str(root / "shipping/n03_operator_pin.json"),
+        "SACCADE_N03_BUILT_PIN_SHA256": _sha(b"op"),
+        "SACCADE_N03_BUILT_PIN_BYTES": "2",
     }
     return subprocess.run(
         [cmake, *(f"-D{k}={v}" for k, v in defs.items()), "-P", str(INSTALL_SCRIPT)],

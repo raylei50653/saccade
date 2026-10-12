@@ -20,9 +20,10 @@ directory. "No CUDA call" is observed as in
   ``--require-identity``, exits 2 before the run id (MB-54) -- no journal, no
   ``<out>``, no CUDA;
 * stand-in bundle (small files, a lineage / attestation / manifest bound to
-  them): Gate A passes in manifest mode, CUDA initializes, and Gate B's dlopen
-  of the stand-in operator fails: ``load_verification`` failed, identity
-  unchanged (MB-58, catchable). Needs a CUDA driver;
+  them): Gate A passes in manifest mode, CUDA initializes, and Gate B refuses
+  the stand-in operator (not the pinned N03, before it is opened; #549 S2-2,
+  P-N03 rev 3d): ``load_verification`` failed, identity unchanged (MB-58,
+  catchable). Needs a CUDA driver;
 * refusals without CUDA, each one change: a replaced member, a member of
   another size, a symlinked member, an allowlist other than the pinned one
   (MB-32), no manifest, ``--require-identity expected_source_verified`` with
@@ -359,7 +360,11 @@ def test_standin_bundle_passes_gate_a_and_gate_b_records_the_failed_load(
     assert cuda, "the observer did not see cuInit after Gate A passed"
     j = _journal(tmp_path)
     assert j["state"] == "failed"
-    assert "dlopen" in j["failure"]["message"], j["failure"]
+    standin_sha = _sha(b"operator library stand-in")
+    assert (
+        f"sha256 {standin_sha} is not the admitted N03 operator library's"
+        in j["failure"]["message"]
+    ), j["failure"]
     assert j["load_verification"] == LOAD_FAILED
     identity = j["identity"]
     assert identity["mode"] == "model_bundle" and identity["required"] == "none"
@@ -688,10 +693,14 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
     assert load["head_artifact_sha256"] == manifest["members"][HEAD]["sha256"]
     assert load["backbone_engine_sha256"] == manifest["members"][BACKBONE]["sha256"]
     # The same binary in legacy mode on the same sequence: raw MOT text equal
-    # (a local diagnostic of the two modes, not a qualified parity claim).
+    # (a local diagnostic of the two modes, not a qualified parity claim). Its
+    # model root is the prefix's share/saccade (the only place its operator
+    # library may come from, #549 S2-2 D-N03-5), with the models linked in.
+    share_root = prefix / "share" / "saccade"
+    (share_root / "models").symlink_to(REPO / "models", target_is_directory=True)
     legacy, _ = _run(
         tmp_path,
-        BUILD / binary,
+        prefix / "libexec" / binary,
         [
             "--config",
             str(CONFIG),
@@ -699,6 +708,8 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
             str(REPO / manifest["members"][LINEAGE]["path"]),
             "--attestation",
             str(ATTESTATION),
+            "--model-root",
+            str(share_root),
             str(SEQUENCE),
         ],
         out="legacy",
@@ -717,12 +728,13 @@ def test_real_bundle_killed_during_the_load_leaves_no_load_claim(
     """MB-58, uncatchable: SIGKILL while the runtime is loading the detector.
 
     "During the load" is observed, not assumed: the kill is sent only once the
-    runtime root's operator library is mapped into the process (dlopen, Gate
-    B step 2) while the journal still has no load_verification -- the head and
-    engine loads that follow take seconds. A run that got further (verified)
-    fails this test instead of passing it."""
-    prefix, bundle, manifest = _real_bundle(tmp_path, "saccade_track")
-    op = str((prefix / "share" / "saccade" / manifest["members"][OP]["path"]).resolve())
+    operator library is mapped into the process -- its sealed memfd, made from
+    the runtime root's copy (dlopen, Gate B step 2; #549 S2-2) -- while the
+    journal still has no load_verification; the head and engine loads that
+    follow take seconds. A run that got further (verified) fails this test
+    instead of passing it."""
+    prefix, bundle, _ = _real_bundle(tmp_path, "saccade_track")
+    op = "/memfd:saccade-n03:src-fd="
     journal = tmp_path / "out" / JOURNAL
     p = subprocess.Popen(
         [

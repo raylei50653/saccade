@@ -1211,6 +1211,17 @@ bash results/465_prc1_bundle/<label>/run.sh   # §17.4 gates 1-5 and the negativ
 
 launcher 與 auditor 的原始碼註解以「§17.8, A2」指到這裡。修正案、契約修正與正式 run 結果在 §18.10–§18.11：A2 改的是 PR-C1 的 launcher 與 auditor，但正式 run 是在 PR-C1＋PR-C2 合在一起的 head 上重跑 §18.4 的整個 run。§17.4 與 §17.5 記錄的是舊 launcher（沒有 probe）。
 
+### 17.9 #549 S2-2：N03 從 sealed memfd 載入（P-N03 rev 3c，rev 3d 修訂）
+
+設計、威脅模型與研究證據：[#583](https://github.com/raylei50653/saccade/pull/583)；rev 3d（離線 admission 與 runtime pin）：[model_bundle_s2_2_n03_offline_proposal_549.md](model_bundle_s2_2_n03_offline_proposal_549.md)；實作與證據：[model_bundle_s2_2_n03_phase2_549.md](model_bundle_s2_2_n03_phase2_549.md)。這裡只記下實作之後的規則；N03 MB-41 在合併並通過 main CI 之前仍是 OPEN，整體 `load_verification.byte_scope` 維持 `hashed_before_load`。
+
+- **host**（`operator_loader.hpp`）：shipping entrypoint 由 kernel 對自己的 mapping（`/proc/self/maps` 中 `dl_iterate_phdr` 第一個物件）推出 `<prefix>/libexec/<entrypoint>`，唯一合法的 operator library 是 `<prefix>/share/saccade/build/libsaccade_scan_torchop.so`（D-N03-5；direct exec 與 launcher 的 explicit loader 相同，Gate A 的 `/proc/self/exe` 不變）。plan 的 binding 指向其他檔案、或沒有指定時，Gate B 拒絕（可捕捉，exit 2）。plan 的 SHA-256（與 Gate A 已知的大小）必須是編入的 N03 pin，否則在開檔、registry 與 `dlopen` 之前拒絕（rev 3d；caller attestation 自洽也一樣）。合法路徑只開一次（`openat2`，任何一段不得是 symlink 或 magic link），要求 pin 的大小，讀完、核對 SHA-256，複製進標籤為 `saccade-n03:src-fd=<S>` 的 memfd，加上 `F_SEAL_WRITE | GROW | SHRINK | SEAL` 並讀回確認（`F_SEAL_FUTURE_WRITE` 不能代替 `F_SEAL_WRITE`），再整份讀回核對 SHA-256，然後 `dlopen("/proc/self/fd/<M>")`。回傳物件 dynamic section 所在的 `/proc/self/maps` record 必須是 M（device、inode 與 M 自己的 `/proc` 名稱）。M 保持開啟到 process 結束；同一 process 只接受同一個 SHA-256 與來源路徑的 operator。沒有路徑載入的 fallback（D-N03-3）。
+- **N03 pin 與 admission**（rev 3d）：`shipping/n03_operator_pin.json` 在 configure 時生成 `saccade_shipping_n03_pin`，由 loader 的 library 連結；它必須等於 tracked realization attestation 的 `op_library`（configure 與 install 都核對），`saccade_track` 的 POST_BUILD 確認 binary 帶有該 digest。runtime 不解析 ELF。`$ORIGIN` 搜尋路徑規則（policy `n03-no-origin-v1`）由不安裝、不被任何 runtime target 連結的 `saccade_n03_admission` 在接受新 digest 時執行；install／package 只比對 digest。
+- **auditor**（`la_objopen`）：先以 kernel 的記錄辨識實際 mapping（含 dynamic section 的 `/proc/self/maps` record：路徑與 inode；overlayfs 下 maps 與 `stat` 的 device 不同，所以一般物件不比 device）。vDSO 是 kernel 的 `[vdso]`。名稱無法辨識 mapping 的物件——`/proc/`、`/dev/fd/` 開頭的名稱、`realpath` 失敗的相對或絕對名稱、真實路徑不是 mapping 路徑、mapping 路徑帶 ` (deleted)`、inode 不同——一律拒絕，除非它是驗證過的 operator memfd：名稱恰為 `/proc/self/fd/<M>`、標籤與四個 seal 正確、`S` 的 `d_path` 是固定 operator 路徑且是該路徑目前的 inode、M 的 bytes 與該檔案相同、M 就是實際 mapping（路徑、device、inode）。其餘物件照原規則分類。maps record 整筆讀入；超過 64 KiB 緩衝的 record 會整筆丟到換行為止，不會把後續片段當成 record。
+- **相容性限制**（fail closed）：名稱以 ` (deleted)` 結尾的一般檔案、`l_ld` 不在檔案 mapping 中的物件、mapping 路徑長度達 `PATH_MAX` 的物件，都會被拒絕。
+- **對 main 的已知繞過**：`/proc/self/fd` 載入已刪除的 N03 名稱副本、相對路徑 alias 指向 memfd、alias 的 `realpath` 被植入的 `… (deleted)` 檔案冒用，在 main 的 auditor 下都會放行；新規則都拒絕（127）。
+- **讀取 log 的工具**：`check_shipping_bundle.py` 的 `sources`（`LD_DEBUG=files` 的 `calling init` 路徑）與 strace parser（`open`／`openat`，不含 `openat2`）尚未理解 memfd 載入，套件重新 pin 之前要調整；本節不改變發行策略。
+
 ## 18. Shipping CLI：移除開發選項、measurement 邊界（Phase C PR-C2）
 
 PR-C2 是 Phase C 的第二個 PR（[Phase C scope](native_runtime_phase_c_scope.md) §6）：shipping 的 `saccade_track` 不再有任何開發／量測選項，也不含任何 mutation 程式碼；負控制注入只存在於一個明確、不安裝的 developer build。PR-C2 不改任何 stage 的計算，也不改 engine、operator library、27 個第三方物件的閉包、launcher／auditor、`sm_120` 與 Ubuntu 24.04 的契約。entrypoint 的原始碼改了，所以它的位元組改變，pin 換成新的一份（§18.4）。
