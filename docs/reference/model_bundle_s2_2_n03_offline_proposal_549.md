@@ -109,6 +109,12 @@ N03 本身的 bytes，不涵蓋其 `DT_NEEDED` 依賴如何解析。
 | configure | 由 pin 產生 constant；pin 與 tracked attestation 的 `op_library` 不一致即失敗（`shipping/cmake/n03_pin.cmake`，configure 與 install 共用；shipping CMake 最低版本因 `string(JSON)` 升為 3.19）；pin 變更觸發重新 configure／重建 |
 | install／package | 只核對 digest：既有 [install-time copy check](../../shipping/cmake/install_model_root.cmake) 對照本次 build 編入的 pin（source pin 在 build 後改過、或要安裝的本次 build `saccade_track` 不帶該 digest，就要求重建），且 install 所用的 attestation snapshot 必須等於它；`scripts/native/check_shipping_package.py` 的 `check_n03_pin` 核對 packaged operator 等於該 commit 的 pin；該 commit 的 shipping CMake 已編入 pin 時，pin 讀不到即拒絕（`read_n03_pin`） |
 
+**#585 後續 hardening。** 上表保留 rev 3d 接受時的設計；現行 `read_n03_pin` 的免 pin
+例外已改為可證明的 ancestry：只允許 `74f2f5cb1a3db8a1f42da48d533e3322f243d138`
+（最後一個 pre-rev-3d main）及其祖先，其他 commit 一律要求可讀的 pin。
+未知 commit、缺少 history 或 shallow repository 均拒絕，不再以 CMake 文字判斷。
+現行規則見 [Phase 2 的 Pin and admission](model_bundle_s2_2_n03_phase2_549.md#design)。
+
 同一份 bytes 的 parser 結果不會改變，因此 install／package 不重跑 parser，也不讀 caller
 提供的 `PASS` 紀錄。pin 核對不放在 saccade_track 的 compile 步驟：重編 op library 只會在
 install／package 被拒，不阻擋開發 build。封裝的 memfd evidence reader 適配仍屬既有
