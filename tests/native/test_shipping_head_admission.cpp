@@ -16,7 +16,8 @@
 //       does not define, another global (in data and in the debug ranges),
 //       an opcode the unpickler does not read, protocol 3, a truncated
 //       pickle, code outside a def or class, a class constant, a literal
-//       parameter default;
+//       parameter default, NamedTuple reserved-name fields, ordinary classes,
+//       Enum and interface class kinds;
 //     - after the load: an operator off the list (aten::sin), control flow
 //       (prim::If), a from_file method that forward never calls, a call
 //       through a module interface (it does not resolve statically), and a
@@ -294,6 +295,27 @@ int main(int argc, char** argv) {
                  "class __torch__.Benign assigns k a value, which the loader evaluates");
         pre_case("literal_default", benign("def helper(self, y: int = 3) -> int:\n    return y\n"),
                  "code record code/__torch__.py gives parameter y a default value, which the loader evaluates");
+        // Reserved Module metadata names must not exempt NamedTuple fields
+        // from admission. These declarations are intentionally harmless;
+        // their importer is outside the reviewed N02 Module grammar.
+        for (const std::string& attr : {"__parameters__", "__buffers__"}) {
+            pre_case(("named_tuple_" + attr).c_str(), rewrite(ok, [&](Records& r) {
+                         record(r, "code/__torch__.py") +=
+                             "\nclass FieldDefaults(NamedTuple):\n  " + attr + " : Tensor = Tensor\n";
+                     }),
+                     "class __torch__.FieldDefaults is not a Module class");
+        }
+        pre_case("ordinary_class", rewrite(ok, [](Records& r) {
+                     replace_once(record(r, "code/__torch__.py"), "class Benign(Module):", "class Benign:");
+                 }),
+                 "class __torch__.Benign is not a Module class");
+        for (const std::string& base : {"Enum", "Interface", "ModuleInterface"}) {
+            pre_case(("class_kind_" + base).c_str(), rewrite(ok, [&](Records& r) {
+                         replace_once(record(r, "code/__torch__.py"), "class Benign(Module):",
+                                      "class Benign(" + base + "):");
+                     }),
+                     "class __torch__.Benign is not a Module class");
+        }
         pre_case("top_level", rewrite(ok, [](Records& r) { record(r, "code/__torch__.py") += "x = 1\n"; }),
                  "at top level");
         {
@@ -304,8 +326,10 @@ int main(int argc, char** argv) {
         }
 
         // ── after the load: one change each ──────────────────────────────
-        const auto post_case = [&](const char* name, const std::string& bytes, const std::string& want) {
-            CHECK(archive_error(dir, bytes).empty());
+        const auto post_case = [&](const char* name, const std::string& bytes, const std::string& want,
+                                   bool archive_admitted = true) {
+            if (archive_admitted) CHECK(archive_error(dir, bytes).empty());
+            else CHECK(has(archive_error(dir, bytes), "is not a Module class"));
             const std::string e = module_error(load(bytes));
             std::fprintf(stderr, "%s: %s\n", name, e.c_str());
             CHECK(starts(e, kPrefix));
@@ -318,7 +342,7 @@ int main(int argc, char** argv) {
                   "function __torch__.Benign.helper uses aten::from_file");
         post_case("interface_call", interface_call(),
                   "function __torch__.Caller.forward makes a call that does not resolve to the head's own functions: "
-                  "prim::CallMethod one on __torch__.OneInterface");
+                  "prim::CallMethod one on __torch__.OneInterface", false);
 
         {
             // In memory, each Module has its own compilation unit: outer's

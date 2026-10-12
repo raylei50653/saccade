@@ -151,6 +151,14 @@ void refuse_parameter_defaults(const torch::jit::TreeRef& tree, const std::strin
 // (lists of names), and __annotations__["n"] = T (a type).
 void admit_class_body(const torch::jit::ClassDef& cls, const std::string& cls_name) {
     using namespace torch::jit;
+    // These body rules describe the Module importer only. NamedTuple has a
+    // different default evaluator, including for fields named __parameters__
+    // or __buffers__. N02 needs only Module classes, so every other class
+    // kind is refused before applying any Module metadata exception.
+    if (!cls.superclass().present() || cls.superclass().get().kind() != TK_VAR ||
+        Var(cls.superclass().get()).name().name() != "Module") {
+        refuse("class " + cls_name + " is not a Module class; other class importers are not admitted");
+    }
     for (const Stmt& stmt : cls.body()) {
         if (stmt.kind() == TK_DEF) {
             if (Def(stmt).name().name() == "__setstate__") {

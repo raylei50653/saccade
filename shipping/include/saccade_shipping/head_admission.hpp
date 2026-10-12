@@ -22,7 +22,9 @@
 //      - no parameter default, class constant or other class-body value: the
 //        importer evaluates each one by compiling and running it
 //        (script_type_parser.cpp evaluateDefaults).
-//      A class body may hold only methods, attribute annotations,
+//      Only Module class declarations are admitted. NamedTuple, Enum,
+//      interfaces and ordinary classes use other import paths and are refused.
+//      A Module body may hold only methods, attribute annotations,
 //      __parameters__ / __buffers__ and __annotations__ types.
 //   4. Every pickle the load reads uses only opcodes LibTorch's unpickler
 //      reads. Its GLOBALs may name only:
