@@ -107,7 +107,7 @@ N03 本身的 bytes，不涵蓋其 `DT_NEEDED` 依賴如何解析。
 | 接受新 digest | 執行 `saccade_n03_admission`；紀錄保存 artifact digest／size、pin digest、policy、checker source digest、target loader／ABI 與結果。紀錄是證據，不能自行核准另一份 bytes。 |
 | CI／CPU ctest | parser 的 fixture controls；artifact 存在時，對真實 N03 執行 admission 工具 |
 | configure | 由 pin 產生 constant；pin 與 tracked attestation 的 `op_library` 不一致即失敗（`shipping/cmake/n03_pin.cmake`，configure 與 install 共用；shipping CMake 最低版本因 `string(JSON)` 升為 3.19）；pin 變更觸發重新 configure／重建 |
-| install／package | 只核對 digest：既有 [install-time copy check](../../shipping/cmake/install_model_root.cmake) 對照本次 build 編入的 pin（source pin 在 build 後改過就要求重建），且 attestation 必須等於它；`scripts/native/check_shipping_package.py` 的 `check_n03_pin` 核對 packaged operator 等於該 commit 的 pin |
+| install／package | 只核對 digest：既有 [install-time copy check](../../shipping/cmake/install_model_root.cmake) 對照本次 build 編入的 pin（source pin 在 build 後改過、或要安裝的本次 build `saccade_track` 不帶該 digest，就要求重建），且 install 所用的 attestation snapshot 必須等於它；`scripts/native/check_shipping_package.py` 的 `check_n03_pin` 核對 packaged operator 等於該 commit 的 pin |
 
 同一份 bytes 的 parser 結果不會改變，因此 install／package 不重跑 parser，也不讀 caller
 提供的 `PASS` 紀錄。pin 核對不放在 saccade_track 的 compile 步驟：重編 op library 只會在

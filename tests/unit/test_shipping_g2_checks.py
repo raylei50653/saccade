@@ -600,3 +600,21 @@ def test_install_model_root_refuses_a_pin_changed_since_the_build(
     assert r.returncode != 0
     assert "rebuild before installing" in r.stderr, r.stderr
     assert not (Path(defs["SACCADE_MODEL_ROOT_DEST"]) / "build/libop.so").exists()
+
+
+@pytest.mark.parametrize("carries", [True, False])
+def test_install_model_root_requires_the_built_entrypoint_to_carry_the_pin(
+    tmp_path: Path, carries: bool
+) -> None:
+    """This build's saccade_track (reconfigured but not rebuilt: another pin)."""
+    _, defs = _fake_repo(tmp_path)
+    exe = tmp_path / "saccade_track"
+    exe.write_bytes(b"\x7fELF..." + (_sha(b"op") if carries else "d" * 64).encode())
+    defs["SACCADE_N03_BUILT_ENTRYPOINT"] = str(exe)
+    r = _install(defs)
+    if carries:
+        assert r.returncode == 0, r.stderr
+    else:
+        assert r.returncode != 0
+        assert "does not carry the N03 pin" in r.stderr, r.stderr
+        assert not (Path(defs["SACCADE_MODEL_ROOT_DEST"]) / "build/libop.so").exists()

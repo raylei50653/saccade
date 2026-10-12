@@ -15,8 +15,12 @@
 # (P-N03 rev 3d): the pin this build compiled into the runtime
 # (SACCADE_N03_BUILT_PIN_*, from configure), which must still be
 # shipping/n03_operator_pin.json (a pin changed since the build needs a
-# rebuild first). The install checks digests only; the ELF admission ran once
-# when that digest was accepted.
+# rebuild first). When the tree takes this build's saccade_track
+# (SACCADE_N03_BUILT_ENTRYPOINT; empty for a pinned entrypoint, which predates
+# the pin until it is re-pinned), that executable must carry the pin's digest,
+# so a reconfigure without a rebuild cannot pair it with another operator.
+# The install checks digests only; the ELF admission ran once when that digest
+# was accepted.
 foreach(_v SACCADE_REPO_ROOT SACCADE_MODEL_ROOT_DEST SACCADE_SHIPPING_CONFIG
            SACCADE_SHIPPING_LINEAGE SACCADE_SHIPPING_ATTESTATION SACCADE_ATTESTED_OP_LIBRARY
            SACCADE_N03_OPERATOR_PIN SACCADE_N03_BUILT_PIN_SHA256 SACCADE_N03_BUILT_PIN_BYTES)
@@ -66,8 +70,16 @@ saccade_read_n03_pin("${SACCADE_N03_OPERATOR_PIN}" _pin_sha _pin_bytes)
 if(NOT _pin_sha STREQUAL SACCADE_N03_BUILT_PIN_SHA256 OR NOT _pin_bytes STREQUAL SACCADE_N03_BUILT_PIN_BYTES)
     message(FATAL_ERROR "shipping model root: shipping/n03_operator_pin.json (${_pin_sha}, ${_pin_bytes} bytes) is not the pin this build compiled into the runtime (${SACCADE_N03_BUILT_PIN_SHA256}, ${SACCADE_N03_BUILT_PIN_BYTES} bytes); rebuild before installing")
 endif()
+if(SACCADE_N03_BUILT_ENTRYPOINT)
+    file(STRINGS "${SACCADE_N03_BUILT_ENTRYPOINT}" _pin_in_entrypoint REGEX "${SACCADE_N03_BUILT_PIN_SHA256}" LIMIT_COUNT 1)
+    if(NOT _pin_in_entrypoint)
+        message(FATAL_ERROR "shipping model root: ${SACCADE_N03_BUILT_ENTRYPOINT} does not carry the N03 pin ${SACCADE_N03_BUILT_PIN_SHA256}; rebuild before installing")
+    endif()
+endif()
+# The attestation text read above: the snapshot whose op_library digest the
+# copy below checks.
 saccade_require_attested_n03_pin("${SACCADE_N03_BUILT_PIN_SHA256}" "${SACCADE_N03_BUILT_PIN_BYTES}"
-    "${SACCADE_REPO_ROOT}/${SACCADE_SHIPPING_ATTESTATION}" "shipping model root")
+    "${_attestation}" "shipping model root")
 if(NOT _att_lineage_path STREQUAL SACCADE_SHIPPING_LINEAGE)
     message(FATAL_ERROR "shipping model root: the attestation binds ${_att_lineage_path}, not ${SACCADE_SHIPPING_LINEAGE}")
 endif()

@@ -4,8 +4,9 @@
 #
 #   saccade_read_n03_pin(<pin file> <out sha256> <out bytes>)
 #       a 64-hex sha256 and a positive byte count, or FATAL_ERROR;
-#   saccade_require_attested_n03_pin(<sha256> <bytes> <attestation file> <context>)
-#       the realization attestation's op_library must be that pin.
+#   saccade_require_attested_n03_pin(<sha256> <bytes> <attestation JSON text> <context>)
+#       the realization attestation's op_library must be that pin (the caller
+#       passes the text it read, so it checks the snapshot it uses).
 #
 # Script mode (tests): cmake -DPIN=<pin file> -DATTESTATION=<attestation> -P n03_pin.cmake
 function(saccade_read_n03_pin pin_file out_sha out_bytes)
@@ -21,12 +22,11 @@ function(saccade_read_n03_pin pin_file out_sha out_bytes)
     set(${out_bytes} "${_bytes}" PARENT_SCOPE)
 endfunction()
 
-function(saccade_require_attested_n03_pin sha bytes attestation_file context)
-    file(READ "${attestation_file}" _att)
-    string(JSON _att_sha ERROR_VARIABLE _e1 GET "${_att}" op_library sha256)
-    string(JSON _att_bytes ERROR_VARIABLE _e2 GET "${_att}" op_library bytes)
+function(saccade_require_attested_n03_pin sha bytes attestation context)
+    string(JSON _att_sha ERROR_VARIABLE _e1 GET "${attestation}" op_library sha256)
+    string(JSON _att_bytes ERROR_VARIABLE _e2 GET "${attestation}" op_library bytes)
     if(_e1 OR _e2 OR NOT _att_sha STREQUAL sha OR NOT _att_bytes STREQUAL bytes)
-        message(FATAL_ERROR "${context}: the attestation's op_library (${_att_sha}, ${_att_bytes} bytes; ${attestation_file}) is not the runtime's N03 pin (${sha}, ${bytes} bytes; shipping/n03_operator_pin.json)")
+        message(FATAL_ERROR "${context}: the attestation's op_library (${_att_sha}, ${_att_bytes} bytes) is not the runtime's N03 pin (${sha}, ${bytes} bytes; shipping/n03_operator_pin.json)")
     endif()
 endfunction()
 
@@ -35,5 +35,6 @@ if(CMAKE_SCRIPT_MODE_FILE STREQUAL CMAKE_CURRENT_LIST_FILE)
         message(FATAL_ERROR "usage: cmake -DPIN=<pin file> -DATTESTATION=<attestation> -P n03_pin.cmake")
     endif()
     saccade_read_n03_pin("${PIN}" _sha _bytes)
-    saccade_require_attested_n03_pin("${_sha}" "${_bytes}" "${ATTESTATION}" "n03 pin")
+    file(READ "${ATTESTATION}" _attestation)
+    saccade_require_attested_n03_pin("${_sha}" "${_bytes}" "${_attestation}" "n03 pin")
 endif()

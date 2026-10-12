@@ -70,7 +70,8 @@ set(_saccade_n03_attestation ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_re
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SACCADE_N03_OPERATOR_PIN} ${_saccade_n03_attestation})
 include(cmake/n03_pin.cmake)
 saccade_read_n03_pin(${SACCADE_N03_OPERATOR_PIN} SACCADE_N03_PIN_SHA256 SACCADE_N03_PIN_BYTES)
-saccade_require_attested_n03_pin(${SACCADE_N03_PIN_SHA256} ${SACCADE_N03_PIN_BYTES} ${_saccade_n03_attestation}
+file(READ ${_saccade_n03_attestation} _saccade_n03_attestation_text)
+saccade_require_attested_n03_pin(${SACCADE_N03_PIN_SHA256} ${SACCADE_N03_PIN_BYTES} "${_saccade_n03_attestation_text}"
     "shipping/n03_operator_pin.json")
 configure_file(cmake/n03_operator_pin.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/generated/n03_operator_pin.cpp @ONLY)
 add_library(saccade_shipping_n03_pin STATIC ${CMAKE_CURRENT_BINARY_DIR}/generated/n03_operator_pin.cpp)
@@ -635,6 +636,7 @@ if(TARGET saccade_tracking)
         set(SACCADE_N03_OPERATOR_PIN \"${SACCADE_N03_OPERATOR_PIN}\")
         set(SACCADE_N03_BUILT_PIN_SHA256 \"${SACCADE_N03_PIN_SHA256}\")
         set(SACCADE_N03_BUILT_PIN_BYTES \"${SACCADE_N03_PIN_BYTES}\")
+        set(SACCADE_N03_BUILT_ENTRYPOINT \"$<$<NOT:$<BOOL:${SACCADE_SHIPPING_ENTRYPOINT}>>:$<TARGET_FILE:saccade_track>>\")
         include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/install_model_root.cmake\")" COMPONENT shipping)
 
     if(ENABLE_NATIVE_TESTS)

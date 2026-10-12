@@ -79,8 +79,10 @@ legal operator library:
   compiled at configure time into `saccade_shipping_n03_pin`, which the loader's library
   `saccade_shipping_operator_loader` links. Configure refuses a pin that is not the tracked
   realization attestation's `op_library` (`cmake/n03_pin.cmake`). Install compares against the pin
-  this build compiled in, refuses a source pin changed since the build, and requires the
-  attestation to be that pin. The package checker (`check_n03_pin`) compares the packaged
+  this build compiled in, refuses a source pin changed since the build, requires this build's
+  `saccade_track` (when the tree takes it) to carry the pin's digest, and requires the attestation
+  snapshot it copies against to be that pin. A pinned entrypoint (`SACCADE_SHIPPING_ENTRYPOINT`)
+  is not checked: the current one predates the pin until a package re-pin. The package checker (`check_n03_pin`) compares the packaged
   operator with the pin at the source commit.
 - `saccade_track`'s POST_BUILD (`cmake/check_n03_pin.cmake`) requires the pin's digest in the
   binary, and `saccade_shipping_n03_pin_test` requires the generated pin to equal the record.
