@@ -5,7 +5,15 @@
 
 # #549 S2-2 N03 Phase 2: sealed-memfd operator load (implementation candidate)
 
-**Status: Draft implementation candidate. Not merged.** Until it is merged and main CI passes:
+**Merge status (2026-10-12):** merged as [#584](https://github.com/raylei50653/saccade/pull/584)
+(merge `4a79e50f4484fefa4d3f270a406eac016b229412`, head `c73ff7c1`); main CI on the merge SHA
+passed 8/8. The #585 hardening followed in [#586](https://github.com/raylei50653/saccade/pull/586)
+(merge `793c5d56ad6be2d0f85c98112dc63ae7948f4bec`). The status after merge is written only in
+[CC-536-01-02 S2-2 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-2): the per-object scope is `loaded_buffer` for all three objects, but MB-41 stays **OPEN**,
+S2-2 stays **PARTIAL** and the aggregate scope stays `hashed_before_load` until a separate PR,
+under the owner's conditional approval of 2026-10-12, checks the conditions and changes them. The rest of this page is the candidate record as reviewed.
+
+**Status (as reviewed): Draft implementation candidate. Not merged.** Until it is merged and main CI passes:
 
 - N03 MB-41 stays **OPEN** and S2-2 stays **PARTIAL**;
 - aggregate `load_verification.byte_scope` stays `hashed_before_load`;

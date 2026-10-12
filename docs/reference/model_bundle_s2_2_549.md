@@ -13,6 +13,12 @@ The governing contracts are [ADR 028 D5](../decisions/028-model-bundle-runtime-s
 [model-bundle contract](../architecture/model_bundle_contract_549.md),
 [CC-536-01-02](../architecture/ship_export_contracts_536.md#cc-536-01-02), and #550.
 
+**Merge status (2026-10-12):** merged as [#582](https://github.com/raylei50653/saccade/pull/582)
+(merge `74f2f5cb1a3db8a1f42da48d533e3322f243d138`). The N03 candidate referred to below merged
+later as [#584](https://github.com/raylei50653/saccade/pull/584); since then the operator is no
+longer loaded by pathname and its per-object scope is `loaded_buffer`. The current status is
+written only in [CC-536-01-02 S2-2 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-2). The rest of this page is the record as reviewed.
+
 This candidate delivers engine/head buffer loading and compatibility gates. **S2-2 is incomplete**:
 N03 operator byte equality remains OPEN. The N03 implementation (P-N03 rev 3c, owner decisions
 D-N03-1..6) is a separate Draft candidate, described in
