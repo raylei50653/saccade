@@ -1,6 +1,6 @@
 <!-- doc-status: accepted -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-10-11 -->
+<!-- doc-date: 2026-10-12 -->
 <!-- doc-module: cross -->
 
 # ADR 028: 模型 bundle 與 native runtime 分離：可信 expected identity 與發行責任
@@ -11,7 +11,7 @@
 
 本 ADR 接受的只是**設計目標**；範圍與邊界只在下方決策段落陳述。介面契約、fail-closed 規則、G01–G07 處置與控制矩陣放在 [model bundle 契約](../architecture/model_bundle_contract_549.md)，本文不重述。
 
-<a id="implementation-status"></a>**實作狀態（2026-10-11，只引用，不在此重述證據）**：S2-1 已 merge（[#576](https://github.com/raylei50653/saccade/pull/576)，merge commit `c5ddf51c62c382b8f6851c57bb07b2b72d18d083`），屬於 **source-level implemented**。狀態的唯一寫入處是 [CC-536-01-02 S2-1 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-1)，逐層證據在 [S2-1 evidence page](../reference/model_bundle_s2_1_549.md)。依決策項目區分：
+<a id="implementation-status"></a>**實作狀態（2026-10-12，只引用，不在此重述證據）**：S2-1 已 merge（[#576](https://github.com/raylei50653/saccade/pull/576)，merge commit `c5ddf51c62c382b8f6851c57bb07b2b72d18d083`）；S2-2 的三個 PR 也已 merge（[#582](https://github.com/raylei50653/saccade/pull/582)、[#584](https://github.com/raylei50653/saccade/pull/584)、[#586](https://github.com/raylei50653/saccade/pull/586)，最後一個 merge `793c5d56ad6be2d0f85c98112dc63ae7948f4bec`），S2-2 仍是 **PARTIAL**。兩者都屬於 **source-level implemented**。狀態的唯一寫入處是 [CC-536-01-02 S2-1 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-1) 與 [CC-536-01-02 S2-2 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-2)，逐層證據在 [S2-1 evidence page](../reference/model_bundle_s2_1_549.md)、[S2-2 evidence page](../reference/model_bundle_s2_2_549.md) 與 [N03 Phase 2 page](../reference/model_bundle_s2_2_n03_phase2_549.md)。依決策項目區分：
 
 - **source-level implemented（S2-1）**：
   - D2 TR-1b 機制：allowlist sha256 編進 entrypoint，approved entry 才給 `expected_source_verified`。**production allowlist 是空的**，所以目前沒有任何 shipping bundle 能達到 `expected_source_verified`；CI 只用測試自帶 pin 的 fixture 驗過這條路徑。
@@ -20,11 +20,15 @@
   - D6：manifest 模式下 attestation 必填。
   - D7：v1 schema 接受 `engine_precision: unresolved`。
   - 狀態與寫入邊界：Gate A 唯一寫入 `identity`；Gate B 寫 `load_verification`，`byte_scope` 最多 `hashed_before_load`。
-- **仍是 accepted target、未實作**：
+- **source-level implemented（S2-2，PARTIAL）**：
+  - D5 的不變式在逐物件層面：engine 和 head 從已 hash 的 buffer 載入（#582）；N03 依 owner 接受的 P-N03 rev 3d，以 compiled pin、sealed memfd 與 mapping 核對載入，auditor 不放寬，改以 kernel 的 mapping 記錄辨識物件（#584）。這個技術是 owner 另外接受的，不是本 ADR 批准的。
+  - manifest 模式的 TRT、LibTorch、CUDA 版本 gate（Gate A），以及 SM gate 和 TRT I/O dtype 比對（Gate B）（#582）。
+  - install 只寫入驗證過的 snapshot（#586）。
+- **仍是 accepted target、未實作或待裁決**：
   - D1 的 package 拆分，以及 D4 的 installed launcher 預設改成 `expected_source_verified`，兩者都屬 S2-3。
-  - D5 的不變式（`loaded_buffer`），以及 SM、TRT、LibTorch、CUDA 版本 gate 和 TRT I/O dtype 比對，都屬 S2-2。
+  - D5 的整體宣稱：`load_verification.byte_scope` 仍固定 `hashed_before_load`；提升為 `loaded_buffer` 與 MB-41 結案依 owner 條件式批准，另以獨立 PR 處理。
   - TR-2 延後。
-- **未驗證**：qualified V5 是 **UNRESOLVED**，installed package 是 **UNVERIFIED**，equivalence 是 `unproven`。manifest 模式 MOT text 相等只是 diagnostic，不是 parity。`distribution.status=local-only`。
+- **未驗證**：qualified V5 是 **UNRESOLVED**，installed package 是 **UNVERIFIED**（entrypoint 尚未 re-pin），equivalence 是 `unproven`。manifest 模式 MOT text 相等只是 diagnostic，不是 parity。`distribution.status=local-only`。
 
 source-level implemented 不代表 runtime、GPU、installed package 或 production qualification 已完成。
 
@@ -133,6 +137,8 @@ flowchart LR
 ```
 
 **S2-1 之後的對應**：GA2（VL0、VL1）和 T3（VL2）已有 source-level 實作。GB2 只實作了兩件事：從 resolved bindings 取路徑，以及寫 `load_verification`；「載入已 hash 的 bytes」和 SM／TRT／dtype 都屬 S2-2，仍未實作。N-M1 到 N-M5 的拆分發行流程尚未建立，屬 S2-3。這些都不是驗證宣稱，見[實作狀態](#implementation-status)。
+
+**S2-2 之後的對應**：GB2 的「載入已 hash 的 bytes」在三個物件各自成立，SM／dtype 比對與 GA2 的版本 gate 也已有 source-level 實作；整體 `byte_scope` 仍是 `hashed_before_load`（S2-2 PARTIAL）。N-M1 到 N-M5 仍未建立。見[實作狀態](#implementation-status)。
 
 **目標的信任根（D2）**：可信的 expected identity 是 allowlist 中 state 為 `approved` 的 entry，以 bundle manifest 檔案的 sha256 為鍵。allowlist 檔隨 runtime package 出貨，它的 sha256 在建置時編進 entrypoint。entrypoint 由 [entrypoint pin](../../shipping/entrypoint_pin.json) 釘住，並納入 runtime package 的 digest 和簽章。要讓 runtime 對替換的模型報出 `expected_source_verified`，就得連 pinned entrypoint 一起換掉，光換模型 bundle 做不到。這回答了 CC-536-01-02 要求的判準：expected 來源能不能和模型被同一個 caller 一起替換。
 
