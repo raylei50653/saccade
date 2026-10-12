@@ -3,18 +3,17 @@
 <!-- doc-date: 2026-10-12 -->
 <!-- doc-module: cross -->
 
-# #549 MB-41: historical condition check and bounded F-1/F-2 closeout candidate
+# #549 MB-41: historical condition check and bounded F-1/F-2 closeout
 
-**Main remains MB-41 OPEN, with aggregate `load_verification.byte_scope=hashed_before_load`.**
+**MB-41 is CLOSED on main within the bounded condition-2 declaration** ([#591](https://github.com/raylei50653/saccade/pull/591)
+merge `c78f1319`, required main CI SUCCESS). Manifest aggregate `load_verification.byte_scope` is
+`loaded_buffer` only when all three objects report it; legacy stays `hashed_before_load`.
 The original condition check below found G-1 and is retained as historical evidence.
 The [final owner ruling in #590](https://github.com/raylei50653/saccade/issues/590#issuecomment-6123060172)
-has settled the bounded requirement and the F-1/F-2 integration path in
-[#591](https://github.com/raylei50653/saccade/pull/591), with independent coordinate review in
-[#592](https://github.com/raylei50653/saccade/pull/592). The integrated implementation is a candidate;
-its local verification, remote CI, independent review and merge status are recorded separately in
-[F-1/F-2 evidence](model_bundle_mb41_f1_549.md). Old head and coordinate results do not verify this
-candidate. Main status can be promoted only after the owner-authorized final heads actually
-merge and the required main CI passes at that merge SHA.
+settled the bounded requirement and the F-1/F-2 integration path; independent coordinate review
+was [#592](https://github.com/raylei50653/saccade/pull/592). Local verification, remote CI,
+independent review and the landing are recorded in [F-1/F-2 evidence](model_bundle_mb41_f1_549.md).
+Old head and coordinate results do not verify the integration.
 
 The status is written only in
 [CC-536-01-02 S2-2 實作狀態](../architecture/ship_export_contracts_536.md#cc-536-01-02-status-s2-2).

@@ -16,11 +16,11 @@
   - 3.4 的兩種模式與 `--require-identity`（預設 `none`）；
   - 4.1 的 manifest 模式 identity；
   - VL0–VL2；
-  - `load_verification`，`byte_scope` 最多 `hashed_before_load`；
+  - `load_verification`（S2-1 時 `byte_scope` 最多 `hashed_before_load`）；
   - 第 5 節中標為 S2-1 的 fail-closed 規則；
-  - S2-2：engine、head、N03 各自從核對過的 bytes 載入（逐物件 `loaded_buffer`），manifest 模式的版本、SM 與 TRT I/O gate（VL3 的大部分）。
+  - S2-2：engine、head、N03 各自從核對過的 bytes 載入（逐物件 `loaded_buffer`），manifest 模式的版本、SM 與 TRT I/O gate（VL3 的大部分）；
+  - MB-41（[#591](https://github.com/raylei50653/saccade/pull/591)，merge `c78f1319`）：F-1 head admission 與 F-2 整體 scope，依 [有界宣告](#mb41-head-admission) 結案；manifest 模式三項物件 scope 都成立時整體為 `loaded_buffer`。
 - **main 尚未合併的內容**：
-  - S2-2：MB-41 仍 OPEN，整體 `load_verification.byte_scope` 仍是 `hashed_before_load`。[#590 Owner 最終裁決](https://github.com/raylei50653/saccade/issues/590#issuecomment-6123060172) 已接受有界的 F-1＋F-2 路徑；[#591](https://github.com/raylei50653/saccade/pull/591) 整合 head admission 與 `69476d4b` 的必要變更，[#592](https://github.com/raylei50653/saccade/pull/592) 保留獨立 coordinate 審查。候選實作、這次本地驗證與已合併狀態分開記在 [canonical 狀態段落](ship_export_contracts_536.md#cc-536-01-02-status-s2-2)；舊證據不驗證新整合版本；
   - S2-3：package 拆分、launcher 預設 policy；
   - S2-4：TR-2。
 - **可達性限制**：`expected_source_verified` 只在 manifest 模式、且 production allowlist 有對應的 approved entry 時才可能出現。production allowlist 是空的，所以現有 shipping bundle 達不到這一級。
@@ -137,7 +137,7 @@ level 和 binding 的格式沿用 CC-536-01-02：`null` → `checksum_matched` �
 - **`identity` 只描述 Gate A 檢查過的 bytes**：它是 Gate A 的不可變證據，不描述載入。Gate A 寫完之後，任何 gate 都不再改它，也不在其中預先寫入任何載入保證。
 - <a id="load-verification"></a>**`load_verification`（Gate B 寫入，與 `identity` 分開）**：journal 建立時是 `null`。Gate B **全部**載入（operator、head、engine）與載入檢查都成功之後，才寫入一次 `{status: "verified", byte_scope}`；可捕捉的失敗寫 `{status: "failed", byte_scope: null}` 並 exit 2。無法捕捉的結束（loader auditor 的 `_exit(127)`、SIGKILL、abort）可能讓 `load_verification` 維持 `null`、journal 維持 `running`，本契約不承諾這些情況會寫入 `failed`；F3 known limit 保留。這是 journal v3／report v5 的欄位，不改變 identity 的寫入者與 #537 的 state 語義。
   - **Byte scope**：S2-1 是 `hashed_before_load`（hash 與載入是兩次開檔）。S2-2 在每個物件都從核對過的 bytes 載入、通過相應檢查後，manifest 模式才可寫 `loaded_buffer`；任一物件仍以路徑重新開檔，就不得提升。legacy 模式一律 `hashed_before_load`。逐物件 `artifact_byte_scopes` 是各物件適用範圍的權威訊號，不由整體值反推。
-  - **main 狀態**：operator、head、engine 三項逐物件 scope 已是 `loaded_buffer`，整體仍固定 `hashed_before_load`，MB-41 OPEN。先前條件核對揭示 G-1；歷史證據保留在 [MB-41 條件核對](../reference/model_bundle_mb41_549.md)。[#591](https://github.com/raylei50653/saccade/pull/591) 的 F-1＋F-2 是未合併候選，不能把其驗證或 aggregate 提升寫成 main 現況；只有 Owner 授權的最終 head 實際合併且該 merge 的 required main CI 通過後，才可回寫 main 提升狀態。
+  - **main 狀態**：operator、head、engine 三項逐物件 scope 都是 `loaded_buffer`；[#591](https://github.com/raylei50653/saccade/pull/591)（merge `c78f1319`，required main CI SUCCESS）之後，manifest 模式成功載入且三項都成立時整體為 `loaded_buffer`，MB-41 依下條有界宣告結案。先前條件核對揭示的 G-1 與歷史證據保留在 [MB-41 條件核對](../reference/model_bundle_mb41_549.md)。
 - <a id="mb41-head-admission"></a>**MB-41 條件 2（[#590 已裁決](https://github.com/raylei50653/saccade/issues/590#issuecomment-6123060172)）**：「能成功載入的 head，其載入 bytes 等於 hash 過的 bytes，且通過 runtime 擁有的准入政策；其他 head 一律 exit 2。」本條適用於兩個 shipping entrypoint 的 Gate B head admission；整體 `loaded_buffer` 的宣告只適用於 manifest 模式且三項物件 scope 全為 `loaded_buffer` 的成功載入。Gate A identity、legacy scope 與 caught／uncaught failure 語義依上文。
   - **F-1 的範圍與假設**：針對 N02 所需 TorchScript 功能，綁定 LibTorch `2.11.0+cu130`，採 runtime-owned、fail-closed 准入政策；不認證任意 TorchScript 的安全或可信來源。政策假設此版 LibTorch 的 ZIP dispatch、Module importer、pickle restore、預設值／常數求值、constant propagation 與 graph／call 行為符合 [F-1 紀錄](../reference/model_bundle_mb41_f1_549.md#design) 的已審查行為。版本 binding 不重新核驗 LibTorch library bytes；准入政策不認證 LibTorch／native library 的依賴 bytes，亦不保證任意 native code 或所有 runtime state。manifest／lineage 不得擴充操作 allowlist；操作 allowlist 只決定功能准入，不是來源認證，不提升 `identity.level` 或 `publisher_authentication`。
   - **維護與退場**：沿用既有 ctest 的 N02 正控制可載入、五個 G-1 對照被拒絕。升級 LibTorch 或 head 新增 op 時，在同一 PR 更新政策與測試；不另設常態資安重審或新證據帳本。若 F-1 維護成本超過價值，可依 #590 裁決移除，同步降低保證範圍、調整宣告，整體退回 `hashed_before_load`，保留逐物件 scopes；不得保留實作已無法支撐的強保證。
@@ -167,7 +167,7 @@ lineage 是 producer 對 checkpoint、export 工具、structural check 和 runti
 - VL4 沒有在新 loader 下取得 qualified parity：V5 **UNRESOLVED**。
 - VL5 不變。
 
-**S2-2 main 狀態**：VL3 的「hash 過的 bytes 就是載入的 bytes」（三個物件各自）、SM、TRT 版本與 dtype 比對是 source-level implemented；整體 `byte_scope` 仍是 `hashed_before_load`。F-1＋F-2 的未合併候選依 [MB-41 head admission 契約](#mb41-head-admission) 宣告範圍。VL4 仍未 qualified（V5 **UNRESOLVED**，MB-52 未完成）。見 [CC-536-01-02 S2-2 實作狀態](ship_export_contracts_536.md#cc-536-01-02-status-s2-2)。
+**S2-2 main 狀態**：VL3 的「hash 過的 bytes 就是載入的 bytes」（三個物件各自）、SM、TRT 版本與 dtype 比對是 source-level implemented；F-1＋F-2 已合併（#591）：manifest 模式整體 `byte_scope` 在三項物件 scope 都成立時為 `loaded_buffer`，範圍依 [MB-41 head admission 契約](#mb41-head-admission)。VL4 仍未 qualified（V5 **UNRESOLVED**，MB-52 未完成）。見 [CC-536-01-02 S2-2 實作狀態](ship_export_contracts_536.md#cc-536-01-02-status-s2-2)。
 
 ### 4.4 Policy
 
@@ -233,7 +233,7 @@ lineage 是 producer 對 checkpoint、export 工具、structural check 和 runti
 |:--|:--|
 | G01 | manifest 模式的 TR-1b 機制和 policy flag 是 source-level implemented。production allowlist 是空的，所以沒有 bundle 能達到 `expected_source_verified`；legacy 模式仍只到 `checksum_matched` |
 | G02 | manifest 模式的 pairing、config bytes 綁定和 size 檢查是 source-level implemented |
-| G03 | main：路徑限制與 engine、head、N03 各自從核對過的 bytes 載入是 source-level implemented；整體 `byte_scope` 仍是 `hashed_before_load`，MB-41 OPEN。#590 已裁決有界的 [head admission 契約](#mb41-head-admission)，#591 採 F-1＋F-2 未合併候選；歷史 G-1 核對與新版本驗證分開記錄 |
+| G03 | main：路徑限制與 engine、head、N03 各自從核對過的 bytes 載入是 source-level implemented；MB-41 依 #590 有界的 [head admission 契約](#mb41-head-admission) 結案（#591 F-1＋F-2 已合併），manifest 模式整體 `byte_scope` 可為 `loaded_buffer`；歷史 G-1 核對與整合版本驗證分開記錄 |
 | G04 | S2-2 source-level implemented：Gate A 版本 gate，Gate B 的 SM 與 TRT I/O 比對（MB-43..45） |
 | G05 | 未實作（S2-3）。allowlist 隨現行 package 定義安裝，但 installed package 沒有 re-pin，**UNVERIFIED** |
 | G06 | 不變 |
