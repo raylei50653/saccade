@@ -30,10 +30,10 @@
 // `verified` when the detector's three files are loaded and checked,
 // `failed` when that load throws (DetectorLoadError); an uncatchable end
 // (the loader auditor's _exit(127), SIGKILL, abort) leaves it null with the
-// state running. Its byte_scope is always hashed_before_load: Gate B rehashes
-// each file before it loads it from its path, so the loaded bytes are not
-// proven to be the hashed ones (TOCTOU, #549 S2-2). Nothing here can write
-// loaded_buffer.
+// state running. Its byte_scope is always hashed_before_load. Gate B does load
+// each object from the bytes whose SHA-256 it checked (the per-object scopes
+// in HeadLoadReport, #549 S2-2), but the aggregate stays hashed_before_load
+// until #549 MB-41 is closed. Nothing here can write loaded_buffer.
 //
 // Journal (format saccade.native_track_journal/v3; historical v1 / v2 are
 // unchanged):

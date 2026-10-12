@@ -1,6 +1,6 @@
 // Gate B model bytes (#549 S2-2). Read each engine/head exactly once, hash
 // the owned immutable buffer, then load that buffer instead of reopening its
-// path. This does not make the path-loaded operator a loaded_buffer object.
+// path. The operator has its own verified load (operator_loader.hpp).
 #pragma once
 
 #include <cstdint>

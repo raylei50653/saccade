@@ -36,7 +36,15 @@ directory. "No CUDA call" is observed as in
   run of the same binary (raw equality; not a qualified parity claim); and a
   SIGKILL sent once the runtime root's operator library is mapped (the load
   has begun) and before any load record, which leaves the journal running with
-  ``load_verification`` null (MB-58, uncatchable).
+  ``load_verification`` null (MB-58, uncatchable);
+* G-1 heads (#549 MB-41, F-1): the real bundle with its head replaced by a
+  head that reads an external sidecar file (a scripted ``__setstate__``,
+  ``forward``, ``torch.jit.fork``, or the ``__setstate__`` head saved as
+  FlatBuffer), each shown to read the file under plain ``torch.jit.load``.
+  The lineage, attestation and manifest are rebound to it, so Gate A matches
+  it at ``checksum_matched``. With the sidecar removed, Gate B's head
+  admission refuses it: exit 2, ``load_verification`` failed, no sequence
+  run. The real-bundle run above is the N02 positive control.
 
 Skips when ``build/shipping/saccade_track`` has not been built; the real-bundle
 tests skip without the models, the data or a CUDA driver.
@@ -54,6 +62,7 @@ import os
 import re
 import shutil
 import signal
+import struct
 import subprocess
 import time
 from pathlib import Path
@@ -720,6 +729,136 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
         tmp_path / "out" / name
     ).read_bytes()
     assert _journal(tmp_path, "legacy")["load_verification"] == LOAD_VERIFIED
+
+
+# ── G-1 heads (#549 MB-41, F-1) ──────────────────────────────────────────
+G1_KINDS = ("setstate", "forward", "fork", "flatbuffer")
+G1_REFUSAL = {
+    "setstate": "defines __setstate__, which the loader runs",
+    "forward": "forward uses aten::from_file, not among the reviewed head operators",
+    "fork": "forward uses aten::from_file, aten::wait, prim::fork, not among the reviewed head operators",
+    "flatbuffer": "the head is not a ZIP TorchScript archive",
+}
+
+
+def _g1_head(kind: str, sidecar: Path) -> bytes:
+    """A TorchScript head that reads ``sidecar`` (outside the archive)."""
+    import io
+
+    import torch
+
+    class G1SetState(torch.nn.Module):
+        def __init__(self, path: str) -> None:
+            super().__init__()
+            self.path = path
+            self.w = torch.zeros(1)
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x + self.w
+
+        @torch.jit.export
+        def __getstate__(self) -> tuple[str, bool]:
+            return (self.path, self.training)
+
+        @torch.jit.export
+        def __setstate__(self, state: tuple[str, bool]) -> None:
+            self.path = state[0]
+            self.training = state[1]
+            self.w = torch.from_file(self.path, False, 1, dtype=torch.float32)
+
+    class G1Forward(torch.nn.Module):
+        def __init__(self, path: str) -> None:
+            super().__init__()
+            self.path = path
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x + torch.from_file(self.path, False, 1, dtype=torch.float32)
+
+    class G1Fork(torch.nn.Module):
+        def __init__(self, path: str) -> None:
+            super().__init__()
+            self.path = path
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            fut = torch.jit.fork(
+                torch.from_file, self.path, False, 1, dtype=torch.float32
+            )
+            return x + torch.jit.wait(fut)
+
+    cls = {"forward": G1Forward, "fork": G1Fork}.get(kind, G1SetState)
+    m = torch.jit.script(cls(str(sidecar)))
+    buf = io.BytesIO()
+    if kind == "flatbuffer":
+        torch.jit.save_jit_module_to_flatbuffer(m, buf)
+    else:
+        torch.jit.save(m, buf)
+    return buf.getvalue()
+
+
+def _g1_value(kind: str, head: bytes) -> float:
+    """What the head took from its sidecar under plain torch.jit.load."""
+    import io
+
+    import torch
+
+    m = torch.jit.load(io.BytesIO(head), map_location="cpu")
+    if kind in ("setstate", "flatbuffer"):
+        return float(m.w.item())
+    return float(m(torch.zeros(1)).item())
+
+
+def _rebind_head(
+    prefix: Path, bundle: Path, manifest: dict[str, Any], head: bytes
+) -> None:
+    """The bundle's head replaced by ``head``; lineage, attestation and the
+    manifest rebound to it, so Gate A matches every member."""
+    members = manifest["members"]
+    _member_path(bundle, prefix, members[HEAD]).write_bytes(head)
+    lpath = _member_path(bundle, prefix, members[LINEAGE])
+    lineage = json.loads(lpath.read_text())
+    lineage["torchscript"]["sha256"] = _sha(head)
+    lpath.write_text(json.dumps(lineage, indent=2))
+    apath = _member_path(bundle, prefix, members[ATT])
+    att = json.loads(apath.read_text())
+    att["frozen_lineage"]["sha256"] = _sha(lpath.read_bytes())
+    att["frozen_lineage"]["torchscript_sha256"] = _sha(head)
+    apath.write_text(json.dumps(att, indent=2))
+    _write_manifest(bundle, prefix, manifest)
+
+
+@pytest.mark.parametrize("binary", BINARIES)
+@pytest.mark.parametrize("kind", G1_KINDS)
+def test_g1_head_is_refused_by_the_head_admission(
+    tmp_path: Path, binary: str, kind: str
+) -> None:
+    prefix, bundle, manifest = _real_bundle(tmp_path, binary)
+    sidecar = tmp_path / "sidecar.bin"
+    head = _g1_head(kind, sidecar)
+    # The control is real: the head's value follows the external file.
+    sidecar.write_bytes(struct.pack("<f", 60.0))
+    first = _g1_value(kind, head)
+    sidecar.write_bytes(struct.pack("<f", 7.0))
+    assert (first, _g1_value(kind, head)) == (60.0, 7.0)
+    # Without it, any read would fail with LibTorch's own error instead.
+    sidecar.unlink()
+    _rebind_head(prefix, bundle, manifest, head)
+    r, cuda = _run(
+        tmp_path,
+        prefix / "libexec" / binary,
+        ["--model-bundle", str(bundle), *map(str, _sequences(tmp_path))],
+    )
+    assert r.returncode == 2, r.stderr
+    assert cuda and f"{binary}: preflight passed" in r.stderr
+    j = _journal(tmp_path)
+    assert j["state"] == "failed" and j["load_verification"] == LOAD_FAILED
+    assert j["identity"]["level"] == "checksum_matched"
+    assert j["identity"]["bindings"]["head"]["status"] == "matched"
+    message = j["failure"]["message"]
+    assert "shipping detector load: head admission (F-1): " in message, message
+    assert G1_REFUSAL[kind] in message, message
+    assert all(s["state"] == "pending" for s in j["sequences"])
+    assert not list((tmp_path / "out").glob("*.txt"))
+    assert not sidecar.exists()
 
 
 def test_real_bundle_killed_during_the_load_leaves_no_load_claim(

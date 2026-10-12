@@ -462,7 +462,7 @@ if(TARGET saccade_tracking)
         message(FATAL_ERROR "Cannot prove LibTorch CUDA build version: '${SACCADE_LIBTORCH_BUILD_VERSION}'")
     endif()
     saccade_shipping_variants(saccade_shipping_detector
-        src/detector_host.cpp src/detector_s2.cu src/native_runtime_build.cpp)
+        src/detector_host.cpp src/detector_s2.cu src/native_runtime_build.cpp src/head_admission.cpp)
     foreach(_v "" "_measurement")
         target_link_libraries(saccade_shipping_detector${_v} PUBLIC
             saccade_shipping_operator_loader saccade_shipping_native_config saccade_perception ${TORCH_LIBRARIES}
@@ -693,13 +693,24 @@ if(TARGET saccade_tracking)
                     ${SACCADE_REPO_ROOT}/datasets/MOT17/train)
 
         # Gate B in manifest mode (#549 S2-1): cross-root load from Gate A's
-        # resolved bindings, a member replaced after Gate A (MB-55).
+        # resolved bindings, a member replaced after Gate A (MB-55), and the
+        # G-1 heads bound hash-consistently (#549 MB-41 F-1).
         add_executable(saccade_shipping_model_bundle_gate_b_test
             ${SACCADE_REPO_ROOT}/tests/native/test_shipping_model_bundle_gate_b.cpp)
         target_link_libraries(saccade_shipping_model_bundle_gate_b_test PRIVATE
             saccade_shipping_detector saccade_shipping_preflight)
+        target_include_directories(saccade_shipping_model_bundle_gate_b_test PRIVATE ${SACCADE_REPO_ROOT}/tests/native)
         add_test(NAME saccade_shipping_model_bundle_gate_b_test
             COMMAND saccade_shipping_model_bundle_gate_b_test ${SACCADE_REPO_ROOT})
+
+        # TorchScript head admission (#549 MB-41, F-1), CPU only: the four G-1
+        # heads, single-change negatives, and N02 when the models exist.
+        add_executable(saccade_shipping_head_admission_test
+            ${SACCADE_REPO_ROOT}/tests/native/test_shipping_head_admission.cpp)
+        target_include_directories(saccade_shipping_head_admission_test PRIVATE ${SACCADE_REPO_ROOT}/tests/native)
+        target_link_libraries(saccade_shipping_head_admission_test PRIVATE saccade_shipping_detector)
+        add_test(NAME saccade_shipping_head_admission_test
+            COMMAND saccade_shipping_head_admission_test ${SACCADE_REPO_ROOT})
 
         add_executable(saccade_shipping_ingest_host_test
             ${SACCADE_REPO_ROOT}/tests/native/test_shipping_ingest_host.cpp)
