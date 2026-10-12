@@ -12,7 +12,9 @@ the logic in the ordinary pytest job:
   readers replaced by fakes;
 * the SM list in ``shipping/CMakeLists.txt`` is the one the checker expects;
 * ``shipping/cmake/install_model_root.cmake`` copies the bound files and refuses
-  one whose sha256 is not the recorded one (skips without ``cmake``).
+  one whose sha256 is not the recorded one, and an attestation whose operator
+  library is not the runtime's N03 pin (#549 S2-2, P-N03 rev 3d; skips without
+  ``cmake``).
 """
 
 # scope: system
@@ -500,9 +502,13 @@ def _fake_repo(tmp_path: Path) -> tuple[Path, dict[str, str]]:
             "path": "models/yolo/lineage.json",
             "sha256": _sha((repo / "models/yolo/lineage.json").read_bytes()),
         },
-        "op_library": {"path": "build/libop.so", "sha256": _sha(b"op")},
+        "op_library": {"path": "build/libop.so", "sha256": _sha(b"op"), "bytes": 2},
     }
     (repo / "configs/shipping/att.json").write_text(json.dumps(att))
+    (repo / "shipping").mkdir()
+    (repo / "shipping/n03_operator_pin.json").write_text(
+        json.dumps({"sha256": _sha(b"op"), "bytes": 2})
+    )
     defs = {
         "SACCADE_REPO_ROOT": str(repo),
         "SACCADE_MODEL_ROOT_DEST": str(tmp_path / "tree" / "share" / "saccade"),
@@ -510,6 +516,7 @@ def _fake_repo(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         "SACCADE_SHIPPING_LINEAGE": "models/yolo/lineage.json",
         "SACCADE_SHIPPING_ATTESTATION": "configs/shipping/att.json",
         "SACCADE_ATTESTED_OP_LIBRARY": str(repo / "build/libop.so"),
+        "SACCADE_N03_OPERATOR_PIN": str(repo / "shipping/n03_operator_pin.json"),
     }
     return repo, defs
 
@@ -559,3 +566,17 @@ def test_install_model_root_refuses_another_lineage(tmp_path: Path) -> None:
     lineage.write_text(lineage.read_text() + " ")
     r = _install(defs)
     assert r.returncode != 0 and "lineage.json" in r.stderr
+
+
+@pytest.mark.parametrize(
+    "pin", [{"sha256": "e" * 64, "bytes": 2}, {"sha256": _sha(b"op"), "bytes": 3}]
+)
+def test_install_model_root_refuses_an_operator_that_is_not_the_n03_pin(
+    tmp_path: Path, pin: dict[str, Any]
+) -> None:
+    repo, defs = _fake_repo(tmp_path)
+    (repo / "shipping/n03_operator_pin.json").write_text(json.dumps(pin))
+    r = _install(defs)
+    assert r.returncode != 0
+    assert "is not the runtime's N03 pin" in r.stderr, r.stderr
+    assert not (Path(defs["SACCADE_MODEL_ROOT_DEST"]) / "build/libop.so").exists()
