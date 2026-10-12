@@ -84,8 +84,10 @@ legal operator library:
   this build compiled in, refuses a source pin changed since the build, requires this build's
   `saccade_track` (when the tree takes it) to carry the pin's digest, and requires the attestation
   snapshot it copies against to be that pin. A pinned entrypoint (`SACCADE_SHIPPING_ENTRYPOINT`)
-  is not checked: the current one predates the pin until a package re-pin. The package checker (`check_n03_pin`) compares the packaged
-  operator with the pin at the source commit.
+  is not checked: the current one predates the pin until a package re-pin.
+  The package checker compares the packaged operator with the pin at the source commit
+  (`check_n03_pin`). Once that commit's shipping CMake compiles the pin, a pin that cannot be read
+  refuses (`read_n03_pin`); only a commit whose build compiles no pin has none to check.
 - `saccade_track`'s POST_BUILD (`cmake/check_n03_pin.cmake`) requires the pin's digest in the
   binary, and `saccade_shipping_n03_pin_test` requires the generated pin to equal the record.
 - One loader object: CPU tests link a fixture pin
@@ -226,7 +228,16 @@ Round 2 (`cbd8f60c..2fbd437e`) found no blocker or major. Resolution in `8b020ec
 |:--|:--|:--|
 | minor | a reconfigure without a rebuild could still pair this build's `saccade_track` with another operator at install | install requires that executable, when the tree takes it, to carry the pin's digest |
 | minor (new) | install validated a second read of the attestation, copied against the first | one snapshot: the rule takes the text install already read |
-| minor (accepted) | `manifest_head`'s and configure's calls into the pin rules are checked by a source assertion and the shared helper, not end to end | not built: the failure needs the call removed while its text stays, and an end-to-end `manifest_head` fixture costs more than it prevents |
+| minor | `manifest_head`'s and configure's calls into the pin rules were checked by a source assertion and the shared helper, not end to end | `manifest_head` now has end-to-end controls (see the PR review below); configure's call stays covered by the shared-rule controls and every configured build |
+
+**PR review (#584, owner-shared, head `e4e93bde`).** No blocker in the runtime pin, memfd,
+mapping or registry. P2: `manifest_head` read any failed `git show` of the pin as an older commit
+and skipped the check (fail-open). Resolved after the freeze, outside the coordinate's axes
+(`scripts/native/`): the pin is required once the commit's shipping CMake compiles it, an
+unreadable or non-JSON pin refuses, with end-to-end `manifest_head` controls on a fake source commit
+(a mutation restoring the fail-open read fails the unreadable-pin control). P3, tracked separately:
+`install_model_root.cmake` copies the attestation from its source after validating a snapshot, a
+window that predates this PR.
 
 The source was frozen at `8b020ec0` after self-review of the round 2 diff; the final chain and the
 coordinate capture ran on it. The coordinate review of `bc4e77cd` found nothing: the archive is the

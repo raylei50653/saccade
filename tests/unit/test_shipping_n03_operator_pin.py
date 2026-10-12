@@ -10,8 +10,9 @@ install refuse a pin that is not the tracked realization attestation's
 * ``shipping/cmake/n03_pin.cmake`` (the rule configure and install apply)
   refuses a pin of another digest or size than the attestation's, and a
   malformed pin (skips without ``cmake``);
-* the package checker's ``check_n03_pin`` refuses a packaged operator that is
-  not the pin, and ``manifest_head`` calls it;
+* the package checker refuses a packaged operator that is not the pin, and,
+  end to end through ``manifest_head`` on a fake source commit, an unreadable
+  pin once the commit's build compiles it (never taken for an older commit);
 * where the build has the attested operator library, its bytes are the pin's.
 """
 
@@ -115,11 +116,110 @@ def test_the_package_checker_refuses_an_operator_that_is_not_the_pin() -> None:
     pin = json.dumps({"sha256": SHA, "bytes": 5}).encode()
     pkg.check_n03_pin("share/saccade/build/op.so", SHA, pin)
     pkg.check_n03_pin("share/saccade/build/op.so", "e" * 64, None)  # before rev 3d
-    with pytest.raises(pkg.PackageError, match="is not the runtime's N03 pin"):
-        pkg.check_n03_pin("share/saccade/build/op.so", "e" * 64, pin)
-    source = (REPO / "scripts" / "native" / "check_shipping_package.py").read_text()
-    body = source[source.index("def manifest_head(") :]
-    assert 'check_n03_pin(op_file, entry(op_file)["sha256"], n03_pin)' in body
+    for bad in (pin, b"not json", b"[]"):
+        with pytest.raises(pkg.PackageError, match="N03 pin|is not JSON"):
+            pkg.check_n03_pin("share/saccade/build/op.so", "e" * 64, bad)
+
+
+# ── manifest_head end to end, on a fake source commit ─────────────────────────
+
+_COMMIT = "1" * 40
+_OP_SHA = hashlib.sha256(b"op").hexdigest()
+
+
+def _source(cmake: bytes, pin: Any) -> dict[str, bytes]:
+    """The repository files manifest_head reads at the source commit, up to the
+    N03 pin check (``pin`` None: no pin file)."""
+    pkg = _package_checker()
+    att = {
+        "op_library": {"path": "build/libsaccade_scan_torchop.so", "sha256": _OP_SHA}
+    }
+    files = {
+        "pyproject.toml": b'[project]\nversion = "0.0.0"\n',
+        "shipping/third_party_set.json": json.dumps(
+            {"entries": [{"wheel": "w-1", "soname": "libx.so.1", "sha256": "a" * 64}]}
+        ).encode(),
+        "shipping/entrypoint_pin.json": json.dumps({"sha256": "c" * 64}).encode(),
+        pkg.g2.ATTESTATION: json.dumps(att).encode(),
+        "shipping/CMakeLists.txt": cmake,
+    }
+    for role in pkg.TRACKED_ROLES:
+        files.setdefault(pkg.MODEL_ROOT_ROLES[role], b"tracked " + role.encode())
+    if pin is not None:
+        files[pkg.N03_OPERATOR_PIN] = pin
+    return files
+
+
+def _manifest_head(
+    monkeypatch: pytest.MonkeyPatch, source: dict[str, bytes], op_sha: str = _OP_SHA
+) -> str:
+    """manifest_head's refusal (PackageError text) for a package whose model
+    root matches `source`; the vendor object is missing on purpose, so a
+    package that passes the N03 check fails at the next one."""
+    pkg = _package_checker()
+
+    def show(commit: str, path: str) -> bytes:
+        assert commit == _COMMIT
+        if path not in source:
+            raise subprocess.CalledProcessError(
+                128, ["git", "show", f"{commit}:{path}"]
+            )
+        return source[path]
+
+    monkeypatch.setattr(pkg, "_git_show", show)
+    mr = pkg.g2.MODEL_ROOT
+    files = {f"{mr}/{p}": {"sha256": "d" * 64} for p in pkg.MODEL_ROOT_ROLES.values()}
+    for role in pkg.TRACKED_ROLES:
+        path = pkg.MODEL_ROOT_ROLES[role]
+        files[f"{mr}/{path}"] = {"sha256": hashlib.sha256(source[path]).hexdigest()}
+    files[f"{mr}/build/libsaccade_scan_torchop.so"] = {"sha256": op_sha}
+    with pytest.raises(pkg.PackageError) as e:
+        pkg.manifest_head(_COMMIT, True, True, files)
+    return str(e.value)
+
+
+_REV3D_CMAKE = (
+    b"set(SACCADE_N03_OPERATOR_PIN ${CMAKE_CURRENT_SOURCE_DIR}/n03_operator_pin.json)\n"
+)
+_PIN = json.dumps({"sha256": _OP_SHA, "bytes": 2}).encode()
+
+
+def test_manifest_head_passes_the_pinned_operator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = _manifest_head(monkeypatch, _source(_REV3D_CMAKE, _PIN))
+    assert error == "lib/vendor/libx.so.1 is not in the package"  # past the N03 check
+
+
+def test_manifest_head_refuses_an_unreadable_pin_once_the_build_compiles_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = _manifest_head(monkeypatch, _source(_REV3D_CMAKE, None))
+    assert error == (
+        f"shipping/n03_operator_pin.json cannot be read at {_COMMIT[:12]}, whose build compiles it"
+    )
+
+
+@pytest.mark.parametrize("pin", [json.dumps({"sha256": "e" * 64}).encode(), b"{"])
+def test_manifest_head_refuses_an_operator_that_is_not_the_pin(
+    monkeypatch: pytest.MonkeyPatch, pin: bytes
+) -> None:
+    error = _manifest_head(monkeypatch, _source(_REV3D_CMAKE, pin))
+    assert "N03 pin" in error or "is not JSON" in error, error
+
+
+def test_manifest_head_skips_the_pin_before_rev_3d(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A source commit whose shipping CMake compiles no pin has none to check."""
+    error = _manifest_head(monkeypatch, _source(b"# before rev 3d\n", None))
+    assert error == "lib/vendor/libx.so.1 is not in the package"
+
+
+def test_the_repository_build_compiles_the_pin() -> None:
+    pkg = _package_checker()
+    cmake = (REPO / "shipping" / "CMakeLists.txt").read_bytes()
+    assert pkg.N03_PIN_BUILD_MARKER in cmake
 
 
 @pytest.mark.skipif(not OPERATOR.exists(), reason="no build/libsaccade_scan_torchop.so")

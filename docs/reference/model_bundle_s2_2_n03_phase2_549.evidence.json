@@ -147,6 +147,15 @@
       "result": "PASS, no findings: archive equals the outgoing canonical, canonical equals the candidate, only implementation moved (9 added / 9 modified), equivalence unproven, commit message accurate"
     },
     {
+      "id": "pr_review_p2_package_pin_read",
+      "reviewed_commit": "e4e93bde (owner-shared PR review)",
+      "result": "P2 fail-open pin read in manifest_head resolved outside the coordinate's axes: the pin is required once the commit's shipping CMake compiles it; end-to-end manifest_head controls pass; restoring the fail-open read fails the unreadable-pin control. P3 (attestation copied from source after snapshot validation, pre-existing) tracked separately",
+      "tests": "results/549_s2_2_n03_phase2/pkg_pin_read_tests.log",
+      "tests_sha256": "204bbe90716079c114a9c587dfa3d1cf83fd6cf73aefe823c0a56a81ad1c829b",
+      "mutation": "results/549_s2_2_n03_phase2/mutation_pkg_pin_read_fail_open.log",
+      "mutation_sha256": "9caf2885586d7c703343f28880d69a2e5e5df8a2cca840b01df98c3f4497cb4a"
+    },
+    {
       "id": "cpu_operator_loader_test",
       "commit": "0e09a85d",
       "result": "53 checks, 0 failures per run; 30/30 repeated runs",
