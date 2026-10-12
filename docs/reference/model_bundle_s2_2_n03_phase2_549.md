@@ -25,11 +25,10 @@ on its branch). Base: `main@74f2f5cb1a3db8a1f42da48d533e3322f243d138`. Evidence 
 The auditor rule is recorded in [§17.9](native_runtime_resolved_config.md).
 
 **Design revision (2026-10-12).** The owner accepted the [offline admission proposal
-(P-N03 rev 3d)](model_bundle_s2_2_n03_offline_proposal_549.md): the ELF check moves to
-admission and the runtime accepts only a compiled singleton N03 digest. The implementation is in
-progress on this branch; this document is updated with it. The proposal also records the partial
-r4 verification at `1d0ffa1e`; the earlier replay and coordinate bindings below are historical,
-not final evidence for the current source.
+(P-N03 rev 3d)](model_bundle_s2_2_n03_offline_proposal_549.md) (O-N03-1..3): the ELF check moved
+to admission and the runtime accepts only a compiled singleton N03 digest. This document
+describes the revised implementation. The proposal also records the partial r4 verification at
+`1d0ffa1e`; replay and coordinate bindings before rev 3d are historical.
 
 ## Design
 
@@ -55,21 +54,12 @@ legal operator library:
 
 **Load sequence (`operator_loader.hpp`):**
 
-1. Open the legal path once with `openat2`, allowing no symlink or magic link in any component.
-2. Require a regular file and Gate A's size when known, read the whole file, and require the
-   plan's SHA-256. Require a 64-bit ELF whose loader-expanded dynamic strings (`DT_RPATH`,
-   `DT_RUNPATH`, `DT_NEEDED`, `DT_AUXILIARY`, `DT_FILTER`) do not use `$ORIGIN`, which would
-   expand under `/proc/self/fd` when loaded from the memfd. They are read where the loader maps
-   them:
-   - every loadable segment must be nonempty, ascending and page-disjoint, with offsets
-     congruent to their addresses, so every mapped byte comes from one segment;
-   - the dynamic table is read through `p_vaddr` within a file-backed `PT_LOAD`, its stated file
-     offset must agree, and it must be terminated;
-   - the string table must lie within its segment.
-
-   A non-ELF object, or one these properties do not hold for, is refused here, before anything
-   is sealed or `dlopen`'ed. Other ELF acceptance checks (version, machine, type and so on)
-   remain `dlopen`'s.
+1. Require the plan's SHA-256, and Gate A's size when known, to be the compiled N03 pin
+   (`n03_operator_pin()`, rev 3d), before the registry, the open or `dlopen`; a self-consistent
+   plan for another operator is refused here.
+2. Open the legal path once with `openat2`, allowing no symlink or magic link in any component.
+   Require a regular file of the pin's size, read it whole and require the pin's SHA-256. The
+   runtime does not parse the ELF object.
 3. Write the buffer into a memfd labeled `saccade-n03:src-fd=<S>` (`MFD_NOEXEC_SEAL`, with a
    retry only on `EINVAL`).
 4. Add `F_SEAL_WRITE | GROW | SHRINK | SEAL` and read the seals back. `F_SEAL_WRITE` itself
@@ -82,6 +72,26 @@ legal operator library:
    and refuses anything else. It is filled only after validation, with non-throwing transfers.
 8. If anything fails after `dlopen` succeeded, the registry is marked poisoned and `M` stays
    open, so its number is never reused; every later request in the process is refused.
+
+**Pin and admission (rev 3d).**
+
+- `shipping/n03_operator_pin.json` (`aa84cccd…`, 3,517,632 bytes, policy `n03-no-origin-v1`) is
+  compiled at configure time into `saccade_shipping_n03_pin`, which the loader's library
+  `saccade_shipping_operator_loader` links. Configure and install refuse a pin that is not the
+  tracked realization attestation's `op_library`. The package checker compares the packaged
+  operator with the pin at the source commit.
+- `saccade_track`'s POST_BUILD (`cmake/check_n03_pin.cmake`) requires the pin's digest in the
+  binary, and `saccade_shipping_n03_pin_test` requires the generated pin to equal the record.
+- One loader object: CPU tests link a fixture pin
+  (`tests/native/fixtures/n03_operator_fixture_pin.cpp`) ahead of the production one. The
+  production pin has no setter, CLI or environment input.
+- The `$ORIGIN` search-path rule and its layout rules moved unchanged to
+  `saccade_shipping_n03_admission` and the CPU tool `saccade_n03_admission`, which no runtime
+  target links or installs. The tool reads the candidate once, requires the pin's size and
+  SHA-256, applies the rule to the same buffer and prints an admission record. It runs when a
+  digest is accepted and in ctest; install and package compare digests only. A parser that
+  accepts a hostile ELF no longer loads anything: only a reviewed, pinned digest reaches
+  `dlopen`.
 
 Steps 1–5 run in Gate B step 1, before the head and engine are read. The `dlopen` in step 6 is
 Gate B step 2, so every hash refusal still happens before any operator constructor runs. There is
@@ -98,7 +108,7 @@ P-N03 rev 3c rule is applied verbatim apart from comments; see §17.9.
 **Callers.**
 
 - `saccade_detector_probe` is a developer tool and is not installed. It names its plan's own
-  operator; the sealed-memfd load still applies.
+  operator; the pin and the sealed-memfd load still apply, with no exception.
 - `SerialRuntime`/`DoubleBufferRuntime` built from `DetectorInputs` take
   `runtime_operator_path` from their caller (tests). An empty path is refused.
 - Build-tree runs that load the operator now run from an install-shaped prefix:

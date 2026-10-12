@@ -113,6 +113,9 @@ READING = (
     "trusted comment."
 )
 RUNTIME_IDENTITY = "docs/reference/runtime_identity.generated.json"
+# The runtime's N03 pin (#549 S2-2, P-N03 rev 3d): the one operator library the
+# entrypoint loads; the packaged operator must be it at the source commit.
+N03_OPERATOR_PIN = "shipping/n03_operator_pin.json"
 # The GPUs the package runs on: the operator library and the backbone engine
 # are sm_120 only (owner decision C-D2); the entrypoint carries more SASS.
 SUPPORTED_SM = ("sm_120",)
@@ -693,6 +696,14 @@ def manifest_head(
             raise PackageError(f"{mr}/{path} is not {path} at {commit[:12]}")
     if entry(op_file)["sha256"] != att["op_library"]["sha256"]:
         raise PackageError(f"{op_file} is not the attested operator library")
+    try:
+        n03_pin: dict[str, Any] | None = json.loads(repo(N03_OPERATOR_PIN))
+    except subprocess.CalledProcessError:
+        n03_pin = None  # a source commit before P-N03 rev 3d: no runtime pin
+    if n03_pin is not None and entry(op_file)["sha256"] != n03_pin["sha256"]:
+        raise PackageError(
+            f"{op_file} is not the runtime's N03 pin ({N03_OPERATOR_PIN})"
+        )
     for e in set_["entries"]:
         if entry(f"{bundle.VENDOR}/{e['soname']}")["sha256"] != e["sha256"]:
             raise PackageError(

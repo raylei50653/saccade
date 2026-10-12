@@ -1,9 +1,12 @@
-// CPU controls for the N03 operator load (#549 S2-2, P-N03 rev 3c; D-N03-2..5):
-// saccade_shipping/operator_loader.hpp on a real dynamic loader, with two
-// stand-in operator objects (fixtures/operator_fixture.cpp, values 1 and 2).
+// CPU controls for the N03 operator load (#549 S2-2, P-N03 rev 3c as revised
+// by rev 3d; D-N03-2..5): saccade_shipping/operator_loader.hpp on a real
+// dynamic loader, with two stand-in operator objects
+// (fixtures/operator_fixture.cpp, values 1 and 2). The loader object is the
+// runtime's; only the pin differs (fixtures/n03_operator_fixture_pin.cpp, set
+// to value 1). The ELF search-path controls are admission's
+// (test_shipping_n03_admission.cpp).
 //
 // Usage: saccade_shipping_operator_loader_test <fixture value 1> <fixture value 2>
-//            <origin runpath> <origin rpath> <absolute runpath>
 //        saccade_shipping_operator_loader_test --print-entrypoint-operator
 //   (the second form prints entrypoint_runtime_operator_path(), or the
 //   refusal and exit 2; tests/unit/test_shipping_n03_auditor.py runs it from
@@ -18,22 +21,22 @@
 //   * loaded bytes: the object is mapped from the sealed memfd (the kernel's
 //     record), and replacing or rewriting the source after prepare, or after
 //     load, does not change what runs (value 1);
+//   * pin (rev 3d): a self-consistent request for value 2 (its bytes and its
+//     SHA-256), another known size, or any request with no pin set is refused
+//     before anything is opened; bytes other than the pin's at the path are
+//     refused after the read; no refusal runs an operator constructor (the
+//     fixture's sentinel);
 //   * registry: the same SHA-256 and path reuse the handle (also a request
-//     prepared while an identical one loaded); another SHA-256 or path is
-//     refused; the post-check refuses a memfd that is not the mapping;
+//     prepared while an identical one loaded); another path is refused, and so
+//     is another SHA-256 even when the pin changes after the load; the
+//     post-check refuses a memfd that is not the mapping;
 //   * descriptor reuse through load(): an object dlopen'ed earlier as
 //     /proc/self/fd/<K> is returned by name when the operator memfd gets the
 //     number K; load() refuses it, and the process is poisoned;
 //   * seals: F_SEAL_FUTURE_WRITE without F_SEAL_WRITE does not count;
-//   * search paths: $ORIGIN in DT_RUNPATH or DT_RPATH, or a non-ELF object, is
-//     refused before any memfd; an absolute DT_RUNPATH is accepted; malformed
-//     dynamic tables are refused, among them a PT_DYNAMIC whose file offset
-//     names an empty table while the mapped one (what the loader reads)
-//     carries $ORIGIN;
-//   * refusals: wrong SHA-256 or size, a symlink (final or directory
-//     component), a directory, a FIFO, a relative or missing path.
+//   * refusals: a symlink (final or directory component), a directory, a
+//     FIFO, a relative or missing path.
 #include <dlfcn.h>
-#include <elf.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -49,6 +52,7 @@
 #include <sstream>
 #include <string>
 
+#include "n03_operator_fixture_pin.hpp"
 #include "saccade_shipping/detector_plan.hpp"
 #include "saccade_shipping/operator_loader.hpp"
 #include "saccade_shipping/sha256.hpp"
@@ -96,114 +100,6 @@ std::string refusal(const std::function<void()>& f) {
 }
 
 bool has(const std::string& s, const std::string& part) { return s.find(part) != std::string::npos; }
-
-// Malformed variants of an ELF object (program header / dynamic table edits).
-Elf64_Phdr* phdrs(std::string& elf, int& count) {
-    Elf64_Ehdr eh;
-    std::memcpy(&eh, elf.data(), sizeof eh);
-    count = eh.e_phnum;
-    return reinterpret_cast<Elf64_Phdr*>(elf.data() + eh.e_phoff);
-}
-
-Elf64_Phdr* dynamic_phdr(std::string& elf) {
-    int count = 0;
-    Elf64_Phdr* ph = phdrs(elf, count);
-    for (int i = 0; i < count; ++i) {
-        if (ph[i].p_type == PT_DYNAMIC) return &ph[i];
-    }
-    return nullptr;
-}
-
-std::string dynamic_offset_elsewhere(std::string elf) {  // file offset -> appended zeros
-    const std::size_t zeros = elf.size();
-    elf.append(4096, '\0');
-    dynamic_phdr(elf)->p_offset = zeros;
-    return elf;
-}
-
-std::string dynamic_unterminated(std::string elf) {
-    dynamic_phdr(elf)->p_filesz = sizeof(Elf64_Dyn);  // one non-null entry, no DT_NULL
-    return elf;
-}
-
-std::string strsz_oversized(std::string elf) {
-    const Elf64_Phdr* d = dynamic_phdr(elf);
-    for (std::uint64_t at = d->p_offset; at + sizeof(Elf64_Dyn) <= d->p_offset + d->p_filesz; at += sizeof(Elf64_Dyn)) {
-        auto* e = reinterpret_cast<Elf64_Dyn*>(elf.data() + at);
-        if (e->d_tag == DT_STRSZ) e->d_un.d_val = 0x7fffffff;
-    }
-    return elf;
-}
-
-// Review round 3: an earlier PT_LOAD extended over the dynamic table's pages,
-// PT_DYNAMIC's file offset moved to where that segment would read zeros
-// (DT_NULL); the loader maps the later, original segment over it (MAP_FIXED)
-// and reads the real table.
-std::string overlapping_dynamic(std::string elf) {
-    Elf64_Phdr* d = dynamic_phdr(elf);
-    const std::uint64_t dyn_vaddr = d->p_vaddr, dyn_size = d->p_filesz;
-    int count = 0;
-    Elf64_Phdr* ph = phdrs(elf, count);
-    Elf64_Phdr* container = nullptr;
-    Elf64_Phdr* prev = nullptr;
-    for (int i = 0; i < count; ++i) {
-        if (ph[i].p_type == PT_LOAD && dyn_vaddr >= ph[i].p_vaddr && dyn_vaddr < ph[i].p_vaddr + ph[i].p_memsz) container = &ph[i];
-    }
-    for (int i = 0; i < count; ++i) {
-        if (ph[i].p_type == PT_LOAD && container != nullptr && ph[i].p_vaddr < container->p_vaddr &&
-            (prev == nullptr || ph[i].p_vaddr > prev->p_vaddr)) {
-            prev = &ph[i];
-        }
-    }
-    if (prev == nullptr) return elf;
-    const std::uint64_t span = dyn_vaddr + dyn_size - prev->p_vaddr;
-    const std::uint64_t fake = prev->p_offset + (dyn_vaddr - prev->p_vaddr);
-    prev->p_filesz = prev->p_memsz = span;
-    d->p_offset = fake;
-    const std::uint64_t needed = prev->p_offset + span;
-    if (elf.size() < needed) elf.resize(needed, '\0');     // may reallocate: no pointer use after
-    std::memset(elf.data() + fake, 0, sizeof(Elf64_Dyn));  // DT_NULL there
-    return elf;
-}
-
-// Review round 4: the same, with the extended segment's p_memsz zero (the
-// loader still maps its p_filesz bytes); and a segment ending past 2^64.
-std::string zero_size_overlap(std::string elf) {
-    elf = overlapping_dynamic(std::move(elf));
-    int count = 0;
-    Elf64_Phdr* ph = phdrs(elf, count);
-    Elf64_Phdr* widest = nullptr;
-    for (int i = 0; i < count; ++i) {
-        if (ph[i].p_type == PT_LOAD && (widest == nullptr || ph[i].p_filesz > widest->p_filesz)) widest = &ph[i];
-    }
-    if (widest != nullptr) widest->p_memsz = 0;
-    return elf;
-}
-
-std::string wrapping_segment(std::string elf) {
-    int count = 0;
-    Elf64_Phdr* ph = phdrs(elf, count);
-    for (int i = 0; i < count; ++i) {
-        if (ph[i].p_type == PT_LOAD) {
-            ph[i].p_vaddr = UINT64_MAX - 4095 + (ph[i].p_offset % 4096);
-            ph[i].p_memsz = 4096;
-            break;
-        }
-    }
-    return elf;
-}
-
-std::string two_dynamic(std::string elf) {
-    int count = 0;
-    Elf64_Phdr* ph = phdrs(elf, count);
-    for (int i = 0; i < count; ++i) {
-        if (ph[i].p_type == PT_NOTE) {
-            ph[i].p_type = PT_DYNAMIC;
-            break;
-        }
-    }
-    return elf;
-}
 
 int value_of(void* handle) {
     using Fn = int (*)();
@@ -300,18 +196,19 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
-    if (argc != 6) {
-        std::fprintf(stderr, "usage: %s <value 1> <value 2> <origin runpath> <origin rpath> <absolute runpath>\n",
-                     argv[0]);
+    if (argc != 3) {
+        std::fprintf(stderr, "usage: %s <value 1> <value 2>\n", argv[0]);
         return 2;
     }
     const std::string one = read_file(argv[1]), two = read_file(argv[2]);
     const std::string sha1 = sh::sha256_hex(one.data(), one.size());
     const std::string sha2 = sh::sha256_hex(two.data(), two.size());
-    if (one.empty() || two.empty() || sha1 == sha2) {
-        std::fprintf(stderr, "the two fixtures must exist and differ\n");
+    if (one.empty() || two.empty() || sha1 == sha2 || one.size() != two.size()) {
+        std::fprintf(stderr, "the two fixtures must exist, differ and have one size\n");
         return 2;
     }
+    const auto size1 = static_cast<std::int64_t>(one.size());
+    sh::testing::set_fixture_n03_pin(sha1, size1);
     char temp[] = "/tmp/saccade_operator_loader.XXXXXX";
     char* created = ::mkdtemp(temp);
     if (!created) return 2;
@@ -331,6 +228,7 @@ int main(int argc, char** argv) {
             CHECK(!op.reused() && op.sha256() == sha1 && op.source() == a.string());
             void* h = op.load();
             CHECK(h != nullptr && value_of(h) == 1);
+            CHECK(std::getenv("SACCADE_OPERATOR_FIXTURE_CONSTRUCTED") != nullptr);  // the sentinel works
             const std::string& mapped = op.mapped().path;
             CHECK(mapped.rfind(std::string("/memfd:") + sh::kOperatorMemfdLabel, 0) == 0);
             CHECK(mapped.size() > 10 && mapped.compare(mapped.size() - 10, 10, " (deleted)") == 0);
@@ -346,10 +244,13 @@ int main(int argc, char** argv) {
             void* h = sh::VerifiedOperator::prepare(a.string(), sha1).load();
             sh::VerifiedOperator again = sh::VerifiedOperator::prepare(a.string(), sha1);
             CHECK(again.reused() && again.load() == h);
-            CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(a.string(), sha2); }),
-                      "is already loaded; operator library"));
             CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(b.string(), sha1); }),
                       "already loaded from " + a.string()));
+            // Defense in depth: a pin change after the load does not admit a
+            // second operator into the process.
+            sh::testing::set_fixture_n03_pin(sha2, size1);
+            CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(b.string(), sha2); }),
+                      "is already loaded; operator library"));
         });
         in_child("source_replaced_after_prepare", [&] {
             sh::VerifiedOperator op = sh::VerifiedOperator::prepare(a.string(), sha1);
@@ -401,49 +302,29 @@ int main(int argc, char** argv) {
             CHECK(sh::sealed_against_writes(m) == (with_write == 1));
             ::close(m);
         }
-        // Search paths ($ORIGIN would expand under /proc/self/fd) and non-ELF.
-        CHECK(refusal([&] { sh::require_no_origin_search_path(one, "fixture"); }).empty());
-        CHECK(refusal([&] { sh::require_no_origin_search_path(read_file(argv[5]), "absolute"); }).empty());
-        CHECK(has(refusal([&] { sh::require_no_origin_search_path(read_file(argv[3]), "runpath"); }),
-                  "runpath DT_RUNPATH $ORIGIN/../lib uses $ORIGIN"));
-        CHECK(has(refusal([&] { sh::require_no_origin_search_path(read_file(argv[4]), "rpath"); }),
-                  "rpath DT_RPATH $ORIGIN uses $ORIGIN"));
-        CHECK(has(refusal([&] { sh::require_no_origin_search_path("not an elf object at all, padded out to the header "
-                                                                  "size of an ELF64 file", "text"); }),
-                  "text is not a 64-bit little-endian ELF object"));
-        {
-            const std::string origin = read_file(argv[3]);
-            const std::string elsewhere = dynamic_offset_elsewhere(origin);
-            CHECK(has(refusal([&] { sh::require_no_origin_search_path(elsewhere, "split"); }),
-                      "split has a dynamic section whose file and memory locations disagree"));
-            CHECK(has(refusal([&] { sh::require_no_origin_search_path(dynamic_unterminated(origin), "short"); }),
-                      "short has an unterminated dynamic section"));
-            CHECK(has(refusal([&] { sh::require_no_origin_search_path(strsz_oversized(origin), "strsz"); }),
-                      "strsz has a string table outside its file-backed segment"));
-            CHECK(has(refusal([&] { sh::require_no_origin_search_path(two_dynamic(origin), "twice"); }),
-                      "twice has more than one dynamic segment"));
-            CHECK(has(refusal([&] { sh::require_no_origin_search_path(overlapping_dynamic(origin), "overlap"); }),
-                      "overlap has overlapping or unordered loadable segments"));
-            CHECK(has(refusal([&] { sh::require_no_origin_search_path(zero_size_overlap(origin), "zero"); }),
-                      "zero has a malformed loadable segment"));
-            CHECK(has(refusal([&] { sh::require_no_origin_search_path(wrapping_segment(origin), "wrap"); }),
-                      "wrap has a malformed loadable segment"));
-        }
-        {
-            const fs::path origin = dir / "origin" / "libsaccade_scan_torchop.so";
-            fs::create_directories(origin.parent_path());
-            const std::string bytes = read_file(argv[3]);
-            write_file(origin, bytes);
-            CHECK(has(refusal([&] {
-                          (void)sh::VerifiedOperator::prepare(origin.string(), sh::sha256_hex(bytes.data(), bytes.size()));
-                      }),
-                      "uses $ORIGIN"));
-        }
-
-        // Refusals before anything is mapped.
-        CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(a.string(), sha2); }), "sha256 " + sha1 + " != " + sha2));
+        // The pin (rev 3d): a self-consistent request for another operator
+        // (value 2's bytes at the path, its SHA-256) is refused before the
+        // source is opened, as is another known size; bytes other than the
+        // pin's at the path are refused after the read.
+        const fs::path c = dir / "c" / "libsaccade_scan_torchop.so";
+        fs::create_directories(c.parent_path());
+        write_file(c, two);
+        CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(c.string(), sha2, size1); }),
+                  "operator library " + c.string() + ": sha256 " + sha2 +
+                      " is not the admitted N03 operator library's " + sha1 + " (P-N03 rev 3d)"));
         CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(a.string(), sha1, 1); }),
-                  "bytes " + std::to_string(one.size()) + " != 1"));
+                  ": 1 bytes is not the admitted N03 operator library's " + std::to_string(one.size())));
+        CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(c.string(), sha1); }), "sha256 " + sha2 + " != " + sha1));
+        in_child("no_pin_refuses_everything", [&] {
+            sh::testing::set_fixture_n03_pin("", -1);
+            CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(a.string(), sha1); }),
+                      "is not the admitted N03 operator library's"));
+            CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare(a.string(), ""); }), "bytes "));
+        });
+        fs::create_directories(dir / "short");
+        write_file(dir / "short" / "op.so", one.substr(0, one.size() / 2));
+        CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare((dir / "short" / "op.so").string(), sha1); }),
+                  "bytes " + std::to_string(one.size() / 2) + " != " + std::to_string(one.size())));
         fs::create_symlink(a, dir / "link.so");
         CHECK(has(refusal([&] { (void)sh::VerifiedOperator::prepare((dir / "link.so").string(), sha1); }),
                   "has a symbolic link in its path"));
@@ -464,6 +345,7 @@ int main(int argc, char** argv) {
         std::string line, all;
         while (std::getline(maps, line)) all += line + "\n";
         CHECK(!has(all, std::string("memfd:") + sh::kOperatorMemfdLabel));
+        CHECK(std::getenv("SACCADE_OPERATOR_FIXTURE_CONSTRUCTED") == nullptr);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "unexpected: %s\n", e.what());
         ++failures;

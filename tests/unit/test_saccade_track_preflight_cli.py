@@ -18,7 +18,8 @@ constructor dlopens it before ``main`` in every run.
   root) passes Gate A -- it checks bytes, not their source -- so the run prints
   ``preflight passed``, builds the runtime (``cuInit`` is logged) and is
   refused by the detector load (Gate B: the stand-in operator library is not
-  an ELF object, refused before it is sealed or dlopen'ed, #549 S2-2). The build binary runs from an install-shaped prefix
+  the pinned N03, refused before it is opened; #549 S2-2, P-N03 rev 3d). The
+  build binary runs from an install-shaped prefix
   (``libexec/<binary>``) whose ``share/saccade`` is that model root: the
   detector load opens only the runtime package's operator library (#549 S2-2
   D-N03-5). Needs a CUDA driver on the host;
@@ -269,7 +270,7 @@ def test_positive_control_passes_gate_a_then_initializes_cuda(
         assert all(s["state"] == "pending" for s in j["sequences"])
         assert not list((tmp_path / "out").glob("*.txt"))
     else:
-        assert "is not a 64-bit little-endian ELF object" in message, message
+        assert "is not the admitted N03 operator library's" in message, message
         # Gate B's caught load failure (#549 S2-1, MB-58): load_verification
         # failed; Gate A's identity is unchanged by it.
         assert j["load_verification"] == {"status": "failed", "byte_scope": None}

@@ -21,8 +21,8 @@ directory. "No CUDA call" is observed as in
   ``<out>``, no CUDA;
 * stand-in bundle (small files, a lineage / attestation / manifest bound to
   them): Gate A passes in manifest mode, CUDA initializes, and Gate B refuses
-  the stand-in operator (not an ELF object, before it is sealed or dlopen'ed;
-  #549 S2-2): ``load_verification`` failed, identity unchanged (MB-58,
+  the stand-in operator (not the pinned N03, before it is opened; #549 S2-2,
+  P-N03 rev 3d): ``load_verification`` failed, identity unchanged (MB-58,
   catchable). Needs a CUDA driver;
 * refusals without CUDA, each one change: a replaced member, a member of
   another size, a symlinked member, an allowlist other than the pinned one
@@ -360,7 +360,7 @@ def test_standin_bundle_passes_gate_a_and_gate_b_records_the_failed_load(
     assert cuda, "the observer did not see cuInit after Gate A passed"
     j = _journal(tmp_path)
     assert j["state"] == "failed"
-    assert "is not a 64-bit little-endian ELF object" in j["failure"]["message"], j[
+    assert "is not the admitted N03 operator library's" in j["failure"]["message"], j[
         "failure"
     ]
     assert j["load_verification"] == LOAD_FAILED

@@ -1,23 +1,27 @@
 """N03 sealed-memfd load and the loader auditor on a real loader (#549 S2-2).
 
-docs/reference/model_bundle_s2_2_n03_549.md (P-N03 rev 3c, D-N03-2..5). An
-install-shaped prefix is built in ``tmp_path`` with the real
+docs/reference/model_bundle_s2_2_n03_549.md (P-N03 rev 3c, D-N03-2..5, as
+revised by rev 3d: docs/reference/model_bundle_s2_2_n03_offline_proposal_549.md).
+An install-shaped prefix is built in ``tmp_path`` with the real
 ``shipping/src/loader_audit.c`` and launcher, a bundled ``lib/vendor/libfoo.so``
 and a stand-in operator library at ``share/saccade/build/
 libsaccade_scan_torchop.so`` (``op()`` returns 1; a byte-different copy
 returns 2). ``libexec/saccade_track`` is a host driver compiled from the
-production ``shipping/src/operator_loader.cpp``: it names its runtime
-package's operator from its own mapping (D-N03-5), then prepares (read once,
-hash, sealed labeled memfd, readback) and loads it (dlopen of the memfd,
-mapping post-check). A forger (C) maps objects the ways the auditor must
-refuse.
+production ``shipping/src/operator_loader.cpp`` with a pin naming the
+stand-in (value 1) in place of the generated production pin: it names its
+runtime package's operator from its own mapping (D-N03-5), then prepares
+(pin, read once, hash, sealed labeled memfd, readback) and loads it (dlopen
+of the memfd, mapping post-check). A forger (C) maps objects the ways the
+auditor must refuse.
 
 * positives: the driver through the launcher (explicit loader, --audit) and
   by direct exec with LD_AUDIT both derive <prefix>/share/saccade/build/...
   and run the operator from its memfd; the vDSO and the vendor library pass;
-* D-N03-5: a plan naming another file is refused by the host (exit 2); so is
-  an operator whose RUNPATH or DT_NEEDED uses $ORIGIN (it would expand under
-  /proc/self/fd);
+* D-N03-5: a plan naming another file is refused by the host (exit 2);
+* pin (rev 3d): a self-consistent request for an operator other than the
+  pinned one is refused by the host before anything is opened (exit 2), here
+  operators whose RUNPATH or DT_NEEDED uses $ORIGIN, which admission refuses
+  (tests/native/test_shipping_n03_admission.cpp);
 * races (production host, real auditor): rename-replace or in-place write of
   the source after the hash is refused by the auditor (127); an in-place
   write after the load does not change what runs;
@@ -265,10 +269,19 @@ def prefix(tmp_path: Path) -> Path:
     # the stand-in operator (1) at the fixed path, a byte-different copy (2)
     for value, out in ((1, p / OP_REL), (2, p / "other" / "op2.so")):
         _cc("-shared", "-fPIC", f"-DVALUE={value}", "-o", str(out), str(src / "op.c"))
+    # the driver's pin names the stand-in (the production pin is generated
+    # from shipping/n03_operator_pin.json)
+    op1 = (p / OP_REL).read_bytes()
+    (src / "pin.cpp").write_text(
+        '#include "saccade_shipping/operator_loader.hpp"\n'
+        "const saccade::shipping::N03OperatorPin& saccade::shipping::n03_operator_pin() {\n"
+        f'    static constexpr N03OperatorPin kPin{{"{hashlib.sha256(op1).hexdigest()}", {len(op1)}}};\n'
+        "    return kPin;\n}\n"
+    )
     subprocess.run(
         [
             "g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", f"-I{REPO / 'shipping/include'}",
-            "-o", str(p / "libexec/saccade_track"), str(src / "driver.cpp"),
+            "-o", str(p / "libexec/saccade_track"), str(src / "driver.cpp"), str(src / "pin.cpp"),
             str(REPO / "shipping/src/operator_loader.cpp"), str(REPO / "shipping/src/sha256.cpp"),
             f"-L{p / 'lib/vendor'}", "-Wl,--no-as-needed", "-lfoo", "-ldl",
         ],
@@ -349,17 +362,29 @@ def test_a_binding_to_another_file_is_refused_by_the_host(prefix: Path) -> None:
     assert f"is not the runtime package's {(prefix / OP_REL)}" in r.stdout
 
 
-def test_an_origin_runpath_is_refused_by_the_host(prefix: Path) -> None:
+def _refused_by_the_pin(prefix: Path, op: Path) -> None:
+    pinned = "".join(  # the driver's pin: the original stand-in's sha256
+        line.split('"')[1]
+        for line in (prefix / "src/pin.cpp").read_text().splitlines()
+        if "kPin{" in line
+    )
+    r = _audited(prefix, "saccade_track", "load", _sha(op))
+    assert r.returncode == 2, (r.stdout, r.stderr)
+    assert (
+        f"sha256 {_sha(op)} is not the admitted N03 operator library's {pinned} (P-N03 rev 3d)"
+        in r.stdout
+    ), r.stdout
+    assert "value=" not in r.stdout and "memfd" not in r.stdout
+
+
+def test_an_origin_runpath_operator_is_refused_by_the_pin(prefix: Path) -> None:
     op = prefix / OP_REL
     _cc("-shared", "-fPIC", "-DVALUE=1", "-Wl,--enable-new-dtags,-rpath,$ORIGIN/../lib", "-o", str(op),
         str(prefix / "src/op.c"))  # fmt: skip
-    r = _audited(prefix, "saccade_track", "load", _sha(op))
-    assert r.returncode == 2, (r.stdout, r.stderr)
-    assert "DT_RUNPATH $ORIGIN/../lib uses $ORIGIN" in r.stdout
-    assert "value=" not in r.stdout
+    _refused_by_the_pin(prefix, op)
 
 
-def test_an_origin_needed_name_is_refused_by_the_host(prefix: Path) -> None:
+def test_an_origin_needed_operator_is_refused_by_the_pin(prefix: Path) -> None:
     """The loader expands $ORIGIN in DT_NEEDED as well (review round 3)."""
     dep = prefix / "other" / "libdep.so"
     (prefix / "src" / "dep.c").write_text("int dep(void) { return 0; }\n")
@@ -383,10 +408,7 @@ def test_an_origin_needed_name_is_refused_by_the_host(prefix: Path) -> None:
         "-Wl,--no-as-needed",
         str(dep),
     )
-    r = _audited(prefix, "saccade_track", "load", _sha(op))
-    assert r.returncode == 2, (r.stdout, r.stderr)
-    assert "DT_NEEDED $ORIGIN/libdep.so uses $ORIGIN" in r.stdout
-    assert "value=" not in r.stdout
+    _refused_by_the_pin(prefix, op)
 
 
 def test_a_wrong_sha256_is_refused_before_anything_is_mapped(prefix: Path) -> None:
