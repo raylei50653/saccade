@@ -159,15 +159,29 @@ void RunCompletion::record_gate_a_identity(const JsonValue& identity, bool final
     SACCADE_COMPLETION_POINT("identity_published", 0);
 }
 
-void RunCompletion::record_load_verification(bool verified) {
+const char* load_byte_scope_name(LoadByteScope scope) {
+    return scope == LoadByteScope::LoadedBuffer ? "loaded_buffer" : "hashed_before_load";
+}
+
+LoadByteScope aggregate_load_byte_scope(bool manifest_mode, const std::string& op_library,
+                                        const std::string& head_artifact, const std::string& backbone_engine) {
+    const std::string loaded = load_byte_scope_name(LoadByteScope::LoadedBuffer);
+    const bool all_loaded = op_library == loaded && head_artifact == loaded && backbone_engine == loaded;
+    return manifest_mode && all_loaded ? LoadByteScope::LoadedBuffer : LoadByteScope::HashedBeforeLoad;
+}
+
+void RunCompletion::record_load_verification(bool verified, LoadByteScope scope) {
     if (!identity_finalized_ || identity_.find("level")->kind == JsonValue::Kind::Null) {
         throw std::logic_error("load verification before Gate A passed");
     }
     if (load_verification_.kind != JsonValue::Kind::Null) throw std::logic_error("load verification already recorded");
+    if (scope == LoadByteScope::LoadedBuffer && !verified) throw std::logic_error("a failed load has no byte scope");
+    if (scope == LoadByteScope::LoadedBuffer && !manifest_mode_) {
+        throw std::logic_error("legacy mode records hashed_before_load (#549 contract 4.1)");
+    }
     JsonValue v = JsonValue::make_object();
     v.set("status", JsonValue::make_string(verified ? "verified" : "failed"));
-    // S2-1: Gate B rehashes each file, then opens it again by path to load it.
-    v.set("byte_scope", verified ? JsonValue::make_string("hashed_before_load") : JsonValue::make_null());
+    v.set("byte_scope", verified ? JsonValue::make_string(load_byte_scope_name(scope)) : JsonValue::make_null());
     load_verification_ = std::move(v);
     try {
         write_journal();
@@ -179,7 +193,7 @@ void RunCompletion::record_load_verification(bool verified) {
 
 RunCompletion::RunCompletion(std::string run_id, std::string entrypoint, RunOutputs outputs, bool manifest_mode,
                              IdentityLevel required)
-    : run_id_(std::move(run_id)), entrypoint_(std::move(entrypoint)),
+    : run_id_(std::move(run_id)), entrypoint_(std::move(entrypoint)), manifest_mode_(manifest_mode),
       identity_(unverified_identity(manifest_mode, required)), out_(std::move(outputs.out)),
       report_(std::move(outputs.report)), journal_(out_ / kRunJournalName) {
     const fs::path lock = out_ / kRunLockName;

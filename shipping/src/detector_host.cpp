@@ -30,6 +30,7 @@
 
 #include "perception/trt_engine.hpp"
 #include "saccade_shipping/detector_s2.hpp"
+#include "saccade_shipping/head_admission.hpp"
 #include "saccade_shipping/operator_loader.hpp"
 #include "saccade_shipping/sha256.hpp"
 #include "saccade_shipping/verified_model_bytes.hpp"
@@ -297,6 +298,9 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
         plan.resolved ? plan.resolved->backbone_engine.bytes : -1);
     m.report.head_artifact_sha256 = head_bytes.sha256();
     m.report.backbone_engine_sha256 = engine_bytes.sha256();
+    // F-1 (#549 MB-41): deserializing the verified head runs no head code
+    // (head_admission.hpp); checked before the operator is mapped.
+    admit_head_archive(head_bytes, SACCADE_LIBTORCH_BUILD_VERSION);
 
     // 2. the native scan operator, from its sealed memfd (a registry reuse
     // when this process already loaded the same verified operator).
@@ -316,6 +320,9 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
     }
     VerifiedModelStream head_stream(head_bytes);
     m.head = torch::jit::load(head_stream);
+    // F-1: every function compiled from the head uses only the reviewed head
+    // operators, before the head is used in any other way.
+    admit_head_module(m.head, SACCADE_LIBTORCH_BUILD_VERSION);
     m.report.head_artifact_byte_scope = "loaded_buffer";
     m.head.eval();
     std::set<std::string> param_devices;

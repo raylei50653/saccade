@@ -28,7 +28,9 @@
 //   MB-39 a directory below the bundle root that is a symlink out of it;
 //   MB-40 the whole bundle relocated (and reached through a symlinked root);
 //   MB-14 an unknown manifest schema; R-03 a pairing to the wrong role;
-//   MB-57's manifest counterpart: required levels at and above the proven one.
+//   MB-57's manifest counterpart: required levels at and above the proven one;
+//   MB-41's journal record: after a manifest-mode Gate A, Gate B may record
+//         verified / loaded_buffer, never for a failed load, identity unchanged.
 // Every refusal: PreflightError naming the check, journal failed, the
 // bindings' statuses, level null -- except a policy refusal, which keeps the
 // proven level and records `required`. Every pass: the resolved bindings are
@@ -447,6 +449,43 @@ void check_frozen_model(const Fixture& fx, const fs::path& dir, const fs::path& 
     std::fprintf(stderr, "frozen_model: %s\n", o.error.empty() ? "passed" : o.error.c_str());
 }
 
+// #549 MB-41: after a manifest-mode Gate A, Gate B's aggregate may be
+// loaded_buffer (the detector load decides, aggregate_load_byte_scope); the
+// identity is unchanged by it, and a failed load still has no byte scope.
+void check_manifest_load_scope(const Fixture& fx, const fs::path& dir) {
+    auto logic_error = [](const std::function<void()>& f) {
+        try {
+            f();
+        } catch (const std::logic_error&) {
+            return true;
+        }
+        return false;
+    };
+    for (const sh::LoadByteScope scope : {sh::LoadByteScope::LoadedBuffer, sh::LoadByteScope::HashedBeforeLoad}) {
+        fs::remove_all(dir);
+        Bundle b = make_bundle(fx, dir);
+        sh::RunCompletion rc(sh::new_run_id(), "saccade_shipping_preflight_manifest_test",
+                             sh::RunOutputs{b.out, b.report, b.trace, kSeqs}, true, b.required);
+        sh::run_preflight(inputs_of(b), rc);
+        const JsonValue sealed = rc.identity();
+        const bool failed_refused = logic_error([&] { rc.record_load_verification(false, sh::LoadByteScope::LoadedBuffer); });
+        CHECK(failed_refused);
+        // Preserve an ordinary assertion failure for a removed-guard mutant;
+        // a second record would throw and obscure the tested refusal rule.
+        if (!failed_refused) continue;
+        CHECK(is_null(sh::parse_strict_json(read_file(b.out / sh::kRunJournalName)), "load_verification"));
+        rc.record_load_verification(true, scope);
+        const JsonValue j = sh::parse_strict_json(read_file(b.out / sh::kRunJournalName));
+        const JsonValue& v = at(j, "load_verification");
+        CHECK(v.object.size() == 2);
+        CHECK(str(v, "status") == "verified");
+        CHECK(str(v, "byte_scope") == sh::load_byte_scope_name(scope));
+        CHECK(at(j, "identity") == sealed);
+        CHECK(rc.identity() == sealed);
+    }
+    std::fprintf(stderr, "manifest_load_scope: passed\n");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -774,6 +813,7 @@ int main(int argc, char** argv) {
         if (c.extra) c.extra(b, o);
         std::fprintf(stderr, "%s: %s\n", c.name, o.error.empty() ? "passed" : o.error.c_str());
     }
+    check_manifest_load_scope(fx, base / "manifest_load_scope");
     if (!frozen_model_root.empty()) check_frozen_model(fx, base / "frozen_model", frozen_model_root);
     if (keep.empty()) fs::remove_all(base);
     std::printf("%d checks, %d failures\n", g_checks, g_failures);

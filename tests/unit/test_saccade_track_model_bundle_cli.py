@@ -31,12 +31,23 @@ directory. "No CUDA call" is observed as in
   mode under the same policy (MB-57);
 * real bundle (N01-N06 copied into a bundle directory, the operator in the
   runtime root; needs the models, MOT17-09 and a GPU): a complete run with
-  ``load_verification`` verified / hashed_before_load and the resolved
-  bindings across the two roots, whose MOT text is compared with a legacy-mode
-  run of the same binary (raw equality; not a qualified parity claim); and a
+  ``load_verification`` verified / loaded_buffer (#549 MB-41: all three
+  per-object scopes are loaded_buffer) and the resolved bindings across the
+  two roots, whose MOT text is compared with a legacy-mode run of the same
+  binary (raw equality; not a qualified parity claim), which still records
+  verified / hashed_before_load (contract 4.1: legacy mode); and a
   SIGKILL sent once the runtime root's operator library is mapped (the load
   has begun) and before any load record, which leaves the journal running with
-  ``load_verification`` null (MB-58, uncatchable).
+  ``load_verification`` null (MB-58, uncatchable);
+* G-1 heads (#549 MB-41, F-1): the real bundle with its head replaced by a
+  head that reads an external sidecar file (a scripted ``__setstate__``,
+  ``forward``, ``torch.jit.fork``, the ``__setstate__`` head saved as
+  FlatBuffer, or a parameter default the importer evaluates), each shown to
+  read the file under plain ``torch.jit.load``.
+  The lineage, attestation and manifest are rebound to it, so Gate A matches
+  it at ``checksum_matched``. With the sidecar removed, Gate B's head
+  admission refuses it: exit 2, ``load_verification`` failed, no sequence
+  run. The real-bundle run above is the N02 positive control.
 
 Skips when ``build/shipping/saccade_track`` has not been built; the real-bundle
 tests skip without the models, the data or a CUDA driver.
@@ -54,6 +65,7 @@ import os
 import re
 import shutil
 import signal
+import struct
 import subprocess
 import time
 from pathlib import Path
@@ -76,6 +88,8 @@ JOURNAL = "saccade_track.journal.json"
 PROBE = "cuda_init_probe.so"
 SEQS = ("SEQ-A", "SEQ-B")
 LOAD_VERIFIED = {"status": "verified", "byte_scope": "hashed_before_load"}
+# Manifest mode with every object loaded from its checked bytes (#549 MB-41).
+LOAD_VERIFIED_BUFFER = {"status": "verified", "byte_scope": "loaded_buffer"}
 LOAD_FAILED = {"status": "failed", "byte_scope": None}
 # Example manifest member index of each slot.
 BACKBONE, HEAD, OP, CFG, LINEAGE, ATT = range(6)
@@ -658,7 +672,7 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
     assert cuda
     j = _journal(tmp_path)
     assert j["state"] == "complete"
-    assert j["load_verification"] == LOAD_VERIFIED
+    assert j["load_verification"] == LOAD_VERIFIED_BUFFER
     identity = j["identity"]
     assert (identity["mode"], identity["level"], identity["required"]) == (
         "model_bundle",
@@ -669,7 +683,10 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
     assert identity["bundle_manifest_sha256"] == _sha(MANIFEST.read_bytes())
     rep = json.loads(report.read_text())
     assert rep["format"] == "saccade.native_track_report/v5"
-    assert (rep["identity"], rep["load_verification"]) == (identity, LOAD_VERIFIED)
+    assert (rep["identity"], rep["load_verification"]) == (
+        identity,
+        LOAD_VERIFIED_BUFFER,
+    )
     assert (rep["mode"], rep["model_bundle"], rep["model_root"], rep["config"]) == (
         "model_bundle",
         str(bundle),
@@ -692,6 +709,11 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
     assert load["op_library_sha256"] == manifest["members"][OP]["sha256"]
     assert load["head_artifact_sha256"] == manifest["members"][HEAD]["sha256"]
     assert load["backbone_engine_sha256"] == manifest["members"][BACKBONE]["sha256"]
+    assert load["artifact_byte_scopes"] == {
+        "op_library": "loaded_buffer",
+        "head_artifact": "loaded_buffer",
+        "backbone_engine": "loaded_buffer",
+    }
     # The same binary in legacy mode on the same sequence: raw MOT text equal
     # (a local diagnostic of the two modes, not a qualified parity claim). Its
     # model root is the prefix's share/saccade (the only place its operator
@@ -720,6 +742,174 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
         tmp_path / "out" / name
     ).read_bytes()
     assert _journal(tmp_path, "legacy")["load_verification"] == LOAD_VERIFIED
+
+
+# ── G-1 heads (#549 MB-41, F-1) ──────────────────────────────────────────
+G1_KINDS = ("setstate", "forward", "fork", "flatbuffer", "default")
+G1_REFUSAL = {
+    "setstate": "defines __setstate__, which the loader runs",
+    "forward": "forward uses aten::from_file, not among the reviewed head operators",
+    "fork": "forward uses aten::from_file, aten::wait, prim::fork, not among the reviewed head operators",
+    "flatbuffer": "the head is not a ZIP TorchScript archive",
+    "default": "gives parameter y a default value, which the loader evaluates",
+}
+
+
+def _g1_head(kind: str, sidecar: Path) -> bytes:
+    """A TorchScript head that reads ``sidecar`` (outside the archive)."""
+    import io
+
+    import torch
+
+    class G1SetState(torch.nn.Module):
+        def __init__(self, path: str) -> None:
+            super().__init__()
+            self.path = path
+            self.w = torch.zeros(1)
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x + self.w
+
+        @torch.jit.export
+        def __getstate__(self) -> tuple[str, bool]:
+            return (self.path, self.training)
+
+        @torch.jit.export
+        def __setstate__(self, state: tuple[str, bool]) -> None:
+            self.path = state[0]
+            self.training = state[1]
+            self.w = torch.from_file(self.path, False, 1, dtype=torch.float32)
+
+    class G1Forward(torch.nn.Module):
+        def __init__(self, path: str) -> None:
+            super().__init__()
+            self.path = path
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x + torch.from_file(self.path, False, 1, dtype=torch.float32)
+
+    class G1Fork(torch.nn.Module):
+        def __init__(self, path: str) -> None:
+            super().__init__()
+            self.path = path
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            fut = torch.jit.fork(
+                torch.from_file, self.path, False, 1, dtype=torch.float32
+            )
+            return x + torch.jit.wait(fut)
+
+    class G1Default(torch.nn.Module):
+        def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+            return x + y
+
+    if kind == "default":
+        return _with_parameter_default(G1Default, sidecar)
+    cls = {"forward": G1Forward, "fork": G1Fork}.get(kind, G1SetState)
+    m = torch.jit.script(cls(str(sidecar)))
+    buf = io.BytesIO()
+    if kind == "flatbuffer":
+        torch.jit.save_jit_module_to_flatbuffer(m, buf)
+    else:
+        torch.jit.save(m, buf)
+    return buf.getvalue()
+
+
+def _with_parameter_default(cls: Any, sidecar: Path) -> bytes:
+    """``forward``'s ``y`` given a default that the importer evaluates while
+    the archive loads. The code record is edited by hand, as an archive's
+    author could; a saved module would carry the evaluated value instead.
+    Its debug ranges no longer match the text, so they go too."""
+    import io
+    import zipfile
+
+    import torch
+
+    buf = io.BytesIO()
+    torch.jit.save(torch.jit.script(cls()), buf)
+    src = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
+    old = "y: Tensor) -> Tensor:"
+    new = f'y: Tensor=torch.from_file("{sidecar}", False, 1, dtype=6)) -> Tensor:'
+    edited = [
+        n for n in src.namelist() if n.endswith(".py") and old in src.read(n).decode()
+    ]
+    assert len(edited) == 1, edited
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as dst:
+        for n in src.namelist():
+            if n == edited[0] + ".debug_pkl":
+                continue
+            data = src.read(n)
+            if n == edited[0]:
+                data = data.decode().replace(old, new).encode()
+            dst.writestr(n, data)
+    return out.getvalue()
+
+
+def _g1_value(kind: str, head: bytes) -> float:
+    """What the head took from its sidecar under plain torch.jit.load."""
+    import io
+
+    import torch
+
+    m = torch.jit.load(io.BytesIO(head), map_location="cpu")
+    if kind in ("setstate", "flatbuffer"):
+        return float(m.w.item())
+    return float(m(torch.zeros(1)).item())  # forward, fork, default
+
+
+def _rebind_head(
+    prefix: Path, bundle: Path, manifest: dict[str, Any], head: bytes
+) -> None:
+    """The bundle's head replaced by ``head``; lineage, attestation and the
+    manifest rebound to it, so Gate A matches every member."""
+    members = manifest["members"]
+    _member_path(bundle, prefix, members[HEAD]).write_bytes(head)
+    lpath = _member_path(bundle, prefix, members[LINEAGE])
+    lineage = json.loads(lpath.read_text())
+    lineage["torchscript"]["sha256"] = _sha(head)
+    lpath.write_text(json.dumps(lineage, indent=2))
+    apath = _member_path(bundle, prefix, members[ATT])
+    att = json.loads(apath.read_text())
+    att["frozen_lineage"]["sha256"] = _sha(lpath.read_bytes())
+    att["frozen_lineage"]["torchscript_sha256"] = _sha(head)
+    apath.write_text(json.dumps(att, indent=2))
+    _write_manifest(bundle, prefix, manifest)
+
+
+@pytest.mark.parametrize("binary", BINARIES)
+@pytest.mark.parametrize("kind", G1_KINDS)
+def test_g1_head_is_refused_by_the_head_admission(
+    tmp_path: Path, binary: str, kind: str
+) -> None:
+    prefix, bundle, manifest = _real_bundle(tmp_path, binary)
+    sidecar = tmp_path / "sidecar.bin"
+    head = _g1_head(kind, sidecar)
+    # The control is real: the head's value follows the external file.
+    sidecar.write_bytes(struct.pack("<f", 60.0))
+    first = _g1_value(kind, head)
+    sidecar.write_bytes(struct.pack("<f", 7.0))
+    assert (first, _g1_value(kind, head)) == (60.0, 7.0)
+    # Without it, any read would fail with LibTorch's own error instead.
+    sidecar.unlink()
+    _rebind_head(prefix, bundle, manifest, head)
+    r, cuda = _run(
+        tmp_path,
+        prefix / "libexec" / binary,
+        ["--model-bundle", str(bundle), *map(str, _sequences(tmp_path))],
+    )
+    assert r.returncode == 2, r.stderr
+    assert cuda and f"{binary}: preflight passed" in r.stderr
+    j = _journal(tmp_path)
+    assert j["state"] == "failed" and j["load_verification"] == LOAD_FAILED
+    assert j["identity"]["level"] == "checksum_matched"
+    assert j["identity"]["bindings"]["head"]["status"] == "matched"
+    message = j["failure"]["message"]
+    assert "shipping detector load: head admission (F-1): " in message, message
+    assert G1_REFUSAL[kind] in message, message
+    assert all(s["state"] == "pending" for s in j["sequences"])
+    assert not list((tmp_path / "out").glob("*.txt"))
+    assert not sidecar.exists()
 
 
 def test_real_bundle_killed_during_the_load_leaves_no_load_claim(

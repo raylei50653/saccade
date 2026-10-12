@@ -20,7 +20,14 @@
 //                  flipped): the load refuses it at the resolved path before
 //                  loading anything (DetectorLoadError, sha256 mismatch);
 //   * model_root:  a plan with resolved bindings and a model root is refused;
-//   * not_the_plan: resolved bindings whose sha256 is not the plan's are refused.
+//   * not_the_plan: resolved bindings whose sha256 is not the plan's are refused;
+//   * g1 (#549 MB-41 F-1): the G-1 heads (fixtures/g1_heads.hpp) bound
+//                  hash-consistently, so the rehash passes. The sidecar does
+//                  not exist, so a read would fail with another error.
+//                  setstate, flatbuffer and default are refused before the
+//                  load and before the operator is mapped. forward and fork are
+//                  refused after the load, before anything runs. The
+//                  cross_root load is the N02 positive control.
 // Skips (exit 0, "SKIP") when a model file is missing.
 #include <cuda_runtime.h>
 #include <torch/script.h>
@@ -36,6 +43,7 @@
 #include <string>
 #include <vector>
 
+#include "fixtures/g1_heads.hpp"
 #include "saccade_shipping/detector_host.hpp"
 #include "perception/trt_engine.hpp"
 #include "saccade_shipping/model_bundle.hpp"
@@ -135,6 +143,23 @@ sh::DetectorPlan gate_a(const Layout& l) {
     return r.detector;
 }
 
+// The plan with its head binding replaced by `bytes` at `path`, consistently
+// (path, size, sha256 in the plan and its resolved bindings): the rehash
+// passes, so only the head admission can refuse it.
+sh::DetectorPlan substitute_head(const sh::DetectorPlan& plan, const fs::path& path, const std::string& bytes) {
+    write_file(path, bytes);
+    sh::DetectorPlan p = plan;
+    auto r = std::make_shared<sh::ResolvedLoadBindings>(*plan.resolved);
+    r->head_artifact.absolute_path = path.string();
+    r->head_artifact.bytes = static_cast<std::int64_t>(bytes.size());
+    r->head_artifact.sha256 = sh::sha256_hex(bytes.data(), bytes.size());
+    p.resolved = r;
+    p.head_artifact.sha256 = r->head_artifact.sha256;
+    return p;
+}
+
+const std::string kAdmission = "shipping detector load: head admission (F-1): ";
+
 std::string load_error(const sh::DetectorPlan& plan, const std::string& model_root, cudaStream_t stream) {
     try {
         sh::DetectorHost host(plan, model_root, stream);
@@ -209,6 +234,26 @@ int main(int argc, char** argv) {
             CHECK(e.find("shipping detector load: head artifact " + head.string() + " sha256 ") == 0);
             CHECK(!mapped(plan.resolved->op_library.absolute_path));  // refused before dlopen
             CHECK(!mapped_memfd());
+        }
+        {
+            const Layout l = make_layout(repo, base / "g1_before_load");
+            const sh::DetectorPlan plan = gate_a(l);
+            for (const std::string kind : {"setstate", "flatbuffer", "default"}) {
+                const fs::path sidecar = base / ("g1_" + kind + ".bin");
+                const sh::DetectorPlan p =
+                    substitute_head(plan, l.bundle / ("g1_" + kind + ".pt"), g1::archive(kind, sidecar.string()));
+                const std::string e = load_error(p, "", stream);
+                std::fprintf(stderr, "g1 %s: %s\n", kind.c_str(), e.c_str());
+                const std::string want =
+                    kind == "setstate" ? "class __torch__.G1setstate defines __setstate__, which the loader runs"
+                    : kind == "default"
+                        ? "code record code/__torch__.py gives parameter y a default value, which the loader evaluates"
+                        : "the head is not a ZIP TorchScript archive (FlatBuffer and other formats are refused)";
+                CHECK(e == kAdmission + want);
+                CHECK(!mapped(plan.resolved->op_library.absolute_path));
+                CHECK(!mapped_memfd());
+                CHECK(!fs::exists(sidecar));
+            }
         }
         {
             const Layout l = make_layout(repo, base / "unsupported_sm");
@@ -322,6 +367,20 @@ int main(int argc, char** argv) {
                 CHECK(!e.empty());
                 CHECK(e.find("not a DetectorLoadError") == std::string::npos);
                 CHECK(e.find(mutation == "head_dtype" ? "head supported contract" : "backbone engine") != std::string::npos);
+            }
+
+            // F-1, after the operator is mapped: heads that read when they run
+            // load without reading and are refused before any run.
+            for (const std::string kind : {"forward", "fork"}) {
+                const fs::path sidecar = base / ("g1_" + kind + ".bin");
+                const sh::DetectorPlan p =
+                    substitute_head(plan, l.bundle / ("g1_" + kind + ".pt"), g1::archive(kind, sidecar.string()));
+                const std::string e = load_error(p, "", stream);
+                std::fprintf(stderr, "g1 %s: %s\n", kind.c_str(), e.c_str());
+                CHECK(e == kAdmission + "function __torch__.G1" + kind + ".forward uses " +
+                               (kind == "fork" ? "aten::from_file, aten::wait, prim::fork" : "aten::from_file") +
+                               ", not among the reviewed head operators");
+                CHECK(!fs::exists(sidecar));
             }
         }
     } catch (const std::exception& e) {

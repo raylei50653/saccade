@@ -47,7 +47,8 @@
 //
 // Gate B (detector_host.hpp): building the runtime loads the detector's three
 // files; the journal's load_verification is then `verified` (byte_scope
-// hashed_before_load), or `failed` when the load throws DetectorLoadError.
+// loaded_buffer in manifest mode when all three report it, hashed_before_load
+// otherwise), or `failed` when the load throws DetectorLoadError.
 #pragma once
 
 #include <cstdint>
@@ -198,8 +199,9 @@ inline PreflightResult preflight(const Options& o, const char* entrypoint, RunCo
 
 // Gate B: builds the runtime from Gate A's result -- the detector load hashes
 // and loads the three files (manifest mode: from the resolved bindings only)
-// -- then records load_verification: verified, or failed when the load throws
-// DetectorLoadError. Any other failure leaves it null. The operator library is
+// -- then records load_verification: verified with the aggregate of the three
+// per-object byte scopes (aggregate_load_byte_scope), or failed when the load
+// throws DetectorLoadError. Any other failure leaves it null. The operator library is
 // only the runtime package's of this entrypoint (D-N03-5, both modes): where
 // the kernel maps <prefix>/libexec/<entrypoint>, <prefix>/share/saccade/build/
 // libsaccade_scan_torchop.so (operator_loader.hpp).
@@ -217,7 +219,10 @@ std::unique_ptr<Runtime> load_runtime(const Options& o, PreflightResult& pre, Ru
         }
         throw;
     }
-    completion.record_load_verification(true);
+    const HeadLoadReport& r = rt->load_report();
+    completion.record_load_verification(
+        true, aggregate_load_byte_scope(o.manifest_mode(), r.op_library_byte_scope, r.head_artifact_byte_scope,
+                                        r.backbone_engine_byte_scope));
     return rt;
 }
 

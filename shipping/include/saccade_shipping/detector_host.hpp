@@ -16,13 +16,17 @@
 //      whose SHA-256 was checked. The operator must be the runtime package's
 //      file the caller named (DetectorPlan::runtime_operator_path, D-N03-5);
 //      it is read once, hashed and sealed into a memfd that is read back
-//      (operator_loader.hpp, #549 S2-2 P-N03);
+//      (operator_loader.hpp, #549 S2-2 P-N03). The verified head bytes must
+//      then be a ZIP TorchScript archive whose deserialization runs no head
+//      code (head_admission.hpp, #549 MB-41 F-1);
 //   2. the operator library is dlopen'ed from that sealed memfd and the
 //      mapping is checked to be it (it registers
 //      `saccade_native::selective_scan_fwd` with the dispatcher);
 //   3. the artifact's runtime requirements are set and read back (graph
 //      executor optimize off, cuDNN benchmark off, cuDNN TF32 on, matmul TF32
-//      off), then `torch::jit::load(verified_stream)` without a device map: parameters
+//      off), then `torch::jit::load(verified_stream)` without a device map.
+//      Every function compiled from the head may use only the reviewed head
+//      operators (head_admission.hpp, F-1). Parameters
 //      must land on cuda:0 and every tensor constant must stay on the CPU (a
 //      CUDA constant in the traced shape arithmetic turns aten::Int into a
 //      device sync; PR-2L amendment A1);
@@ -81,7 +85,7 @@ struct HeadLoadReport {
     std::string gpu_sm;  // manifest mode: device 0's actual SM, checked before deserialization
     // Per-object byte scopes (D-N03-2): each object is loaded from the buffer
     // whose SHA-256 was checked (the operator from its sealed memfd). The
-    // aggregate load_verification stays hashed_before_load (not promoted here).
+    // journal's aggregate is aggregate_load_byte_scope (run_completion.hpp).
     std::string op_library_byte_scope, head_artifact_byte_scope, backbone_engine_byte_scope;
     std::string op_library_mapped;  // the kernel's path of the operator mapping (its memfd)
 };
