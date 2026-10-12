@@ -57,15 +57,21 @@ this page reproduces below.
 |:--|:--|:--|
 | 1. Load files covered | **Met** for the three files that contract 4.1 names. In the shipping tree, `dlopen(`, `torch::jit::load(` and the `TRTEngine` constructors appear only at `detector_host.cpp` (head from a stream, engine from a pointer/size) and `operator_loader.cpp` (`/proc/self/fd/<M>`). Each runtime builds one `DetectorHost`. The pathname loaders under `src/perception/` are not reachable from shipping code. | `git grep` over `shipping/`, `src/`, `include/` |
 | 2. Loaded bytes = hashed bytes, no unverified alternative path | **Not met.** The outer bytes hold: head and engine come from one immutable hashed buffer, and the operator comes from a sealed, read-back memfd whose mapping is checked. **But the head's TorchScript can read bytes that were never hashed**, both while it loads and while it runs (gap G-1 below). | `repro_from_file.log`, `repro_forward_from_file.log`, `codex_review_r1.md`. Outer-byte controls: `verified_model_bytes`, `model_bundle_gate_b`, `operator_loader` ctests and the N03 auditor suite |
-| 3. Tests, negative controls, journal consistency | **Not met as a whole.** Everything that exists passes on the candidate, but there is no negative control for G-1, so the controls do not cover condition 2. | Candidate runs below |
+| 3. Tests, negative controls, journal consistency | **Not met as a whole.** The shipping ctest, the CLI suites and the mutants pass on the candidate (below), but there is no negative control for G-1, so the controls do not cover condition 2. | Candidate runs below |
 
 Candidate runs (local, gpu0 lease; CI runs neither GPU nor real-binary CLI tests):
 
 - shipping ctest 22/22;
 - the 12 CLI suites of the #584 chain: 656 passed, 0 skipped;
 - five CPU mutants and one end-to-end CLI mutant, all caught;
-- full pre-push 5671 passed. Its one failure (`test_dali_pipeline`) was a missing worktree
-  dataset link; it passes (12/12) once the link exists.
+- full pre-push on the candidate (`0032ab38`): 5671 passed, **1 failed**
+  (`test_dali_pipeline::test_connect_returns_true`). Its video,
+  `datasets/MOT17_videos/MOT17-05-SDP.mp4`, was not linked into the worktree.
+- full pre-push on this branch (`af256e8a`): 5679 passed, **2 failed**. Both were
+  `test_real_bundle_runs_from_two_roots`: the worktree binaries were still the candidate's,
+  which writes `loaded_buffer`, while this branch's test expects `hashed_before_load`.
+- After linking the video and rebuilding both entrypoints from this branch's source, the DALI
+  test and the model-bundle CLI suite ran again: 55 passed (12 + 43).
 
 ## Gap G-1: the head's TorchScript can read external, unverified bytes
 
@@ -73,12 +79,15 @@ Candidate runs (local, gpu0 lease; CI runs neither GPU nor real-binary CLI tests
 
 - **G-1a, at load.** LibTorch runs a scripted `__setstate__` (of a module or a scripted class)
   while it deserializes the archive. The C++ `torch::jit::load(std::istream&)` that Gate B uses
-  goes through the same import code. The read happens before any Gate B check, and the bytes
-  are neither in the hashed archive nor among the head's parameters or buffers.
+  goes through the same import code, and it accepts **FlatBuffer** TorchScript as well as ZIP.
+  The read happens during deserialization, before Gate B's post-deserialization head checks
+  (the hashes and the manifest/SM checks come earlier). The bytes are neither in the hashed
+  archive nor among the head's parameters or buffers.
 - **G-1b, at run time.** `forward`, or any method it calls, can read a file on every inference.
-  The op does appear in the inlined forward graph that Gate B already walks
-  (`detector_host.cpp`). That walk refuses `prim::PythonOp` and the Python scan op, but not
-  `aten::from_file`.
+  Gate B already walks the inlined forward graph (`detector_host.cpp`). That walk refuses
+  `prim::PythonOp` and the Python scan op, but not `aten::from_file`, and it visits nested
+  blocks only. A read passed to `torch.jit.fork` stays in the `prim::fork` node's graph-valued
+  `Subgraph` attribute after inlining, so the walk never sees it.
 
 **Reproduction of G-1a** (`repro_from_file.py`, Torch 2.11, entirely in memory):
 
@@ -92,6 +101,14 @@ The parameter and buffer lists are empty in both loads.
 **Reproduction of G-1b** (`repro_forward_from_file.py`): one loaded module's `forward` returns
 `[60.0]`, and after the sidecar is rewritten the same module returns `[7.0]`. The inlined
 forward graph contains `aten::from_file`.
+
+**Variants** (`repro_variants.py`; review round 2 reported both, and they are reproduced here):
+
+- **fork.** `forward` reads through `torch.jit.fork(torch.from_file, …)`. It returns `[60.0]`,
+  then `[7.0]` after the sidecar changes. A block walk of the inlined graph does not see
+  `aten::from_file`; it sits inside the `prim::fork` node's `Subgraph`.
+- **FlatBuffer.** The same `__setstate__` module saved as FlatBuffer (not a ZIP archive) loads
+  through `torch.jit.load` and restores `[60.0]`, then `[7.0]` after the sidecar changes.
 
 **Scope.**
 
@@ -108,25 +125,38 @@ forward graph contains `aten::from_file`.
 ## Minimal follow-up
 
 **F-1 (blocks MB-41): head closure in Gate B.** Gate B refuses (exit 2, `load_verification`
-failed) any head whose TorchScript can read bytes outside its archive, on both paths. Both
-repros become negative controls in the GPU ctest and the CLI suite. A refusal after the load
-still meets the MB-41 row ("the loaded bytes are the hashed bytes, or exit 2"): no inference
-runs.
+failed) any head whose TorchScript can read bytes outside its archive. All four repros become
+negative controls in the GPU ctest and the CLI suite: `__setstate__`, `forward`, `fork` and
+FlatBuffer.
 
-Each design has two parts, one per path. The choice is the owner's:
+A refusal after the load still meets the MB-41 row ("the loaded bytes are the hashed bytes, or
+exit 2"), as long as it exits 2 with `failed`/null before any inference. It cannot undo a read
+that already happened during deserialization. G-1a therefore has to be closed before the load.
 
-- **G-1a, before `torch::jit::load`.** Refuse any scripted `__setstate__` (module or class),
-  found in the archive's code entries. A post-load check cannot stop this read, because it has
-  already happened.
-- **G-1b, after the load**, over every method of every submodule and class:
-  - **(a)** a denylist of file-reading ops (`aten::from_file` and similar). Least work, but it
-    can never be shown complete;
-  - **(b)** an op allowlist bound to the lineage or the manifest. Stronger, but it is a new
-    contract field.
+What F-1 has to meet:
 
-**F-2 (after F-1): land the candidate.** Rebase `69476d4b` onto F-1 and recapture the
-coordinate. Rerun the shipping ctest, the CLI suites, the mutants and pre-push, then close MB-41
-in the status writer.
+- **Before `torch::jit::load`:**
+  - accept only the ZIP TorchScript format, and refuse FlatBuffer and anything unrecognized;
+  - refuse any scripted `__setstate__` (module or class) found in the archive's code entries.
+- **After the load, over every method of every submodule and class:**
+  - traverse nested blocks **and** graph-valued attributes (`Subgraph`) and called functions;
+  - refuse any executable path the walk cannot resolve.
+- **The policy that decides which ops are allowed:**
+  - **(a)** A denylist (`aten::from_file` and similar) is a **mitigation only**. It can never be
+    shown complete, so on its own it does not establish condition 2. MB-41 would stay OPEN.
+  - **(b)** An op allowlist establishes condition 2 only if the runtime owns it: built in and
+    reviewed, like the N03 pin or the TR-1b allowlist. A list carried in the caller-controlled
+    lineage or manifest could authorize `aten::from_file` itself at `checksum_matched`.
+
+The design choice is the owner's.
+
+**F-2 (after F-1): land the candidate.** Only after F-1 establishes condition 2 with option (b)
+or an equivalent runtime-owned policy, not merely when its tests pass:
+
+1. Rebase `69476d4b` onto F-1.
+2. Recapture the coordinate.
+3. Rerun the shipping ctest, the CLI suites, the mutants and pre-push.
+4. Close MB-41 in the status writer.
 
 **Unchanged by this check:**
 
@@ -151,6 +181,13 @@ All files are local-only, under `results/549_mb41/` (gitignored).
 | `review/production_head_scan.log` | `b019305789472a3ef2b80859a321ecc557e9b0dd609df95763661252d39d63a5` |
 | `review/repro_forward_from_file.py` | `dd4ba683b7caa5f553e7a9921f05c5bfc56213f62475ed57d8206f6cb93368a5` |
 | `review/repro_forward_from_file.log` | `5544c2dd963fb01410661d2de55a584d324acd2c8394328358194866f2826c38` |
+| `review/codex_prompt_r2.md` | `bc2538be9e43456d19e3c1ec422b17fad6c5d5d5a8c201e00367c156f9787ccd` |
+| `review/codex_review_r2b.md` | `3d006ded8bcc9256a4e1d3967fdcbb528e79dfff01c1c91c22cd634f3b0fec52` |
+| `review/repro_variants.py` | `fef95317c0956894eb5e6a66e1a465e0bff050c5e855bfbaf7e05a3f308b9945` |
+| `review/repro_variants.log` | `da56137e226baa06e6ca6bc0432c931c3deb6862adba76f3c34bb02694098700` |
+| `pre_push_candidate_0032ab38.log` | `ab24e2064edf2394478c39e1e75e85dd88089a33f12d8afde3405430ee7ad59e` |
+| `pre_push_docs_af256e8a.log` | `bd466aa5898bf56883e1e48c6ae6148d85fbb099b99f00614c5fd25347379360` |
+| `rerun_dali_and_model_bundle_cli_17777293.log` | `a5d1692034760847e45cac89be8a572d2912de49f913b7605bfaf2aba2f7a886` |
 | `ctest_shipping.log` (candidate) | `c957ee162bf3e38a5e03ecc538cc901528f517e507d9f33af1efad8b20463859` |
 | `cli_suites_69476d4b.log` (candidate) | `8b8bf2a6552f66ea3d1413152c45723f94783d3ac33cd3c284dbbb3182f6d718` |
 | `mutation_cpu.log` (candidate) | `ff72d29891f108db911c1deae183f7ed1c28fdbe6ee45ae6fe2670759875ee71` |
