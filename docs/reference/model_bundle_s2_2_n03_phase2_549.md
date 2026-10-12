@@ -1,6 +1,6 @@
 <!-- doc-status: active -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-10-11 -->
+<!-- doc-date: 2026-10-12 -->
 <!-- doc-module: cross -->
 
 # #549 S2-2 N03 Phase 2: sealed-memfd operator load (implementation candidate)
@@ -23,6 +23,13 @@ The design, threat model and Phase 1 research evidence are in Draft
 on its branch). Base: `main@74f2f5cb1a3db8a1f42da48d533e3322f243d138`. Evidence bindings:
 [model_bundle_s2_2_n03_phase2_549.evidence.json](model_bundle_s2_2_n03_phase2_549.evidence.json).
 The auditor rule is recorded in [§17.9](native_runtime_resolved_config.md).
+
+**Design revision (2026-10-12).** The owner accepted the [offline admission proposal
+(P-N03 rev 3d)](model_bundle_s2_2_n03_offline_proposal_549.md): the ELF check moves to
+admission and the runtime accepts only a compiled singleton N03 digest. The implementation is in
+progress on this branch; this document is updated with it. The proposal also records the partial
+r4 verification at `1d0ffa1e`; the earlier replay and coordinate bindings below are historical,
+not final evidence for the current source.
 
 ## Design
 
@@ -108,9 +115,12 @@ P-N03 rev 3c rule is applied verbatim apart from comments; see §17.9.
 
 ## Evidence
 
-Raw evidence is under `results/549_s2_2_n03_phase2/` (gitignored, local-only). The final runs are
-bound to clean head `c5510fdd` (code `0e09a85d`). The retained earlier runs at `e598d2f6`, `492bb3d3`
-and `85086d59` predate the later review fixes. Hashes are in the evidence JSON.
+Raw evidence is under `results/549_s2_2_n03_phase2/` (gitignored, local-only). The last completed
+historical runs are bound to clean head `c5510fdd` (code `0e09a85d`), before the r4 fix in
+`4e49864a`; they are not final evidence for current head `1d0ffa1e`. The r4 chain has completed
+CPU, GPU-native ctest and CLI checks, but its seven-sequence replay chain is partial (see the
+offline proposal). The retained earlier runs at `e598d2f6`, `492bb3d3` and `85086d59` also predate
+later review fixes. The evidence JSON retains the historical bindings.
 
 | Acceptance condition | Control | Result |
 |:--|:--|:--|
@@ -194,12 +204,13 @@ nothing.
 - **Provenance.** It is an audit-time observation on the auditor side. D-N03-5 adds the host-side
   binding of where the source is opened. The chunked auditor comparison is not a single-instant
   snapshot; byte identity does not depend on it.
-- **Runtime identity.** The coordinate is republished in this delivery. Only the implementation
-  axis changed: `bc378f68…` → `671bc0a9…`, 303 → 305 files (the two new loader files and eight
-  modified shipping files). It was a fresh `--run-probe` capture of `0e09a85d`; the outgoing
-  canonical bytes are archived append-only, and the attested check passes. Probe equality does
-  not establish equivalence. Two intermediate republications (`91a0037c`, `001ecec4`) described
-  earlier sources and were reverted before any push; they are not archived.
+- **Runtime identity.** Historical commit `456f948e` published a fresh `--run-probe` capture of
+  `0e09a85d`, moving only the implementation axis: `bc378f68…` → `671bc0a9…`, 303 → 305 files.
+  Its attested check passed for that source. After the r4 fix, `1d0ffa1e` reverted that publication
+  and its outgoing archive; the current source has no final coordinate publication. Earlier
+  republications `91a0037c` and `001ecec4` were also reverted before any push. Their local capture
+  records remain historical evidence. A new publication must follow the fresh-capture,
+  independent-review and append-only-archive runbook. Probe equality does not establish equivalence.
 - **Not covered:**
   - the installed package and launcher acceptance (no re-pin);
   - another GPU, driver 616.92 and V5 qualification;
