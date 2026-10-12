@@ -51,7 +51,9 @@
 //                     during the load is test_saccade_track_model_bundle_cli); a failure after Gate A that is
 //                     not the detector load leaves it null; and the writer
 //                     rules: never before Gate A passed, never twice, never a
-//                     change of the sealed identity.
+//                     change of the sealed identity, never loaded_buffer in
+//                     legacy mode or for a failed load (#549 MB-41); and the
+//                     aggregate of the per-object scopes.
 // --keep DIR leaves each case's files in DIR/<case>/ with the run id of its
 // last invocation in DIR/<case>/invocation.run_id, for the reader check in
 // tests/unit/test_native_track_parity.py.
@@ -585,6 +587,32 @@ void case_load_verification_rules(const fs::path& base) {
         check_load_verified(journal(c.p));
         CHECK(logic_error([&] { rc.record_load_verification(false); }));  // once
         check_load_verified(journal(c.p));
+    }
+    {
+        // #549 MB-41: legacy mode always records hashed_before_load, and a
+        // failed load has no byte scope; a refused claim writes nothing.
+        sh::RunCompletion rc(sh::new_run_id(), "fake_track", sh::RunOutputs{c.p.out, c.p.report, c.p.trace, kSeqs});
+        sh::run_preflight(c.gate_a, rc);
+        CHECK(logic_error([&] { rc.record_load_verification(true, sh::LoadByteScope::LoadedBuffer); }));
+        CHECK(logic_error([&] { rc.record_load_verification(false, sh::LoadByteScope::LoadedBuffer); }));
+        CHECK(is_null(journal(c.p), "load_verification"));
+        rc.record_load_verification(true, sh::LoadByteScope::HashedBeforeLoad);
+        check_load_verified(journal(c.p));
+    }
+    {
+        // The aggregate: loaded_buffer only in manifest mode with all three
+        // per-object scopes loaded_buffer.
+        using sh::LoadByteScope;
+        const std::string lb = "loaded_buffer", hb = "hashed_before_load", none;
+        CHECK(sh::aggregate_load_byte_scope(true, lb, lb, lb) == LoadByteScope::LoadedBuffer);
+        CHECK(sh::aggregate_load_byte_scope(false, lb, lb, lb) == LoadByteScope::HashedBeforeLoad);
+        CHECK(sh::aggregate_load_byte_scope(true, hb, lb, lb) == LoadByteScope::HashedBeforeLoad);
+        CHECK(sh::aggregate_load_byte_scope(true, lb, hb, lb) == LoadByteScope::HashedBeforeLoad);
+        CHECK(sh::aggregate_load_byte_scope(true, lb, lb, hb) == LoadByteScope::HashedBeforeLoad);
+        CHECK(sh::aggregate_load_byte_scope(true, none, lb, lb) == LoadByteScope::HashedBeforeLoad);
+        CHECK(sh::aggregate_load_byte_scope(true, lb, lb, "Loaded_buffer") == LoadByteScope::HashedBeforeLoad);
+        CHECK(std::string(sh::load_byte_scope_name(LoadByteScope::LoadedBuffer)) == lb);
+        CHECK(std::string(sh::load_byte_scope_name(LoadByteScope::HashedBeforeLoad)) == hb);
     }
     {
         // A refused Gate A (level null) has nothing for Gate B to verify.

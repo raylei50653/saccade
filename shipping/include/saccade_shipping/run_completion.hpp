@@ -30,10 +30,10 @@
 // `verified` when the detector's three files are loaded and checked,
 // `failed` when that load throws (DetectorLoadError); an uncatchable end
 // (the loader auditor's _exit(127), SIGKILL, abort) leaves it null with the
-// state running. Its byte_scope is always hashed_before_load: Gate B rehashes
-// each file before it loads it from its path, so the loaded bytes are not
-// proven to be the hashed ones (TOCTOU, #549 S2-2). Nothing here can write
-// loaded_buffer.
+// state running. Its byte_scope (#549 contract §4.1) is loaded_buffer only
+// in manifest mode and only when the operator, the head and the engine were
+// each loaded from the bytes whose SHA-256 Gate B checked
+// (aggregate_load_byte_scope); legacy mode always records hashed_before_load.
 //
 // Journal (format saccade.native_track_journal/v3; historical v1 / v2 are
 // unchanged):
@@ -49,7 +49,8 @@
 //                 "bindings": {[bundle_manifest,] config, lineage, attestation,
 //                              op_library, head, engine}},
 //    "load_verification": null | {"status": verified|failed,
-//                                 "byte_scope": "hashed_before_load"|null},
+//                                 "byte_scope": "hashed_before_load"|
+//                                               "loaded_buffer"|null},
 //    "sequences": [{"name", "state": pending|written, "txt", "txt_sha256",
 //                   "trace", "trace_sha256"}...]   (argv order),
 //    "report": null | {"path", "sha256"},
@@ -92,6 +93,15 @@ JsonValue unverified_identity(bool manifest_mode = false, IdentityLevel required
 
 class GateAIdentityWriter;  // preflight.cpp: Gate A's only access to identity
 
+// Gate B's aggregate byte scope (#549 contract §4.1, MB-41).
+enum class LoadByteScope { HashedBeforeLoad, LoadedBuffer };
+const char* load_byte_scope_name(LoadByteScope scope);  // "hashed_before_load" / "loaded_buffer"
+// The aggregate of the detector load's per-object scopes (HeadLoadReport):
+// LoadedBuffer only when the run is in manifest mode and the operator, the
+// head and the engine each report "loaded_buffer"; HashedBeforeLoad otherwise.
+LoadByteScope aggregate_load_byte_scope(bool manifest_mode, const std::string& op_library,
+                                        const std::string& head_artifact, const std::string& backbone_engine);
+
 struct RunOutputs {
     std::filesystem::path out;             // --out
     std::filesystem::path report;          // --report; empty = none
@@ -117,10 +127,11 @@ public:
     const JsonValue& load_verification() const { return load_verification_; }
 
     // Gate B (the detector load), once, after Gate A has passed: `verified`
-    // with byte_scope hashed_before_load, or `failed` (byte_scope null).
-    // Throws std::logic_error when Gate A has not passed or it was already
-    // recorded; a journal write failure leaves it null and throws.
-    void record_load_verification(bool verified);
+    // with `scope`, or `failed` (byte_scope null). Throws std::logic_error
+    // when Gate A has not passed, it was already recorded, or `scope` is
+    // LoadedBuffer for a failed load or a legacy-mode run; a journal write
+    // failure leaves it null and throws.
+    void record_load_verification(bool verified, LoadByteScope scope = LoadByteScope::HashedBeforeLoad);
 
     // Gate A's output check (preflight.hpp): in every directory this run
     // publishes into -- `<out>`, the --report file's directory (which must
@@ -159,6 +170,7 @@ private:
     void commit_sequence(std::size_t i, const std::string& text);
 
     std::string run_id_, entrypoint_;
+    bool manifest_mode_ = false;
     JsonValue identity_ = unverified_identity();
     bool identity_finalized_ = false;
     JsonValue load_verification_ = JsonValue::make_null();

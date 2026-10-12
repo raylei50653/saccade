@@ -81,7 +81,7 @@ struct HeadLoadReport {
     std::string gpu_sm;  // manifest mode: device 0's actual SM, checked before deserialization
     // Per-object byte scopes (D-N03-2): each object is loaded from the buffer
     // whose SHA-256 was checked (the operator from its sealed memfd). The
-    // aggregate load_verification stays hashed_before_load (not promoted here).
+    // journal's aggregate is aggregate_load_byte_scope (run_completion.hpp).
     std::string op_library_byte_scope, head_artifact_byte_scope, backbone_engine_byte_scope;
     std::string op_library_mapped;  // the kernel's path of the operator mapping (its memfd)
 };

@@ -31,9 +31,11 @@ directory. "No CUDA call" is observed as in
   mode under the same policy (MB-57);
 * real bundle (N01-N06 copied into a bundle directory, the operator in the
   runtime root; needs the models, MOT17-09 and a GPU): a complete run with
-  ``load_verification`` verified / hashed_before_load and the resolved
-  bindings across the two roots, whose MOT text is compared with a legacy-mode
-  run of the same binary (raw equality; not a qualified parity claim); and a
+  ``load_verification`` verified / loaded_buffer (#549 MB-41: all three
+  per-object scopes are loaded_buffer) and the resolved bindings across the
+  two roots, whose MOT text is compared with a legacy-mode run of the same
+  binary (raw equality; not a qualified parity claim), which still records
+  verified / hashed_before_load (contract 4.1: legacy mode); and a
   SIGKILL sent once the runtime root's operator library is mapped (the load
   has begun) and before any load record, which leaves the journal running with
   ``load_verification`` null (MB-58, uncatchable).
@@ -76,6 +78,8 @@ JOURNAL = "saccade_track.journal.json"
 PROBE = "cuda_init_probe.so"
 SEQS = ("SEQ-A", "SEQ-B")
 LOAD_VERIFIED = {"status": "verified", "byte_scope": "hashed_before_load"}
+# Manifest mode with every object loaded from its checked bytes (#549 MB-41).
+LOAD_VERIFIED_BUFFER = {"status": "verified", "byte_scope": "loaded_buffer"}
 LOAD_FAILED = {"status": "failed", "byte_scope": None}
 # Example manifest member index of each slot.
 BACKBONE, HEAD, OP, CFG, LINEAGE, ATT = range(6)
@@ -658,7 +662,7 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
     assert cuda
     j = _journal(tmp_path)
     assert j["state"] == "complete"
-    assert j["load_verification"] == LOAD_VERIFIED
+    assert j["load_verification"] == LOAD_VERIFIED_BUFFER
     identity = j["identity"]
     assert (identity["mode"], identity["level"], identity["required"]) == (
         "model_bundle",
@@ -669,7 +673,10 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
     assert identity["bundle_manifest_sha256"] == _sha(MANIFEST.read_bytes())
     rep = json.loads(report.read_text())
     assert rep["format"] == "saccade.native_track_report/v5"
-    assert (rep["identity"], rep["load_verification"]) == (identity, LOAD_VERIFIED)
+    assert (rep["identity"], rep["load_verification"]) == (
+        identity,
+        LOAD_VERIFIED_BUFFER,
+    )
     assert (rep["mode"], rep["model_bundle"], rep["model_root"], rep["config"]) == (
         "model_bundle",
         str(bundle),
@@ -692,6 +699,11 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
     assert load["op_library_sha256"] == manifest["members"][OP]["sha256"]
     assert load["head_artifact_sha256"] == manifest["members"][HEAD]["sha256"]
     assert load["backbone_engine_sha256"] == manifest["members"][BACKBONE]["sha256"]
+    assert load["artifact_byte_scopes"] == {
+        "op_library": "loaded_buffer",
+        "head_artifact": "loaded_buffer",
+        "backbone_engine": "loaded_buffer",
+    }
     # The same binary in legacy mode on the same sequence: raw MOT text equal
     # (a local diagnostic of the two modes, not a qualified parity claim). Its
     # model root is the prefix's share/saccade (the only place its operator
