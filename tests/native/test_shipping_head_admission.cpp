@@ -8,14 +8,15 @@
 //   * G-1 (fixtures/g1_heads.hpp): each head is first shown to read its
 //     sidecar under plain torch::jit::load (the value follows the file). Then
 //     the sidecar is removed, so any read would fail with another error, and:
-//     - setstate and flatbuffer are refused before the load;
+//     - setstate, flatbuffer and default are refused before the load;
 //     - forward and fork load without reading and are refused after it. For
 //       fork, aten::from_file is found only in the prim::fork Subgraph.
 //   * Single changes to an archive that is otherwise admitted:
 //     - before the load: an extra record, a custom class, a class the code
 //       does not define, another global (in data and in the debug ranges),
 //       an opcode the unpickler does not read, protocol 3, a truncated
-//       pickle, code outside a def or class;
+//       pickle, code outside a def or class, a class constant, a literal
+//       parameter default;
 //     - after the load: an operator off the list (aten::sin), control flow
 //       (prim::If), a from_file method that forward never calls, a call
 //       through a module interface (it does not resolve statically), and a
@@ -119,49 +120,10 @@ std::string module_error(const torch::jit::Module& m, const std::string& build =
 bool starts(const std::string& s, const std::string& p) { return s.rfind(p, 0) == 0; }
 bool has(const std::string& s, const std::string& p) { return s.find(p) != std::string::npos; }
 
-// A copy of a ZIP archive with records edited (name -> bytes; an empty name
-// list entry removes nothing). The writer adds version, byteorder and the
-// serialization id itself.
-using Records = std::vector<std::pair<std::string, std::string>>;
-std::string rewrite(const std::string& bytes, const std::function<void(Records&)>& edit) {
-    std::istringstream in(bytes);
-    caffe2::serialize::PyTorchStreamReader reader(&in);
-    Records records;
-    for (const std::string& name : reader.getAllRecords()) {
-        if (name == "version" || name == ".data/version" || name == "byteorder" || name == ".data/serialization_id") {
-            continue;
-        }
-        auto [data, size] = reader.getRecord(name);
-        records.emplace_back(name, std::string(static_cast<const char*>(data.get()), size));
-    }
-    edit(records);
-    std::string out;
-    {
-        caffe2::serialize::PyTorchStreamWriter writer([&](const void* p, size_t n) {
-            out.append(static_cast<const char*>(p), n);
-            return n;
-        });
-        writer.setMinVersion(reader.version());
-        for (const auto& [name, data] : records) writer.writeRecord(name, data.data(), data.size());
-        writer.writeEndOfFile();
-    }
-    return out;
-}
-
-std::string& record(Records& r, const std::string& name) {
-    for (auto& [n, d] : r) {
-        if (n == name) return d;
-    }
-    throw std::runtime_error("no record " + name);
-}
-
-void replace_once(std::string& s, const std::string& from, const std::string& to) {
-    const auto at = s.find(from);
-    if (at == std::string::npos || s.find(from, at + 1) != std::string::npos) {
-        throw std::runtime_error("expected one occurrence of the pickle bytes to change");
-    }
-    s.replace(at, from.size(), to);
-}
+using g1::Records;
+using g1::record;
+using g1::replace_once;
+using g1::rewrite;
 
 // A small benign head: forward adds a tensor attribute.
 std::string benign(const std::string& extra_source = "", const std::string& forward = "torch.add(x, self.w)") {
@@ -251,6 +213,11 @@ int main(int argc, char** argv) {
                 CHECK(pre == kPrefix + "class __torch__.G1setstate defines __setstate__, which the loader runs");
                 continue;
             }
+            if (kind == "default") {
+                CHECK(pre == kPrefix + "code record code/__torch__.py gives parameter y a default value, which the "
+                                       "loader evaluates");
+                continue;
+            }
             if (kind == "flatbuffer") {
                 CHECK(pre == kPrefix + "the head is not a ZIP TorchScript archive (FlatBuffer and other formats are "
                                        "refused)");
@@ -320,6 +287,13 @@ int main(int argc, char** argv) {
                      d.resize(d.size() / 2);
                  }),
                  "pickle data.pkl at byte");
+        pre_case("class_constant", rewrite(ok, [](Records& r) {
+                     replace_once(record(r, "code/__torch__.py"), "  __buffers__ = []\n",
+                                  "  __buffers__ = []\n  k : Final[int] = 3\n");
+                 }),
+                 "class __torch__.Benign assigns k a value, which the loader evaluates");
+        pre_case("literal_default", benign("def helper(self, y: int = 3) -> int:\n    return y\n"),
+                 "code record code/__torch__.py gives parameter y a default value, which the loader evaluates");
         pre_case("top_level", rewrite(ok, [](Records& r) { record(r, "code/__torch__.py") += "x = 1\n"; }),
                  "at top level");
         {

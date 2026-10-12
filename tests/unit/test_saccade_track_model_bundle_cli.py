@@ -39,8 +39,9 @@ directory. "No CUDA call" is observed as in
   ``load_verification`` null (MB-58, uncatchable);
 * G-1 heads (#549 MB-41, F-1): the real bundle with its head replaced by a
   head that reads an external sidecar file (a scripted ``__setstate__``,
-  ``forward``, ``torch.jit.fork``, or the ``__setstate__`` head saved as
-  FlatBuffer), each shown to read the file under plain ``torch.jit.load``.
+  ``forward``, ``torch.jit.fork``, the ``__setstate__`` head saved as
+  FlatBuffer, or a parameter default the importer evaluates), each shown to
+  read the file under plain ``torch.jit.load``.
   The lineage, attestation and manifest are rebound to it, so Gate A matches
   it at ``checksum_matched``. With the sidecar removed, Gate B's head
   admission refuses it: exit 2, ``load_verification`` failed, no sequence
@@ -732,12 +733,13 @@ def test_real_bundle_runs_from_two_roots(tmp_path: Path, binary: str) -> None:
 
 
 # ── G-1 heads (#549 MB-41, F-1) ──────────────────────────────────────────
-G1_KINDS = ("setstate", "forward", "fork", "flatbuffer")
+G1_KINDS = ("setstate", "forward", "fork", "flatbuffer", "default")
 G1_REFUSAL = {
     "setstate": "defines __setstate__, which the loader runs",
     "forward": "forward uses aten::from_file, not among the reviewed head operators",
     "fork": "forward uses aten::from_file, aten::wait, prim::fork, not among the reviewed head operators",
     "flatbuffer": "the head is not a ZIP TorchScript archive",
+    "default": "gives parameter y a default value, which the loader evaluates",
 }
 
 
@@ -785,6 +787,12 @@ def _g1_head(kind: str, sidecar: Path) -> bytes:
             )
             return x + torch.jit.wait(fut)
 
+    class G1Default(torch.nn.Module):
+        def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+            return x + y
+
+    if kind == "default":
+        return _with_parameter_default(G1Default, sidecar)
     cls = {"forward": G1Forward, "fork": G1Fork}.get(kind, G1SetState)
     m = torch.jit.script(cls(str(sidecar)))
     buf = io.BytesIO()
@@ -793,6 +801,37 @@ def _g1_head(kind: str, sidecar: Path) -> bytes:
     else:
         torch.jit.save(m, buf)
     return buf.getvalue()
+
+
+def _with_parameter_default(cls: Any, sidecar: Path) -> bytes:
+    """``forward``'s ``y`` given a default that the importer evaluates while
+    the archive loads. The code record is edited by hand, as an archive's
+    author could; a saved module would carry the evaluated value instead.
+    Its debug ranges no longer match the text, so they go too."""
+    import io
+    import zipfile
+
+    import torch
+
+    buf = io.BytesIO()
+    torch.jit.save(torch.jit.script(cls()), buf)
+    src = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
+    old = "y: Tensor) -> Tensor:"
+    new = f'y: Tensor=torch.from_file("{sidecar}", False, 1, dtype=6)) -> Tensor:'
+    edited = [
+        n for n in src.namelist() if n.endswith(".py") and old in src.read(n).decode()
+    ]
+    assert len(edited) == 1, edited
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as dst:
+        for n in src.namelist():
+            if n == edited[0] + ".debug_pkl":
+                continue
+            data = src.read(n)
+            if n == edited[0]:
+                data = data.decode().replace(old, new).encode()
+            dst.writestr(n, data)
+    return out.getvalue()
 
 
 def _g1_value(kind: str, head: bytes) -> float:
@@ -804,7 +843,7 @@ def _g1_value(kind: str, head: bytes) -> float:
     m = torch.jit.load(io.BytesIO(head), map_location="cpu")
     if kind in ("setstate", "flatbuffer"):
         return float(m.w.item())
-    return float(m(torch.zeros(1)).item())
+    return float(m(torch.zeros(1)).item())  # forward, fork, default
 
 
 def _rebind_head(

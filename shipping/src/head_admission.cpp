@@ -134,6 +134,44 @@ std::string record_text(caffe2::serialize::PyTorchStreamReader& reader, const st
 }
 
 // ── step 3: code ─────────────────────────────────────────────────────────
+// The importer also compiles and runs code while it imports: every parameter
+// default, every class constant (`name : Final[T] = expr`) and every NamedTuple
+// field default goes through ScriptTypeParser::evaluateDefaults, which runs the
+// expression (script_type_parser.cpp). N02 has none of these, so any is refused.
+void refuse_parameter_defaults(const torch::jit::TreeRef& tree, const std::string& name) {
+    if (tree->kind() == torch::jit::TK_PARAM && torch::jit::Param(tree).defaultValue().present()) {
+        refuse("code record " + name + " gives parameter " + torch::jit::Param(tree).ident().name() +
+               " a default value, which the loader evaluates");
+    }
+    for (const torch::jit::TreeRef& child : tree->trees()) refuse_parameter_defaults(child, name);
+}
+
+// A class body may hold only what the importer reads without evaluating it:
+// methods, attribute annotations (`name : T`), __parameters__ / __buffers__
+// (lists of names), and __annotations__["n"] = T (a type).
+void admit_class_body(const torch::jit::ClassDef& cls, const std::string& cls_name) {
+    using namespace torch::jit;
+    for (const Stmt& stmt : cls.body()) {
+        if (stmt.kind() == TK_DEF) {
+            if (Def(stmt).name().name() == "__setstate__") {
+                refuse("class " + cls_name + " defines __setstate__, which the loader runs");
+            }
+            continue;
+        }
+        if (stmt.kind() != TK_ASSIGN) refuse("class " + cls_name + " has a " + kindToString(stmt.kind()) + " statement");
+        const Assign assign(stmt);
+        if (assign.lhs().kind() == TK_SUBSCRIPT) {
+            const Subscript lhs(assign.lhs());
+            if (lhs.value().kind() == TK_VAR && Var(lhs.value()).name().name() == "__annotations__") continue;
+            refuse("class " + cls_name + " assigns to a subscript other than __annotations__");
+        }
+        if (assign.lhs().kind() != TK_VAR) refuse("class " + cls_name + " has an assignment the head loader does not read");
+        const std::string attr = Var(assign.lhs()).name().name();
+        if (!assign.rhs().present() || attr == "__parameters__" || attr == "__buffers__") continue;
+        refuse("class " + cls_name + " assigns " + attr + " a value, which the loader evaluates");
+    }
+}
+
 // The importer's file grammar (import_source.cpp parseSourceIfNeeded):
 // an optional `op_version_set = N` line, then imports, classes and functions.
 // Returns the qualified names of the classes the record defines.
@@ -160,17 +198,15 @@ std::vector<std::string> admit_code(const std::string& name, const std::string& 
             if (L.cur().kind == TK_CLASS_DEF) {
                 const ClassDef cls(p.parseClass());
                 const std::string cls_name = qualifier + "." + cls.name().name();
-                for (const Stmt& stmt : cls.body()) {
-                    if (stmt.kind() == TK_DEF && Def(stmt).name().name() == "__setstate__") {
-                        refuse("class " + cls_name + " defines __setstate__, which the loader runs");
-                    }
-                }
+                admit_class_body(cls, cls_name);
+                refuse_parameter_defaults(cls, name);
                 classes.push_back(cls_name);
             } else if (L.cur().kind == TK_DEF) {
                 const Def fn(p.parseFunction(/*is_method=*/false));
                 if (fn.name().name() == "__setstate__") {
                     refuse("code record " + name + " defines a function __setstate__");
                 }
+                refuse_parameter_defaults(fn, name);
             } else {
                 refuse("code record " + name + " has " + kindToString(L.cur().kind) + " at top level");
             }

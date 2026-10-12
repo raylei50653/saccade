@@ -16,17 +16,24 @@
 //      it is one the loader never reads: version, byteorder, serialization id,
 //      or traced inputs (restore_shapes is false). Any other record is refused.
 //   3. Every code record parses with the TorchScript parser, the way the
-//      importer reads it, and defines no __setstate__. While unpickling, the
-//      deserializer calls a class's __setstate__ (import.cpp ObjLoaderFunc).
+//      importer reads it. It may not hold code the import runs:
+//      - no __setstate__: while unpickling, the deserializer calls a class's
+//        __setstate__ (import.cpp ObjLoaderFunc);
+//      - no parameter default, class constant or other class-body value: the
+//        importer evaluates each one by compiling and running it
+//        (script_type_parser.cpp evaluateDefaults).
+//      A class body may hold only methods, attribute annotations,
+//      __parameters__ / __buffers__ and __annotations__ types.
 //   4. Every pickle the load reads uses only opcodes LibTorch's unpickler
 //      reads. Its GLOBALs may name only:
 //      - in data.pkl and constants.pkl: classes defined in the archive's code
 //        (never a registered custom class, whose C++ __setstate__ would run),
 //        _rebuild_tensor_v2, the Float/Long storages and OrderedDict;
 //      - in debug ranges: build_intlist.
-//   Deserialization also compiles the code. That folds only nodes whose inputs
-//   and outputs are all immutable values (ConstantPropagationImmutableTypes).
-//   aten::from_file returns a Tensor, so it never folds, and no head code runs.
+//   Deserialization also compiles the code. Apart from the values step 3
+//   refuses, compiling folds only nodes whose inputs and outputs are all
+//   immutable (ConstantPropagationImmutableTypes). aten::from_file returns a
+//   Tensor, so it never folds, and no head code runs.
 //
 // After the load (admit_head_module), before anything runs:
 //   5. Each function compiled from the archive is walked as compiled; no

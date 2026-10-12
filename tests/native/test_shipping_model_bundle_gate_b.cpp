@@ -21,11 +21,11 @@
 //                  loading anything (DetectorLoadError, sha256 mismatch);
 //   * model_root:  a plan with resolved bindings and a model root is refused;
 //   * not_the_plan: resolved bindings whose sha256 is not the plan's are refused;
-//   * g1 (#549 MB-41 F-1): the four G-1 heads (fixtures/g1_heads.hpp) bound
+//   * g1 (#549 MB-41 F-1): the G-1 heads (fixtures/g1_heads.hpp) bound
 //                  hash-consistently, so the rehash passes. The sidecar does
 //                  not exist, so a read would fail with another error.
-//                  setstate and flatbuffer are refused before the load and
-//                  before the operator is mapped. forward and fork are
+//                  setstate, flatbuffer and default are refused before the
+//                  load and before the operator is mapped. forward and fork are
 //                  refused after the load, before anything runs. The
 //                  cross_root load is the N02 positive control.
 // Skips (exit 0, "SKIP") when a model file is missing.
@@ -238,16 +238,18 @@ int main(int argc, char** argv) {
         {
             const Layout l = make_layout(repo, base / "g1_before_load");
             const sh::DetectorPlan plan = gate_a(l);
-            for (const std::string kind : {"setstate", "flatbuffer"}) {
+            for (const std::string kind : {"setstate", "flatbuffer", "default"}) {
                 const fs::path sidecar = base / ("g1_" + kind + ".bin");
                 const sh::DetectorPlan p =
                     substitute_head(plan, l.bundle / ("g1_" + kind + ".pt"), g1::archive(kind, sidecar.string()));
                 const std::string e = load_error(p, "", stream);
                 std::fprintf(stderr, "g1 %s: %s\n", kind.c_str(), e.c_str());
-                CHECK(e == kAdmission + (kind == "setstate"
-                                             ? "class __torch__.G1setstate defines __setstate__, which the loader runs"
-                                             : "the head is not a ZIP TorchScript archive (FlatBuffer and other "
-                                               "formats are refused)"));
+                const std::string want =
+                    kind == "setstate" ? "class __torch__.G1setstate defines __setstate__, which the loader runs"
+                    : kind == "default"
+                        ? "code record code/__torch__.py gives parameter y a default value, which the loader evaluates"
+                        : "the head is not a ZIP TorchScript archive (FlatBuffer and other formats are refused)";
+                CHECK(e == kAdmission + want);
                 CHECK(!mapped(plan.resolved->op_library.absolute_path));
                 CHECK(!mapped_memfd());
                 CHECK(!fs::exists(sidecar));
