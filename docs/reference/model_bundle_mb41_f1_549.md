@@ -367,3 +367,103 @@ canonical-plus-archive review boundary; it does not authorize merge into main.
 | `coordinate_comparison_e02b0304.json` | `a13325849efdf1f1586784bf4b7c43353e48e016708a544da0c14f06e5830862` |
 | `capture_final.sh` | `e2e025c620aea03be78ba91a73ad7de38bb81ad6f0dd72c2e45cae7c2a75a857` |
 | `compare_final_coordinate.py` | `f51f88775baaf5f28a8fdc4f757313aba2fb08e8336b553d6c503c923da15839` |
+
+
+## Integrated F-1 + F-2 verification (2026-10-12, unmerged)
+
+**Chosen path: F-1 + F-2.** The eight-file `69476d4b` candidate contributed seven necessary
+file changes as `ebef9c7c`; its `verified_model_bytes.hpp` comment was already corrected by F-1.
+The only transplant conflict was an aggregate comment, with no broader engineering needed.
+The necessary adaptation to two existing writer tests keeps removed-guard mutations visible as
+ordinary CHECK failures rather than a later double-record exception. No attack controls or
+new security framework were added.
+
+The code, contracts and test adaptation were settled in clean
+`433974513f22c383398d039a84a15a6686281aac` before capture and validation. All local results below
+bind that source/test content. The baseline records 140 tracked code/test SHA-256 values and
+actual tested binary hashes. `local_validation_final_43397451.json` records the final restored
+binaries used by the repeated normal tests; some hashes changed after rebuilding unchanged
+source, and no binary reproducibility is claimed. Later evidence documentation and coordinate publication change no
+controlled source/test bytes; their exact delivery heads and final checks are recorded in
+[#591](https://github.com/raylei50653/saccade/pull/591) and
+[#592](https://github.com/raylei50653/saccade/pull/592).
+
+| Current integration check on original WSL host | Result |
+|:--|:--|
+| Named shipping/N03 test targets and both entrypoints | Build succeeded; pinned operator unchanged |
+| Shipping/N03 ctest | 23/23 PASS, no skipped |
+| Focused CPU completion / manifest preflight | 329 / 6515 checks, zero failures |
+| CPU head admission | 82 checks, zero failures; N02 and the five existing G-1 controls |
+| GPU Gate B | 175 checks, zero failures; N02 loads, five hash-consistent G-1 heads refused |
+| Four existing CLI suites, both entrypoints | 82 passed, zero skipped; manifest aggregate `loaded_buffer`, legacy `hashed_before_load`; raw MOT equality is diagnostic |
+| Existing mutation controls | 23/23 expected assertions caught: 17 F-1, five F-2 CPU, one F-2 integration mutation tested across both entrypoints |
+| Mutation restoration | Four source files restored byte-for-byte, six affected targets rebuilt, all 25 named targets rebuilt, normal ctest 23/23 and CLI 82/82 passed again |
+
+A crash, timeout, build error, unavailable environment or skipped test cannot count as a caught
+mutation. The two writer guard mutations now fail the expected CHECK normally with exit 1.
+Complete pre-push and required remote CI are final-delivery-head checks; their logs, exact heads
+and results are maintained in the Draft PR descriptions and #550 after delivery. Historical
+`c6f6c83d` pre-push/CI results do not validate this integration. The stacked #592 workflow
+filter may leave it without remote checks; that is not remote CI success.
+
+**Fresh coordinate.** A new `--run-probe --require-complete` capture used clean `43397451` and
+scratch `results/549_f1/integration_20261012/runtime_identity.candidate.json`. Only the existing
+probe targets were built. Only implementation changes:
+`942e0e3ce5c5717b853828bfd0d2496070ff35cd124c6c45131ab4436d2d7363` ->
+`c0a319fa1207523a9d163dd9fc8741a4a0df0949792b6145297b024b66c91f9f`, 312 -> 314 files,
+two added and seven modified. The other four axes stay unchanged. The 525-frame probe was
+freshly executed; its equality to the outgoing probe is a fixture diagnostic, with
+`equivalence.state=unproven`. Source, observed host, all runtime inputs and the captured probe
+compare with zero failures and zero warnings. Both probe artifacts' physical sizes/hashes match.
+The shipping operator remains
+`aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4`.
+
+**Independent read-only reviews.** Source and contract re-review at `43397451` reports
+No findings / NO SOURCE BLOCKER; the reviewer independently rebuilt the exact snapshot's CPU
+completion and manifest tests (329/0 and 6515/0), and checked unchanged F-1 source against its
+independent 82/0 admission run. GPU, CLI and mutation execution belongs to the implementer.
+The independent coordinate candidate review reports No findings / NO BLOCKER within publication
+scope: all 344 source/recipe blobs match frozen Git objects, the five axes and original-host
+inputs match, fresh-capture provenance and both artifacts match, and outgoing canonical archive
+bytes are exact. Publication-diff and final-head re-reviews are recorded in the PRs after the
+canonical-plus-archive commit is fixed. These are read-only findings, not GitHub APPROVED reviews
+or merge authority.
+
+**Review and landing boundary.** #592 retains a two-file canonical-plus-archive review surface
+against a frozen implementation snapshot (`review/549-f1-f2-source`). This preserves the
+runbook's separate implementation/coordinate review boundary while the same reviewed publication
+content is committed to #591 for current-coordinate required CI and later atomic co-land.
+The old `ae1f28ea` / `c6f6c83d` heads and their local evidence remain historical. Neither PR is
+made Ready or merged by this task.
+
+After Owner authorization binds the final heads, actual merge and its required main CI permit
+MB-41 to close **within the bounded condition-2 declaration**, and manifest aggregate to become
+`loaded_buffer` only when all three objects report it. Until then main remains MB-41 OPEN /
+aggregate `hashed_before_load`. Legacy stays `hashed_before_load`. S2-2 stays governed by its
+canonical PARTIAL status; V5 **UNRESOLVED**, installed package **UNVERIFIED**,
+`distribution.status=local-only`, `equivalence=unproven`. No package re-pin, S2-3 or release is
+part of this closeout.
+
+All integration files below are local-only in `results/549_f1/integration_20261012/`:
+
+| File | SHA-256 |
+|:--|:--|
+| `baseline.json` | `28290fd9b2aa199d09827c0286381e996e334dae420d01e7c1bb64651a4e5afe` |
+| `validation_baseline_43397451.json` | `a698057c8500e9ace4711003618d625d79cc320cbd91c2a6dd40f9b1a97e5302` |
+| `baseline_validation_result_43397451.json` | `f831a35ac63af965c1653ed1cfdedcca1a501b8f4ee2b08e4949f6412b3eb595` |
+| `shipping_ctest_43397451.log` | `2fe228c6fa8221e1fb868086826c8568b36c7142deb46a6b36f7327d81a83b0b` |
+| `focused_ctest_43397451.log` | `1617df9b40bcf51dec6427979b96ad01b58adb1d74dc4b5d1d291b273f126bcf` |
+| `cli_suites_43397451.log` | `bff047a48921dc9016230f10b4a37b8df7ef58d9fa15e55978e4da882e5291b5` |
+| `mutants_43397451.json` | `41d8e091e069e36f8fc34a66978423dd817ceecfd1d54233ab8fe194b1e9980c` |
+| `mutation_controls.py` | `485c05771884a9e11ecd752589a5913cb504381fb26874731a3b5997820c7383` |
+| `mutation_definitions.py` | `b36d176160c7d46a80548862c816777bf24e9abbcb36cba45adc80e7ee46bb01` |
+| `shipping_ctest_post_mutation_43397451.log` | `1e35ba6fd2001639d72639daebcc1bee9654ed49400fbd7997299a664419ea36` |
+| `focused_ctest_post_mutation_43397451.log` | `0bf1b33ad115f9cf97af4a27d221fda0c0cff4f55e959d7f133c45202dcaacb2` |
+| `cli_suites_post_mutation_43397451.log` | `7b4718f2efcff5926b45ae9834df6c54505fba9b0a54a8844b3ab6bdc41839f2` |
+| `runtime_identity.candidate.json` | `6df3bcfb5e1a23be754f2fc5f09bca4ef84f05cfef341ef99c0143e8b8dd4fe3` |
+| `coordinate_capture_43397451.log` | `8f24b04474e7d13ccaf7cc5321cfdcc4a858c05991c54d592c952345d105a2de` |
+| `build_runtime_identity_43397451.log` | `ca720c481f9d285614ef246670b493012419908964f530e019435dbe63a499ab` |
+| `coordinate_comparison_43397451.json` | `3376b5dec4346d658381389aba71bd31b9ae4d6a391d5c97b22418177b1c1237` |
+| `source_review_43397451.md` | `0f0bfda0f629ee17852b9f396bca402c6c122e92d83754ae2a7eb5f406d10cc9` |
+| `coordinate_candidate_review_43397451.json` | `2fad81f0d05f4ea3182ae5f1a3868869249930a2ad387d57b82d58944cca87f6` |
+| `local_validation_final_43397451.json` | `98fd72442106d45bde76dfade437d745297ba3730bd1a1138fe8f04d03992169` |
