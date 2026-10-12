@@ -283,7 +283,7 @@ tests, mutation controls and completed independent source re-review. Fresh coord
 is recorded after capture. The final coordinate-branch pre-push log hash and delivery head are
 recorded in the Draft PR and #549 checkpoint after that run, so this page does not imply that
 the implementation-only branch has a current publication or a remote CI pass.
-The existing coordinate candidate was captured at `2621b016`, before either review fix. The
+The earlier coordinate candidate was captured at `2621b016`, before either review fix. The
 complete pre-push at that same head had 5687 passed and 4 coordinate-related failures; it is
 historical evidence, not final acceptance. Publication follows the
 [runtime coordinate runbook §3.2](runbooks/runtime_identity_republication.md#32-review-boundary-與-landing-的關係)
@@ -299,3 +299,32 @@ with a separate stacked coordinate PR containing canonical and archive files onl
 | `mutants_c9f8b053.py` | `000c58cd8efa815f9cb0e00032835bebaa49cf3047ddadbe422c7cbba6570918` |
 | `review/codex_static_a90ef994.md` | `05e1a313acefe0dbeb032fc46316a7dcd56800b80e6bd63b6bb889e6c2792bcc` |
 | `review/codex_final_c9f8b053.md` | `995041707207ca1a0283598f5cc21958a62aad34564db06a5c4c6e831726ffb3` |
+
+## Fresh runtime coordinate candidate
+
+Captured from clean tree `e02b030410905158b2192d5b1f7e09beb43f2854` with `--run-probe` and
+`--require-complete`. Only the probe targets `saccade_tracking_ext` and
+`saccade_scan_plugin` were built in `build/runtime_identity`. The pinned shipping
+operator in `build/libsaccade_scan_torchop.so` remained
+`aa84cccd5c5094b33d63217eeb377452ae19c69cd1382ec7de8ba96d0d8d31c4`.
+
+Only implementation moves: `942e0e3ce5c5717b853828bfd0d2496070ff35cd124c6c45131ab4436d2d7363`
+to `23c072cfd9d76bff05655aee58281f75cad7b3609a2a9e8c85f662f997fc910c`, 312 to 314 files. The two additions are
+`head_admission.hpp` and `head_admission.cpp`; the five modified implementation members
+are `shipping/CMakeLists.txt`, `detector_host.hpp`, `run_completion.hpp`,
+`verified_model_bytes.hpp` and `detector_host.cpp`. The other four axes are unchanged.
+Source, observed host, current runtime inputs and captured fresh probe compare with
+zero failures and zero warnings; probe artifact sizes and SHA-256 values also match.
+The fresh probe digest equals the outgoing digest, which carries no equivalence claim:
+`equivalence.state=unproven`. The head/tree witness is navigation metadata. Later evidence
+documentation commits do not change an axis. Promotion retains the separate stacked
+canonical-plus-archive review boundary; it does not authorize merge into main.
+
+| File | SHA-256 |
+|:--|:--|
+| `runtime_identity.candidate.json` | `dc8ab54e1e53cdb2d056b7f4e00c2ba0067d1aad923182125127e721e7d01fd2` |
+| `coordinate_capture_e02b0304.log` | `3a42a8d5023ff6ad8a3836e6b6863ba02fcc4b1ad0d51733a78fcd6bea62f728` |
+| `build_runtime_identity_e02b0304.log` | `2adb13b22a50a85f24cb21908e9a87803ed10e860b284c3c82b2d07b042ef655` |
+| `coordinate_comparison_e02b0304.json` | `a13325849efdf1f1586784bf4b7c43353e48e016708a544da0c14f06e5830862` |
+| `capture_final.sh` | `e2e025c620aea03be78ba91a73ad7de38bb81ad6f0dd72c2e45cae7c2a75a857` |
+| `compare_final_coordinate.py` | `f51f88775baaf5f28a8fdc4f757313aba2fb08e8336b553d6c503c923da15839` |
