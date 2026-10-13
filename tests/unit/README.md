@@ -11,7 +11,9 @@
 | `test_eval_script_paths.py` | eval | contract | active | Pin the scripts/eval compat wrappers to their relocated implementations. |
 | `test_headline_decision_contract.py` | eval,tracking,cross-module | contract | active | Unit tests for scripts/tools/check_headline_decision_contract.py. |
 | `test_headline_head_export_binding.py` | system | contract | active | The headline head exporter binds to the preset and the committed lineage inventory. |
+| `test_headline_head_export_publication.py` | system | contract | active | The headline TorchScript exporter publishes only a checked pair and never replaces the frozen stem … |
 | `test_headline_head_torchscript_export.py` | system | contract | active | The LibTorch head exporter produces a Python-free, input-independent, identifiable artifact. |
+| `test_license_audit.py` | system | contract | active | The licence audit of the bundled third-party set (#465 PR-C4, #547). |
 | `test_math_model_doc_consistency.py` | eval,tracking | contract | active | Pin the LaTeX math-model document (``docs/latex``) to the code it describes. |
 | `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
 | `test_native_detector_oracle_pins.py` | system | contract | active | Oracle pins for the native detector (#465 Phase B PR-8, U3b-2). |
@@ -24,6 +26,7 @@
 | `test_native_ingest_oracle_pins.py` | system | contract | active | Oracle pins for the native ingest (#465 Phase B PR-7, U3b-1). |
 | `test_native_track_oracle_pins.py` | system | contract | active | Oracle pins for the native end-to-end serial runtime (#465 Phase B PR-9). |
 | `test_native_track_parity.py` | system | contract | active | ``native_track_parity.py`` comparators on synthetic inputs (#465 PR-9, PR-10). |
+| `test_package_signature.py` | system | contract | active | The minisign signature of the package digest (#465 PR-C4). |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
 | `test_post_detector_host_oracle_pins.py` | system | contract | active | Oracle pins for the native post-detector replay host (#465 Phase B PR-5, U3a). |
 | `test_post_detector_replay_dump_verify.py` | system | contract | active | ``dump_post_detector_replay.py --verify`` on synthetic dumps (#465 PR-6). |
@@ -31,6 +34,9 @@
 | `test_resctl.py` | system | contract | active | Fail-closed contracts for tools/resctl.py, the cross-worktree resource lease CLI. |
 | `test_resolved_bridge_policy_config.py` | system | contract | active | Pin the resolved-config fingerprints the H0 declaration freezes. |
 | `test_resolved_shipping_config.py` | system | contract | active | The headline resolved shipping config equals what the Python oracle uses. |
+| `test_saccade_track_completion_cli.py` | system | contract | active | ``saccade_track`` run completion at the real entrypoint, without a GPU (#536). |
+| `test_saccade_track_model_bundle_cli.py` | system | contract | active | ``saccade_track --model-bundle`` at the built entrypoints (#549 S2-1). |
+| `test_saccade_track_preflight_cli.py` | system | contract | active | ``saccade_track`` Gate A at the built entrypoint: refusals make no CUDA call (#536). |
 | `test_saccade_track_schedule_cli.py` | system | contract | active | ``saccade_track`` refuses a torn schedule config at the CLI (#465 PR-10 review). |
 | `test_safe_reject_audit.py` | eval | behavior | active | Tests for constrained FP pruning / safe-reject metrics. |
 | `test_shipping_bundle_checks.py` | system | contract | active | The bundled shipping tree's checks, launcher, auditor and install (#465 PR-C1). |
@@ -39,6 +45,8 @@
 | `test_shipping_link_surface.py` | system | contract | active | The shipping link surface: tracking without perception, no OpenCV (#465 PR-11). |
 | `test_shipping_measurement_surface.py` | system | contract | active | The shipping entrypoint carries no measurement surface (#465 Phase C PR-C2). |
 | `test_shipping_mot_output_oracle_pins.py` | system | contract | active | Oracle pins for the native MOT output path (#465 Phase B PR-6, U4). |
+| `test_shipping_n03_auditor.py` | system | contract | active | N03 sealed-memfd load and the loader auditor on a real loader (#549 S2-2). |
+| `test_shipping_n03_operator_pin.py` | unit | contract | active | The runtime's N03 pin record (#549 S2-2, P-N03 rev 3d). |
 | `test_shipping_package.py` | system | contract | active | The shipping package: MANIFEST format, builder, installer (#465 PR-C3). |
 | `test_signal_tables.py` | eval | contract | active | Unit tests for signal_tables schema helpers. |
 | `test_slim_release_manifest.py` | system | contract | active | Integrity checks for the slim release manifest. |

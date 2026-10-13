@@ -9,6 +9,7 @@
 - 事件 / API / storage schema：看 [api_spec.md](../modules/storage/api_spec.md)
 - 能力／REQ／Profile、具名 owner、inherited scope／proposed delta 與代表鏈狀態：看 [capability_requirements_535.md](capability_requirements_535.md)（#535；批准與待決狀態只在該檔維護）
 - S-SHIP／S-EXPORT 的展開圖（現況與目標）、completion／identity／export 接口契約卡與 ID 索引：看 [ship_export_contracts_536.md](ship_export_contracts_536.md)（#536；設計狀態只在該檔維護）
+- 失敗／fallback／降級的現況基線（分 profile 的 capability／failure 矩陣、降級轉換表現況與已採納目標、owner 裁決與特徵測試）：看 [failure_degradation_537.md](failure_degradation_537.md)（#537 C0；只固定現況，不修復）
 - 安裝後 package 的 Completion／Gate A、entrypoint re-pin 與驗證證據：看 [package re-pin](../reference/native_runtime_package_repin_536.md)（#536；不擴大支持範圍）
 - 模型 bundle 與 native runtime 的分離（現況／目標架構圖、信任根、責任分工、A／B／C 比較）：看 [ADR 028](../decisions/028-model-bundle-runtime-separation.md)；bundle manifest 契約、fail-closed 規則、G01–G07 處置與控制矩陣：看 [model_bundle_contract_549.md](model_bundle_contract_549.md)（#549 S1；設計狀態只在該檔維護）
 
@@ -209,7 +210,7 @@ not the headline architecture.
 - `FAST_PATH (>92%)`：跳過 RAG 分析（停止 HuggingFaceEmbedding GPU 呼叫）
 - `EMERGENCY (>96%)`：丟棄非異常 frame，不寫 ChromaDB
 
-分開以 `main.py --mode perception`／`--mode orchestrator` 啟動時，兩者是沒有共同父進程的兩個 process，所以用具名 shared memory 而非 `multiprocessing.Value`；`--mode full` 則在同一 process 的同一 event loop 跑兩者，level 仍經具名 segment 傳遞（見[系統總圖](system_overview_536.md#52-本次追查的發現) B0-F01、B0-F07）。Writer 啟動時會 unlink 前次崩潰留下的 stale segment 再重建；但 reader 只在尚未附掛時重新附掛，若它先附掛到舊 segment（`--mode full` 先建構 orchestrator 再執行 `dispatcher.start()`，或分開啟動時 orchestrator 先起），依 source 判讀會一直讀舊 segment 的 level，尚未重現（B0-F07）。Reader 找不到 segment 時 fallback 為 NORMAL，不阻塞。
+分開以 `main.py --mode perception`／`--mode orchestrator` 啟動時，兩者是沒有共同父進程的兩個 process，所以用具名 shared memory 而非 `multiprocessing.Value`；`--mode full` 則在同一 process 的同一 event loop 跑兩者，level 仍經具名 segment 傳遞（見[系統總圖](system_overview_536.md#52-本次追查的發現) B0-F01、B0-F07）。Writer 啟動時會 unlink 前次崩潰留下的 stale segment 再重建；但 reader 只在尚未附掛時重新附掛，若它先附掛到舊 segment（`--mode full` 先建構 orchestrator 再執行 `dispatcher.start()`，或分開啟動時 orchestrator 先起），會一直讀舊 segment 的 level；這已由 #537 C0 的無 GPU 測試重現（B0-F07，見 [C0-08](failure_degradation_537.md#2-capabilityfailure-矩陣observed-as-is)）。Reader 找不到 segment 時 fallback 為 NORMAL，不阻塞（C0-06）。三階 hysteresis 的實際轉換和文件不一致，見 [§3 轉換表](failure_degradation_537.md#3-降級轉換表現況與已採納目標)。
 
 **Dispatcher GPU Tracker LRU**
 

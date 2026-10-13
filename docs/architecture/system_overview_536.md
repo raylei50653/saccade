@@ -314,12 +314,12 @@ Evidence 欄只放 pointer，不代表在本 baseline 重新驗證過。驗證�
 | ID | 發現 | 分類 | 處置 |
 |:--|:--|:--|:--|
 | B0-F01 | README §4.5 原本寫 dispatcher 與 orchestrator 是「兩進程獨立啟動」；`main.py --mode full` 實際上在同一 process 的同一 event loop 跑兩者，只有分開以 `--mode perception`／`--mode orchestrator` 啟動時才跨 process | contract-gap（文件漂移） | 本稿同時修正 README §4.5 的敘述，不改程式 |
-| B0-F02 | `AsyncDispatcher` 直接 `from saccade_tracking_ext import GPUByteTracker`，不經 facade；擴充缺失時名稱改綁 `typing.Any`。依 source 判讀，建立 tracker 時會丟 `TypeError`。library 的 stub `update()` 本身回空 list，但 facade 在呼叫它前先取 CUDA stream，無 CUDA 時會先丟例外（§3）。兩條路徑的能力缺失行為需分別驗證 | unverified（待重現） | 交 REQ-535-02-01／02-04 的裁決與 #537；作為具名失敗語義案例，本稿不選行為 |
+| B0-F02 | `AsyncDispatcher` 直接 `from saccade_tracking_ext import GPUByteTracker`，不經 facade；擴充缺失時名稱改綁 `typing.Any`。依 source 判讀，建立 tracker 時會丟 `TypeError`。library 的 stub `update()` 本身回空 list，但 facade 在呼叫它前先取 CUDA stream，無 CUDA 時會先丟例外（§3）。兩條路徑的能力缺失行為需分別驗證 | `get_tracker()` 的 `TypeError` 與 facade 兩條路徑已由 [#537 C0](failure_degradation_537.md#2-capabilityfailure-矩陣observed-as-is) 重現（C0-01～C0-03，`main@8350f6f7`）；consumer 層的觸發時間仍是 source 判讀 | 交 REQ-535-02-01／02-04 的裁決與 #537；作為具名失敗語義案例，本稿不選行為 |
 | B0-F03 | tracker facade（SN-PL2）與 headline detector（SN-EV4）在 module 層 import `saccade.perception.eval.cuda_capture`；public-library export 因此依賴 eval 子套件 | unverified（影響未評估） | 作為依賴方向與 public surface 的設計輸入：tracker／reorder 交 #441，eval／config／detector 交 #535／#536 與原 owner；跨模組契約交 #536 B1。import 依賴本身不構成搬模組或重寫 facade 的授權 |
 | B0-F04 | README §2 的 L1～L6 沒有涵蓋 `shipping/` 樹與 build／export 期交付 | contract-gap（閱讀面） | 本稿在 README §2 加上指向總圖的說明 |
 | B0-F05 | repo 內沒有 retrieval API 的 ASGI 啟動點（只有 `app` 物件與 `uvicorn` 依賴）；[yolo-api.service](../../infra/systemd/yolo-api.service) 的 ExecStart 指向 repo 外的 `YOLO_LLM/scripts/run.sh api` | unverified（部署 `unknown`） | 沿用 ledger E06 路由至 #535；沒有 in-tree 啟動點不證明服務不存在，也不授權退役 |
 | B0-F06 | ledger E05／E06／E07 已記的 gap（SE-21、8stream `--workbench` 用到未定義的 `WorkbenchPool`、SHM writer 只在 AsyncDispatcher）在本 baseline 仍存在 | already-covered（ledger） | 沿用 ledger 路由 |
-| B0-F07 | `VRAMLevelReader` 只在 `_shm is None` 時重新附掛。`--mode full` 先建構 orchestrator（reader）才執行 dispatcher 的 `start()`（writer）；若前次崩潰留下 segment，reader 會先附掛舊 segment，writer 之後 unlink 並重建，依 source 判讀 reader 會一直讀已 unlink 的舊 segment。分開啟動且 orchestrator 先啟動時同理 | unverified（待重現；屬 ledger E07 的 stale／writer restart 缺口） | 交 #537、#538，建議優先驗證此生命週期案例；本次未執行或授權 runtime 修復，不選 freshness／restart 判準 |
+| B0-F07 | `VRAMLevelReader` 只在 `_shm is None` 時重新附掛。`--mode full` 先建構 orchestrator（reader）才執行 dispatcher 的 `start()`（writer）；若前次崩潰留下 segment，reader 會先附掛舊 segment，writer 之後 unlink 並重建，依 source 判讀 reader 會一直讀已 unlink 的舊 segment。分開啟動且 orchestrator 先啟動時同理 | SHM 行為與 `--mode full` 建構順序已由 [#537 C0](failure_degradation_537.md#2-capabilityfailure-矩陣observed-as-is) 重現（C0-08，`main@8350f6f7`）；對 orchestrator 事件的影響仍是 source 判讀。屬 ledger E07 的 stale／writer restart 缺口 | 交 #537、#538，建議優先驗證此生命週期案例；本次未執行或授權 runtime 修復，不選 freshness／restart 判準 |
 
 ### 5.3 差異方向（proposed，不是批准）
 
