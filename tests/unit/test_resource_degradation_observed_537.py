@@ -134,14 +134,17 @@ def test_c3_reader_without_segment_reads_normal(shm_name: str) -> None:
 
 def test_c3_reader_attaches_to_writer_created_later(shm_name: str) -> None:
     reader = VRAMLevelReader()
-    writer = VRAMLevelWriter()
     try:
+        # Same reader: missing segment reads NORMAL, then attaches once it exists.
         assert reader.read() is L.NORMAL
-        writer.write(L.FAST_PATH)
-        assert reader.read() is L.FAST_PATH
+        writer = VRAMLevelWriter()
+        try:
+            writer.write(L.FAST_PATH)
+            assert reader.read() is L.FAST_PATH
+        finally:
+            writer.close()
     finally:
         reader.close()
-        writer.close()
 
 
 def test_c3_reader_rejects_out_of_range_byte(shm_name: str) -> None:
@@ -165,23 +168,23 @@ def test_b0_f07_reader_attached_before_writer_restart_keeps_stale_level(
     crashed._shm.close()
 
     stale_reader = VRAMLevelReader()  # orchestrator built first
-    writer = VRAMLevelWriter()  # dispatcher.start(): unlink stale, recreate
     try:
-        assert stale_reader.read() is L.EMERGENCY
-        for level in (L.NORMAL, L.REDUCED):
-            writer.write(level)
-            assert stale_reader.read() is L.EMERGENCY
-
-        fresh_reader = VRAMLevelReader()
+        writer = VRAMLevelWriter()  # dispatcher.start(): unlink stale, recreate
         try:
-            assert fresh_reader.read() is L.REDUCED
-        finally:
-            fresh_reader.close()
-    finally:
-        writer.close()
+            assert stale_reader.read() is L.EMERGENCY
+            for level in (L.NORMAL, L.REDUCED):
+                writer.write(level)
+                assert stale_reader.read() is L.EMERGENCY
 
-    # After the writer stops, the old reader still reports its last value.
-    try:
+            fresh_reader = VRAMLevelReader()
+            try:
+                assert fresh_reader.read() is L.REDUCED
+            finally:
+                fresh_reader.close()
+        finally:
+            writer.close()
+
+        # After the writer stops, the old reader still reports its last value.
         assert stale_reader.read() is L.EMERGENCY
     finally:
         stale_reader.close()
