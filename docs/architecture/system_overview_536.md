@@ -31,7 +31,7 @@
 
 ## 2. 系統總圖
 
-**讀法**：五個 profile 是**不同的入口與 process**，不是同一條 pipeline 的五段。它們實際共用的只有三種東西：同一份 native source 編成的 static library（每個 binary 各自連結一份）、同一批 Python 模組（public-library 的五個 export 中，tracker facade 也被 eval 呼叫，`run_eval`／`EvalConfig`／`MambaGatedDetector` 直接解析到 eval 與 detector 的實作），以及 build／export 期產生的檔案。任何 profile 的證據都不會沿共用節點自動傳到其他 profile。
+**讀法**：五個 profile 表示**不同使用入口與執行情境**，不代表彼此一定有 process 隔離；**process／thread 邊界依實際 entrypoint 與啟動模式判定**。public-library 在 caller 的 Python process 內載入，eval 在自己的 process 內直接使用 tracker facade；online 的 `--mode full` 讓 perception 與 orchestrator 共用 process 與 event loop。共用關係包括同一份 native source 編成的 static library（每個 binary 各自連結一份）、同一批 Python 模組（public-library 的 `run_eval`／`EvalConfig`／`MambaGatedDetector` 直接解析到 eval 與 detector 的實作），以及 build／export 期產生的檔案。任何 profile 的證據都不會沿共用節點自動傳到其他 profile。
 
 圖例不只靠顏色：
 
@@ -45,7 +45,7 @@
 | 標籤 `‹main›`／`‹branch›`／`‹R/D›` | 元件在該 profile **已觀察呼叫路徑**中的角色：主路徑／同 profile 的旁支或可選分支（由 flag、可選依賴或另一個 class 選路）／research・build-debug 工具。這是 source 現況的角色分類，**不是支持義務**，也不是生命週期 |
 | 子圖標題的「支持」 | 只引用 #535 ledger 對該 profile REQ 的裁決；②③④ 的 REQ 全部 `undecided`，⑤ 只有 S-EXPORT 的 headline TorchScript exporter 是 `required` |
 | 標籤 `GPU` | 該元件的主要資料面在 GPU；沒標的是 CPU 端 |
-| 子圖標題 | ①～④ 與 `P1`～`P3` 標 process／thread 邊界；⑤ 是各工具各自的 process；`CORE` 是 build 期 static library 的集合，`EXT` 內都是外部依賴，兩者都不是 process 邊界 |
+| 子圖標題 | ①～⑤ 按使用情境分組，標題補充各入口的 process／thread 配置；② 可在③ 的 process 內使用，`P1`／`P2` 在 `--mode full` 下共用 process／event loop，`P3` 的 host 未知；⑤ 是各工具各自的 process。`CORE` 是 build 期 static library 的集合，`EXT` 內都是外部依賴；子圖框本身不表示獨立 process |
 | 實線 `-->` | 執行期呼叫或資料流（`observed as-is`，source-inspected）；⑤ 的工具自己執行時的呼叫也算 |
 | 粗線 `==>` | build／install 期的連結或產物交付，**不是**執行期呼叫 |
 | 虛線 `-.->` 且標 `✗` | source 上找不到閉合的鏈（gap），不代表執行時一定失敗 |
@@ -74,10 +74,12 @@ flowchart LR
     EV5[("SN-EV5 MOT txt／metrics／run manifest")]
   end
 
+  D2[("SN-D2 本地影片<br/>main.py：DUMMY_VIDEO_PATH")]
+
   subgraph ONL["④ online-service｜支持 undecided（#535）｜--mode full 時 P1＋P2 在同一 process 的同一 event loop"]
     subgraph P1["P1 perception：asyncio loop＋worker threads"]
       ON1(["SN-ON1 main.py --mode perception／full<br/>scripts/ops/run_8stream_perception.py"])
-      ON2["SN-ON2 ‹main› MediaMTXClient／DALI ingest"]
+      ON2["SN-ON2 ‹main› ingest<br/>MediaMTXClient（RTSP）／DALI（檔案）"]
       ON3["SN-ON3 ‹main› AsyncDispatcher<br/>batch detect → per-stream tracker・GPU<br/>WorkbenchPool 分支：無可達 in-tree 入口"]
       ON4["SN-ON4 ‹branch› EmbeddingDispatcher<br/>ReID embedding → Redis stream"]
     end
@@ -140,7 +142,8 @@ flowchart LR
   EV2 -->|"SE-16 MOT→metrics"| EV5
 
   %% ④ online-service
-  X4 -->|"SE-17 RTSP"| ON2
+  X4 -->|"SE-17 RTSP→MediaMTXClient"| ON2
+  D2 -->|"SE-49 本地檔案→DALI"| ON2
   ON1 -->|"SE-18 await start"| ON3
   ON2 -->|"SE-19 asyncio.Queue(100)"| ON3
   ON3 -->|"SE-20 直接 import native"| K3
@@ -191,8 +194,10 @@ flowchart LR
 | ① shipping／[CAP-01](capability_requirements_535.md#cap-535-01) | [launcher](../../shipping/launcher/saccade_track.sh) → [loader_audit.c](../../shipping/src/loader_audit.c) → [saccade_track.cpp](../../shipping/tools/saccade_track.cpp) | JPEG sequence → MOT txt＋report＋journal；參數只來自 [resolved config](../reference/native_runtime_resolved_config.md)，模型只來自 caller 指定或 bundle manifest | 單一 native process；Gate A 不碰 CUDA，之後才建 stream／nvJPEG／TRT；不載入 Python | [REQ-535-01-01](capability_requirements_535.md#req-535-01-01)、[01-02](capability_requirements_535.md#req-535-01-02) `required`（S-SHIP 範圍） |
 | ② public-library／[CAP-02](capability_requirements_535.md#cap-535-02) | [`saccade/__init__.py`](../../src/saccade/__init__.py) `_LAZY` | 五個 export 各自 lazy import：tracker facade、reorder、`run_eval`、`EvalConfig`、`MambaGatedDetector` | caller 的 process；native 擴充（先找已安裝的，再找 build 目錄）缺失時 facade 改用 stub（`is_cuda == False`、stub 的 `update` 回空 list）。facade 的 `update()` 在呼叫 stub 前會先取 `torch.cuda.current_stream()`，依 source 判讀，無 CUDA 的主機會先丟例外，而不是回空結果 | [REQ-535-02-01](capability_requirements_535.md#req-535-02-01)、[02-02](capability_requirements_535.md#req-535-02-02) `undecided`；tracker／reorder API 與 core channel 歸 #441，eval／config／detector exports 歸 #535／#536 與原 owner |
 | ③ eval／[CAP-03](capability_requirements_535.md#cap-535-03) | [mot17.py](../../scripts/eval/mot17.py) → [runner.py](../../src/saccade/perception/eval/runner.py)（只 re-export）→ [evaluator.py](../../src/saccade/perception/eval/evaluator.py) `run_eval`；`--cpp-threads` 時 [cpp_runner.py](../../src/saccade/perception/eval/cpp_runner.py) `run_eval_cpp` | dataset＋preset → detector → GMC → tracker facade → MOT lines → motmetrics；run manifest 由 [run_manifest](../../scripts/provenance/run_manifest.py) claim | 一個 Python process；`--processes` 搭配 `--sequences` 時以子 process 分 sequence；relink write 可在背景 thread；`run_eval_cpp` 在 C++ thread pool | [REQ-535-03-01](capability_requirements_535.md#req-535-03-01)、[03-02](capability_requirements_535.md#req-535-03-02)、[02-03](capability_requirements_535.md#req-535-02-03) `undecided` |
-| ④ online-service／[CAP-05](capability_requirements_535.md#cap-535-05)～[07](capability_requirements_535.md#cap-535-07) | [main.py](../../main.py) `--mode perception／orchestrator／full`；[run_8stream_perception.py](../../scripts/ops/run_8stream_perception.py)；[api/server.py](../../src/saccade/api/server.py) `app`；[health.py](../../src/saccade/pipeline/health.py) | RTSP → dispatcher → tracker → callback；embedding → Redis stream → orchestrator → Chroma／RAG → ACK；API 查 Redis／Chroma；VRAM level 經 SHM 傳給 orchestrator | P1 perception（asyncio；WorkbenchPool 的 daemon threads 只有測試會建構，8stream `--workbench` 用到未定義的名稱）、P2 cognition（asyncio）、P3 API；`--mode full` 時 P1＋P2 同 process 同 loop；分開啟動時才是跨 process SHM | REQ-535-05-\*、06-\*、07-\* 全部 `undecided`；部署 `unknown` |
+| ④ online-service／[CAP-05](capability_requirements_535.md#cap-535-05)～[07](capability_requirements_535.md#cap-535-07) | [main.py](../../main.py) `--mode perception／orchestrator／full`；[run_8stream_perception.py](../../scripts/ops/run_8stream_perception.py)；[api/server.py](../../src/saccade/api/server.py) `app`；[health.py](../../src/saccade/pipeline/health.py) | 本地影片 → DALI，或 RTSP → MediaMTXClient（選路見下文）→ dispatcher → tracker → callback；embedding → Redis stream → orchestrator → Chroma／RAG → ACK；API 查 Redis／Chroma；VRAM level 經 SHM 傳給 orchestrator | P1 perception（asyncio；WorkbenchPool 的 daemon threads 只有測試會建構，8stream `--workbench` 用到未定義的名稱）、P2 cognition（asyncio）、P3 API；`--mode full` 時 P1＋P2 同 process 同 loop；分開啟動時才是跨 process SHM | REQ-535-05-\*、06-\*、07-\* 全部 `undecided`；部署 `unknown` |
 | ⑤ research／build-debug／[CAP-04](capability_requirements_535.md#cap-535-04)、[08](capability_requirements_535.md#cap-535-08)、[09](capability_requirements_535.md#cap-535-09) | exporters（[TorchScript](../../scripts/model/export_headline_mamba_head_torchscript.py)、[resolved config](../../scripts/model/export_resolved_shipping_config.py)）、[rebuild.sh](../../scripts/native/rebuild.sh)、[install.sh](../../shipping/package/install.sh)、`shipping/tools/` 的 measurement／probes、training／parity／H2、`saccade_node` | 產生並交付 checkpoint、export 產物、resolved config、extension 與 package；量測工具讀凍結輸入產出證據 | 各工具自己的 process；measurement 用 shipping 函式庫的 `_measurement` 變體（core 照常連結），不 install | [REQ-535-08-02](capability_requirements_535.md#req-535-08-02) `required`（限 S-EXPORT 的 headline TorchScript exporter）；其餘 `undecided` |
+
+**Online 輸入選路（source-inspected）**：`main.py` 讀取 `DUMMY_VIDEO_PATH`（預設 `assets/videos/demo.mp4`）；`os.path.isfile()` 成立時使用 `DALIMediaClient`，否則以 `dummy_video=source_url` 建立 `MediaMTXClient`，由 client 選路，可能使用預設 RTSP。此 env 值不會被當成 `rtsp_url` 傳入。`run_8stream_perception.py` 則明確建構各 stream 的 RTSP URL，以 `rtsp_url=...` 建立 `MediaMTXClient`。圖中 SE-49 與 SE-17 分別標出本地檔案與 RTSP 輸入；DALI 的 `watchdog_loop()` 缺口仍見 SN-ON2，圖線不代表 runtime 已驗證。
 
 ## 4. 追溯索引
 
@@ -223,6 +228,7 @@ Evidence 欄只放 pointer，不代表在本 baseline 重新驗證過。驗證�
 | SN-ON7 | resource／SHM | 07；07-01、07-02 | [resource degradation](../modules/resource/architecture_degradation.md) | [resource_manager.py](../../src/saccade/resource/resource_manager.py) | NVML 失敗回零、缺 segment 回 NORMAL、無 freshness（ledger E07） | observed as-is｜source-inspected | CAP-07；#537、#538 |
 | SN-ON8 | health CLI | 07；07-03 | internal operational contract | [health.py](../../src/saccade/pipeline/health.py)；[saccade_ctl.sh](../../scripts/ops/saccade_ctl.sh) `health` | [health test](../../tests/unit/test_pipeline_health.py)；probe `systemctl --user`、NVML 與 Redis；orchestrator 啟動時也 in-process 執行（SE-48）；`systemctl --user` 與 system units 的差異（ledger 部署段） | observed as-is｜source-inspected | CAP-07；#537 |
 | SN-D1 | headline preset | 03、08-E | [headline config](../reference/mot17_default_config.md) | `configs/presets/mamba_whole_graph.yaml` | eval 與 shipping 經不同路徑消費同一 preset（SE-09、SE-31） | observed as-is｜source-inspected | CAP-03 |
+| SN-D2 | online 本地影片 | 05；05-01 | — | [main.py](../../main.py) `run_perception`／`run_stream_producer` | `DUMMY_VIDEO_PATH`（預設 `assets/videos/demo.mp4`）；檔案存在才選 DALI（SE-49），runtime 未驗證 | observed as-is｜source-inspected | CAP-05；#538 |
 | SN-BX1 | exporters | 08-E；08-02 | TorchScript head 對應 S-SHIP `N-X1`、`N-T4`、[CC-536-08-02](ship_export_contracts_536.md#cc-536-08-02)；resolved config 沿用 [resolved-config 契約](../reference/native_runtime_resolved_config.md) | `run_export`、`export_resolved_shipping_config.py` | [publication tests](../../tests/unit/test_headline_head_export_publication.py)；structural check 不是 MOT parity | 狀態逐 exporter 分開：TorchScript head 為 accepted target＋implemented（#559，REQ-08-02 required）；resolved config exporter 屬 #465 resolved-config 契約（inherited），沒有新 REQ 裁決（ledger C5-4）｜原契約 | CAP-08；#549、#421 |
 | SN-BX2 | export 產物 | 08-02、01-02 | S-SHIP `N-X3`、`N-X5` | `models/yolo/`、`configs/shipping/*.json` | `models/yolo/` 是 gitignored | observed as-is｜source-inspected | CAP-08；#549 |
 | SN-BX3 | build＋package | 08-B；08-03、01-02 | ADR 025；#465 C3／C4；S-SHIP `N-X6`、`N-P1`～`N-P3` | 根 [CMakeLists.txt](../../CMakeLists.txt)、[shipping CMake](../../shipping/CMakeLists.txt)、`rebuild.sh`、`install.sh` | [package test](../../tests/unit/test_shipping_package.py)；native test toolchain 分支 gap（ledger C5-5） | 部分 accepted＋implemented（#465、ADR 025）｜原契約 | CAP-08；#541、#547 |
@@ -243,16 +249,18 @@ Evidence 欄只放 pointer，不代表在本 baseline 重新驗證過。驗證�
 | SE-01～SE-03 | SH1→SH2→SH3→SH4 | argv → plan → MOT／journal；同步、單一 process | 01-01、01-02 | 細節見 S-SHIP `L-09`～`L-16`、`L-T*` |
 | SE-04 | X5→SH3 | JPEG sequence 目錄 | 01 | sequence 輸入在 Gate A 檢查（#565） |
 | SE-05、SE-06 | PL1→PL2／PL3 | `__getattr__` 首次存取才 import | 02-02 | top-level lazy 不代表每個 export resolve 都不需要 torch／native（E02） |
-| SE-46、SE-47 | PL1→EV2／EV4 | `run_eval`（需 `eval` extra）、`EvalConfig`、`MambaGatedDetector` 直接解析到 eval／detector 實作 | 02-02 | 這三個 export 的 public surface 由 #535／#536 與原 owner 裁決，不屬 #441 |
+| SE-46、SE-47 | PL1→EV2／EV4 | 在 caller process 內將 `run_eval`（需 `eval` extra）、`EvalConfig`、`MambaGatedDetector` 直接解析到 eval／detector 實作 | 02-02 | 這三個 export 的 public surface 由 #535／#536 與原 owner 裁決，不屬 #441 |
 | SE-07 | PL2→K3 | import `saccade_tracking_ext`；`ImportError` 時改用 stub | 02-01 | 能力缺失與合法空幀不可區分（E02） |
 | SE-08、SE-09 | X5／D1→EV1 | dataset＋preset YAML | 03-01 | — |
 | SE-10 | EV1→EV2 | `run_eval(**kwargs)`；同步 | 03-01 | `mot17.py` 經 `runner.py` re-export 取得 `run_eval` |
 | SE-11 | EV1→EV3 | `--cpp-threads > 0` 才走 | 03-01 | 支持組合未裁決 |
 | SE-12、SE-14 | EV2→EV4→K3 | frame tensor → detections；GPU | 03 | — |
-| SE-13 | EV2→PL2 | tracker update 經 facade | 02-03 | eval 與 library 共用 facade；共用 implementation 不等於共用支持（ledger「共用 implementation」段） |
+| SE-13 | EV2→PL2 | 在同一 eval process 內直接呼叫 facade 的 tracker update | 02-03 | eval 與 library 共用 facade；共用 implementation 不等於共用支持（ledger「共用 implementation」段） |
 | SE-15 | EV3→K3 | `saccade_eval_ext` | 03-01 | — |
 | SE-16 | EV2→EV5 | MOT lines → motmetrics | 03 | — |
-| SE-17、SE-19 | X4→ON2→ON3 | RTSP frame → `asyncio.Queue(maxsize=100)`（AsyncDispatcher）；WorkbenchPool 的每 stream `queue.Queue(maxsize=4)` 沒有可達的 in-tree 入口 | 05-01 | drop／backpressure 政策未選 |
+| SE-17 | X4→ON2 | RTSP → MediaMTXClient；8stream 明確傳入各 stream URL；`main.py` 未選 DALI 時交由 client 選路，可能使用預設 RTSP（§3） | 05-01 | 兩個 entrypoint 的來源選路不同；runtime 未驗證 |
+| SE-49 | D2→ON2 | 本地影片 → DALIMediaClient；`main.py` 以 `os.path.isfile(source_url)` 選路（§3） | 05-01 | DALI 分支的 `watchdog_loop()` 缺口見 SN-ON2 |
+| SE-19 | ON2→ON3 | ingest frame 經 producer 呼叫 `put_frame` → `asyncio.Queue(maxsize=100)`（AsyncDispatcher）；WorkbenchPool 的每 stream `queue.Queue(maxsize=4)` 沒有可達的 in-tree 入口 | 05-01 | drop／backpressure 政策未選 |
 | SE-18 | ON1→ON3 | 建立 dispatcher 並 `await start()` | 05-02 | stop／partial-start 語義未選（E05） |
 | SE-20 | ON3→K3 | AsyncDispatcher 直接 import native `GPUByteTracker`；WorkbenchPool 經 Workbench ext 與 facade | 02-04 | 見 §5 B0-F02 |
 | SE-21 | ON3⇢ON4 | ✗ 線上入口（`main.py`、8stream、AsyncDispatcher）沒有呼叫 `submit`／`put_crops`；只有 `scripts/benchmarks/` 的合成呼叫 | 05、06-01 | E05；gap，未執行 |
@@ -281,13 +289,13 @@ Evidence 欄只放 pointer，不代表在本 baseline 重新驗證過。驗證�
 
 | ID | 邊界 | 理由與需求 | 設計｜執行點 |
 |:--|:--|:--|:--|
-| B0-D01 | profiles 不共用執行期 pipeline，只共用 native source、Python 模組與 build 期產物 | 各 profile 的使用者、輸入與支持義務不同（#535 CAP 表）；S-SHIP 的保證不外推到其他路徑（S-SHIP 總圖「為什麼這樣分」） | observed as-is｜S-SHIP 範圍內為 accepted |
+| B0-D01 | profiles 區分使用入口與執行情境；process 邊界依 entrypoint／啟動模式判定，可共用 native source、Python 模組與 build 期產物（process 內呼叫見 B0-D07） | 各 profile 的使用者、輸入與支持義務不同（#535 CAP 表）；S-SHIP 的保證不外推到其他路徑（S-SHIP 總圖「為什麼這樣分」） | observed as-is｜S-SHIP 範圍內為 accepted |
 | B0-D02 | shipping 是單一 native process，不載入 Python、不讀 env 參數 | #465 shipping boundary；REQ-535-01-01／01-02 | accepted＋implemented｜[config loader sources test](../../tests/unit/test_shipping_config_loader_sources.py)、loader auditor、measurement 隔離 test |
 | B0-D03 | tracker core（SN-K1）不連結 perception 或 OpenCV | shipping runtime 連結它，不能經它帶入 perception／OpenCV（#465 PR-11） | implemented｜根 CMake configure 時 `FATAL_ERROR` |
-| B0-D04 | 跨 profile 只經檔案交付：preset → resolved config、checkpoint → export → attestation → package | CC-536-08-02 已核准 export → shipping 的接受條件；REQ-535-08-02 | S-EXPORT 為 accepted＋implemented｜其他交付 observed as-is |
+| B0-D04 | S-EXPORT／S-SHIP 的建置與模型交付邊界以檔案傳遞：preset → resolved config、checkpoint → export → attestation → package；eval／public-library 的 process 內共用模組與直接呼叫見 B0-D07、SE-13、SE-46／47 | CC-536-08-02 已核准 export → shipping 的接受條件；REQ-535-08-02 | S-EXPORT 為 accepted＋implemented｜其他交付 observed as-is |
 | B0-D05 | Python 套件依賴方向：`perception` → `resource`／`media`／`storage`；`cognition` → `storage`／`resource`／`pipeline`；`api` → `storage`；`storage`、`resource`、`pipeline`、`media` 不 import 其他 `saccade.*` 子套件 | 讓 storage／cognition 不反向影響 perception 熱路徑（README §4.4、§4.6） | observed as-is（本 baseline 的 import 掃描）｜[check_api_layers.py](../../scripts/tools/check_api_layers.py) 只 warn |
 | B0-D06 | online 的慢路徑（cognition／API）經 Redis／Chroma／SHM 與 perception 解耦 | README §4.4～§4.6 | observed as-is｜沒有 check；鏈有 gap（SE-21） |
-| B0-D07 | eval 與 library 共用 Python 模組：tracker facade（SN-PL2），以及 `run_eval`／`EvalConfig`／`MambaGatedDetector` 三個 export 直接解析到 eval／detector 實作（SE-46、SE-47） | 同一個 tracker wrapper／native core（ledger「共用 implementation」段） | observed as-is｜共用 implementation 不等於共用支持 |
+| B0-D07 | eval 與 public-library 在 caller／eval process 內共用 Python 模組及直接呼叫：tracker facade（SN-PL2、SE-13），以及 `run_eval`／`EvalConfig`／`MambaGatedDetector` 三個 export 直接解析到 eval／detector 實作（SE-46、SE-47） | 同一個 tracker wrapper／native core（ledger「共用 implementation」段） | observed as-is｜共用 implementation 不等於共用支持 |
 
 ### 5.2 本次追查的發現
 
