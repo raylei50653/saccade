@@ -319,7 +319,7 @@ Evidence 欄只放 pointer，不代表在本 baseline 重新驗證過。驗證�
 | B0-F04 | README §2 的 L1～L6 沒有涵蓋 `shipping/` 樹與 build／export 期交付 | contract-gap（閱讀面） | 本稿在 README §2 加上指向總圖的說明 |
 | B0-F05 | repo 內沒有 retrieval API 的 ASGI 啟動點（只有 `app` 物件與 `uvicorn` 依賴）；[yolo-api.service](../../infra/systemd/yolo-api.service) 的 ExecStart 指向 repo 外的 `YOLO_LLM/scripts/run.sh api` | unverified（部署 `unknown`） | 沿用 ledger E06 路由至 #535；沒有 in-tree 啟動點不證明服務不存在，也不授權退役 |
 | B0-F06 | ledger E05／E06／E07 已記的 gap（SE-21、8stream `--workbench` 用到未定義的 `WorkbenchPool`、SHM writer 只在 AsyncDispatcher）在本 baseline 仍存在 | already-covered（ledger） | 沿用 ledger 路由 |
-| B0-F07 | `VRAMLevelReader` 只在 `_shm is None` 時重新附掛。`--mode full` 先建構 orchestrator（reader）才執行 dispatcher 的 `start()`（writer）；若前次崩潰留下 segment，reader 會先附掛舊 segment，writer 之後 unlink 並重建，依 source 判讀 reader 會一直讀已 unlink 的舊 segment。分開啟動且 orchestrator 先啟動時同理 | SHM 行為與 `--mode full` 建構順序已由 [#537 C0](failure_degradation_537.md#2-capabilityfailure-矩陣observed-as-is) 重現（C0-08，`main@8350f6f7`）；對 orchestrator 事件的影響仍是 source 判讀。屬 ledger E07 的 stale／writer restart 缺口 | 交 #537、#538，建議優先驗證此生命週期案例；本次未執行或授權 runtime 修復，不選 freshness／restart 判準 |
+| B0-F07 | `VRAMLevelReader` 只在 `_shm is None` 時重新附掛。`--mode full` 先建構 orchestrator（reader）才執行 dispatcher 的 `start()`（writer）；若前次崩潰留下 segment，reader 會先附掛舊 segment，writer 之後 unlink 並重建，依 source 判讀 reader 會一直讀已 unlink 的舊 segment。分開啟動且 orchestrator 先啟動時同理 | SHM 行為已由 [#537 C0](failure_degradation_537.md#2-capabilityfailure-矩陣observed-as-is) 重現（C0-08，`main@8350f6f7`）；`--mode full` 建構順序以 AST 測試靜態釘住，未執行；對 orchestrator 事件的影響仍是 source 判讀。屬 ledger E07 的 stale／writer restart 缺口 | 交 #537、#538，建議優先驗證此生命週期案例；本次未執行或授權 runtime 修復，不選 freshness／restart 判準 |
 
 ### 5.3 差異方向（proposed，不是批准）
 

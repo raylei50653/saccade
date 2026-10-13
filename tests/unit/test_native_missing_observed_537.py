@@ -74,10 +74,13 @@ def _run(body: str, *, hide_cuda: bool) -> list[str]:
 
 
 def test_c1_facade_without_extension_or_cuda_raises_before_stub() -> None:
-    assert _run(_FACADE, hide_cuda=True) == [
-        "is_cuda False",
-        "dets3 RuntimeError No CUDA GPUs are available",
-        "dets0 RuntimeError No CUDA GPUs are available",
+    # Pin the exception type only: the message depends on the driver setup
+    # ("No CUDA GPUs are available" vs "Found no NVIDIA driver ...").
+    lines = _run(_FACADE, hide_cuda=True)
+    assert lines[0] == "is_cuda False"
+    assert [line.split(" ", 2)[:2] for line in lines[1:]] == [
+        ["dets3", "RuntimeError"],
+        ["dets0", "RuntimeError"],
     ]
 
 
