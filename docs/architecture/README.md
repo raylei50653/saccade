@@ -2,12 +2,13 @@
 
 本文件描述 **目前穩定的系統形狀與責任邊界**。它不是實驗日誌，也不是待辦清單。
 
+- **架構圖集**：本 README 是唯一閱讀入口。[跨 profile 系統總覽](system_overview_536.md) 提供各入口、責任、主要依賴、執行邊界與節點／邊追溯；[S-SHIP／S-EXPORT 展開圖與契約](ship_export_contracts_536.md) 維護 shipping／export 的細節與設計狀態。圖集組織規則見 [S-SHIP §6](ship_export_contracts_536.md#6-本稿之後)，各文件的狀態由原文件維護。
 - 從 `src/` 目錄找到實作與跨語言入口：看 [src/README.md](../../src/README.md)
 - 近期工作方向與 ablation backlog：看 [TODO.md](../TODO.md)
 - 開發入口（需求層級 → 文檔組合）與 source-of-truth：看 [DEVELOPMENT.md](../../DEVELOPMENT.md)
 - 事件 / API / storage schema：看 [api_spec.md](../modules/storage/api_spec.md)
 - 能力／REQ／Profile、具名 owner、inherited scope／proposed delta 與代表鏈狀態：看 [capability_requirements_535.md](capability_requirements_535.md)（#535；批准與待決狀態只在該檔維護）
-- S-SHIP／S-EXPORT 的總圖（現況與目標）、completion／identity／export 接口契約卡與 ID 索引：看 [ship_export_contracts_536.md](ship_export_contracts_536.md)（#536；設計狀態只在該檔維護）
+- S-SHIP／S-EXPORT 的展開圖（現況與目標）、completion／identity／export 接口契約卡與 ID 索引：看 [ship_export_contracts_536.md](ship_export_contracts_536.md)（#536；設計狀態只在該檔維護）
 - 安裝後 package 的 Completion／Gate A、entrypoint re-pin 與驗證證據：看 [package re-pin](../reference/native_runtime_package_repin_536.md)（#536；不擴大支持範圍）
 - 模型 bundle 與 native runtime 的分離（現況／目標架構圖、信任根、責任分工、A／B／C 比較）：看 [ADR 028](../decisions/028-model-bundle-runtime-separation.md)；bundle manifest 契約、fail-closed 規則、G01–G07 處置與控制矩陣：看 [model_bundle_contract_549.md](model_bundle_contract_549.md)（#549 S1；設計狀態只在該檔維護）
 
@@ -35,6 +36,8 @@ Saccade 目前以 **GPU-first 的 MOT / tracking / relink pipeline** 為核心�
 | **L4** | **Runtime Streaming / Dispatch** | multistream dispatcher、zero-copy helpers、frame pool / eval streaming adapters | `src/saccade/perception/dispatcher.py`, `src/saccade/perception/zero_copy.py`, `src/saccade/perception/eval/streaming.py`, `src/saccade/perception/eval/pool.py` |
 | **L5** | **Storage / Event Memory** | Redis microbatch、Chroma memory、metadata filter、hybrid query | `src/saccade/storage/` |
 | **L6** | **Cognition / API / Resource Health** | orchestrator、RAG trigger、API、VRAM degradation、service health | `src/saccade/cognition/`, `src/saccade/api/`, `src/saccade/resource/`, `src/saccade/pipeline/health.py` |
+
+L1～L6 從 Python 套件與它載入的 native 擴充來劃分；L1／L2 列的 `src/tracking/`、`include/tracking/` 是這些擴充背後的 native source。同一份 source 也編成 static library 連進 `shipping/` 的 native 執行檔；`shipping/` 執行檔、static library 的連結關係與 build／export 期的產物交付不在這張表，見 [系統總圖](system_overview_536.md#2-系統總圖)。
 
 ### 2.1 能力與使用 profile
 
@@ -189,7 +192,7 @@ not the headline architecture.
 責任：
 
 - VRAM 使用率監控（pynvml，85/92/96% 三階 hysteresis）
-- 跨進程 VRAM 狀態廣播（POSIX named shared memory）
+- VRAM 狀態廣播（POSIX named shared memory；分開啟動時跨進程）
 - Dispatcher 端 GPU tracker 生命週期管理（LRU eviction）
 
 主要位置：
@@ -199,14 +202,14 @@ not the headline architecture.
 
 目前架構重點：
 
-**跨進程 VRAM 狀態同步**
+**VRAM 狀態同步（具名 shared memory）**
 
-`AsyncDispatcher`（dispatcher 進程）持有 `VRAMLevelWriter`，每次 `decide_degradation_level()` 後將 `DegradationLevel`（0–3）寫入 POSIX named shared memory `saccade_vram_level`（1 byte）。`PipelineOrchestrator`（獨立進程）持有 `VRAMLevelReader`，在每個 `handle_cognitive_event` 入口讀取：
+`AsyncDispatcher`（perception 端；分開啟動時為獨立進程，見下段）持有 `VRAMLevelWriter`，每次 `decide_degradation_level()` 後將 `DegradationLevel`（0–3）寫入 POSIX named shared memory `saccade_vram_level`（1 byte）。`PipelineOrchestrator`（分開啟動時為獨立進程，見下段）持有 `VRAMLevelReader`，在每個 `handle_cognitive_event` 入口讀取：
 
 - `FAST_PATH (>92%)`：跳過 RAG 分析（停止 HuggingFaceEmbedding GPU 呼叫）
 - `EMERGENCY (>96%)`：丟棄非異常 frame，不寫 ChromaDB
 
-兩進程獨立啟動（無共同父進程），故用具名 shared memory 而非 `multiprocessing.Value`。Writer 啟動時自動清除前次崩潰的 stale segment；Reader 找不到 segment 時 fallback 為 NORMAL，不阻塞。
+分開以 `main.py --mode perception`／`--mode orchestrator` 啟動時，兩者是沒有共同父進程的兩個 process，所以用具名 shared memory 而非 `multiprocessing.Value`；`--mode full` 則在同一 process 的同一 event loop 跑兩者，level 仍經具名 segment 傳遞（見[系統總圖](system_overview_536.md#52-本次追查的發現) B0-F01、B0-F07）。Writer 啟動時會 unlink 前次崩潰留下的 stale segment 再重建；但 reader 只在尚未附掛時重新附掛，若它先附掛到舊 segment（`--mode full` 先建構 orchestrator 再執行 `dispatcher.start()`，或分開啟動時 orchestrator 先起），依 source 判讀會一直讀舊 segment 的 level，尚未重現（B0-F07）。Reader 找不到 segment 時 fallback 為 NORMAL，不阻塞。
 
 **Dispatcher GPU Tracker LRU**
 
@@ -298,6 +301,7 @@ not the headline architecture.
 - 目錄地圖（從路徑找到實作）：[src/README.md](../../src/README.md)
 - 開發入口：[DEVELOPMENT.md](../../DEVELOPMENT.md)
 - API / event / storage contract：[api_spec.md](../modules/storage/api_spec.md)
+- 跨 profile 系統總圖與節點／邊追溯索引：[system_overview_536.md](system_overview_536.md)
 - 現行 full stack 各機制的 present-day role 與 interaction map：[module_interactions.md](module_interactions.md)
 - 模組 delta ledger：[PIPELINE_REFERENCE.md](../reference/PIPELINE_REFERENCE.md)
 - 全流程敘事版資料流：[pipeline_flow.md](../reference/pipeline_flow.md)
