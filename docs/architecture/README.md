@@ -37,7 +37,7 @@ Saccade 目前以 **GPU-first 的 MOT / tracking / relink pipeline** 為核心�
 | **L5** | **Storage / Event Memory** | Redis microbatch、Chroma memory、metadata filter、hybrid query | `src/saccade/storage/` |
 | **L6** | **Cognition / API / Resource Health** | orchestrator、RAG trigger、API、VRAM degradation、service health | `src/saccade/cognition/`, `src/saccade/api/`, `src/saccade/resource/`, `src/saccade/pipeline/health.py` |
 
-L1～L6 只涵蓋 Python 套件與它載入的 native 擴充；`shipping/` 的 native 執行檔、build／export 期的產物交付與共用 native static library 不在這張表，見 [系統總圖](system_overview_536.md#2-系統總圖)。
+L1～L6 從 Python 套件與它載入的 native 擴充來劃分；L1／L2 列的 `src/tracking/`、`include/tracking/` 是這些擴充背後的 native source。同一份 source 也編成 static library 連進 `shipping/` 的 native 執行檔；`shipping/` 執行檔、static library 的連結關係與 build／export 期的產物交付不在這張表，見 [系統總圖](system_overview_536.md#2-系統總圖)。
 
 ### 2.1 能力與使用 profile
 
@@ -192,7 +192,7 @@ not the headline architecture.
 責任：
 
 - VRAM 使用率監控（pynvml，85/92/96% 三階 hysteresis）
-- 跨進程 VRAM 狀態廣播（POSIX named shared memory）
+- VRAM 狀態廣播（POSIX named shared memory；分開啟動時跨進程）
 - Dispatcher 端 GPU tracker 生命週期管理（LRU eviction）
 
 主要位置：
@@ -202,14 +202,14 @@ not the headline architecture.
 
 目前架構重點：
 
-**跨進程 VRAM 狀態同步**
+**VRAM 狀態同步（具名 shared memory）**
 
-`AsyncDispatcher`（dispatcher 進程）持有 `VRAMLevelWriter`，每次 `decide_degradation_level()` 後將 `DegradationLevel`（0–3）寫入 POSIX named shared memory `saccade_vram_level`（1 byte）。`PipelineOrchestrator`（分開啟動時為獨立進程，見下段）持有 `VRAMLevelReader`，在每個 `handle_cognitive_event` 入口讀取：
+`AsyncDispatcher`（perception 端；分開啟動時為獨立進程，見下段）持有 `VRAMLevelWriter`，每次 `decide_degradation_level()` 後將 `DegradationLevel`（0–3）寫入 POSIX named shared memory `saccade_vram_level`（1 byte）。`PipelineOrchestrator`（分開啟動時為獨立進程，見下段）持有 `VRAMLevelReader`，在每個 `handle_cognitive_event` 入口讀取：
 
 - `FAST_PATH (>92%)`：跳過 RAG 分析（停止 HuggingFaceEmbedding GPU 呼叫）
 - `EMERGENCY (>96%)`：丟棄非異常 frame，不寫 ChromaDB
 
-分開以 `main.py --mode perception`／`--mode orchestrator` 啟動時，兩者是沒有共同父進程的兩個 process，所以用具名 shared memory 而非 `multiprocessing.Value`；`--mode full` 則在同一 process 的同一 event loop 跑兩者，level 仍經具名 segment 傳遞（見[系統總圖](system_overview_536.md#52-本次追查的發現) B0-F01、B0-F07）。Writer 啟動時自動清除前次崩潰的 stale segment；Reader 找不到 segment 時 fallback 為 NORMAL，不阻塞。
+分開以 `main.py --mode perception`／`--mode orchestrator` 啟動時，兩者是沒有共同父進程的兩個 process，所以用具名 shared memory 而非 `multiprocessing.Value`；`--mode full` 則在同一 process 的同一 event loop 跑兩者，level 仍經具名 segment 傳遞（見[系統總圖](system_overview_536.md#52-本次追查的發現) B0-F01、B0-F07）。Writer 啟動時會 unlink 前次崩潰留下的 stale segment 再重建；但 reader 只在尚未附掛時重新附掛，若它先附掛到舊 segment（`--mode full` 先建構 orchestrator 再執行 `dispatcher.start()`，或分開啟動時 orchestrator 先起），依 source 判讀會一直讀舊 segment 的 level，尚未重現（B0-F07）。Reader 找不到 segment 時 fallback 為 NORMAL，不阻塞。
 
 **Dispatcher GPU Tracker LRU**
 

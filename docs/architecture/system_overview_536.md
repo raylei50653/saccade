@@ -43,9 +43,8 @@
 | 圓柱 `[(…)]` | 檔案／資料（輸入、產物、持久化） |
 | 旗形 `>…]` | 外部依賴（不在本 repo） |
 | 標籤 `‹main›`／`‹branch›`／`‹R/D›` | 元件在該 profile **已觀察呼叫路徑**中的角色：主路徑／同 profile 的旁支或可選分支（由 flag、可選依賴或另一個 class 選路）／research・build-debug 工具。這是 source 現況的角色分類，**不是支持義務**，也不是生命週期 |
-| 子圖標題的「支持」 | 只引用 #535 ledger 對該 profile REQ 的裁決；②③④ 的 REQ 全部 `undecided`，⑤ 只有 S-EXPORT 的 headline TorchScript exporter 是 `required` |
+| 子圖標題 | ①～⑤ 按使用情境分組。「支持」只引用 #535 ledger 對該 profile REQ 的裁決（②③④ 全部 `undecided`，⑤ 只有 S-EXPORT 的 headline TorchScript exporter 是 `required`）；其後是該入口的 process／thread 配置，判定方式見上方讀法。`CORE` 是 build 期 static library 的集合，`PYEXT` 是連結 CORE 的 extension `.so`，`EXT` 內都是外部依賴；子圖框本身不表示獨立 process |
 | 標籤 `GPU` | 該元件的主要資料面在 GPU；沒標的是 CPU 端 |
-| 子圖標題 | ①～⑤ 按使用情境分組，標題補充各入口的 process／thread 配置；② 可在③ 的 process 內使用，`P1`／`P2` 在 `--mode full` 下共用 process／event loop，`P3` 的 host 未知；⑤ 是各工具各自的 process。`CORE` 是 build 期 static library 的集合，`EXT` 內都是外部依賴；子圖框本身不表示獨立 process |
 | 實線 `-->` | 執行期呼叫或資料流（`observed as-is`，source-inspected）；⑤ 的工具自己執行時的呼叫也算 |
 | 粗線 `==>` | build／install 期的連結或產物交付，**不是**執行期呼叫 |
 | 虛線 `-.->` 且標 `✗` | source 上找不到閉合的鏈（gap），不代表執行時一定失敗 |
@@ -103,14 +102,19 @@ flowchart LR
     RD3[["SN-RD3 ‹R/D› saccade_node demo<br/>未接 tracker"]]
   end
 
-  subgraph CORE["共用 native core（src/、include/）｜static library：每個 binary 各自連結，不是共用 runtime"]
+  subgraph CORE["共用 native core（src/、include/）｜static library：每個 binary／extension 各自連結，不是共用 runtime"]
     K1[["SN-K1 ‹main› saccade_tracking<br/>tracker／Kalman／GMC／filter-NMS／relink・GPU"]]
     K2[["SN-K2 ‹main› saccade_perception<br/>TRTEngine／preprocess／ReID extractor・GPU"]]
+    K4[["SN-K4 ‹branch› saccade_media<br/>GStreamer client／GPU buffer pool"]]
+    K5[["SN-K5 輔助 static library<br/>tracker_params／opencv_host／eval_runner"]]
+  end
+
+  subgraph PYEXT["native Python 擴充｜pybind11 shared module（.so）：consumer venv 建置，pip install 只有 stub"]
     K3[["SN-K3 ‹main› pybind 擴充<br/>tracking／eval／perception／media／cheb_gr_online"]]
   end
 
   subgraph EXT["外部依賴 ‹ext›"]
-    X1>"SN-X1 CUDA／TensorRT／LibTorch／nvJPEG／NVML"]
+    X1>"SN-X1 CUDA／cuFFT／TensorRT／LibTorch／nvJPEG／NVML"]
     X2>"SN-X2 Redis"]
     X3>"SN-X3 Chroma"]
     X4>"SN-X4 MediaMTX／RTSP"]
@@ -145,6 +149,7 @@ flowchart LR
   X4 -->|"SE-17 RTSP→MediaMTXClient"| ON2
   D2 -->|"SE-49 本地檔案→DALI"| ON2
   ON1 -->|"SE-18 await start"| ON3
+  ON1 -->|"SE-50 ReID engine 可載入時 start"| ON4
   ON2 -->|"SE-19 asyncio.Queue(100)"| ON3
   ON3 -->|"SE-20 直接 import native"| K3
   ON3 -.->|"SE-21 ✗ 線上入口無 producer"| ON4
@@ -174,14 +179,16 @@ flowchart LR
   K2 ==>|"SE-40 link"| SH3
   K1 ==>|"SE-41 link"| K3
   K2 ==>|"SE-42 link"| K3
+  K4 ==>|"SE-51 link（media_ext）"| K3
+  K5 ==>|"SE-52 link（tracking_ext／eval_ext）"| K3
   CORE ==>|"SE-43 link（經 shipping _measurement 庫）"| RD1
   CORE ==>|"SE-44 link"| RD3
-  CORE -->|"SE-45 CUDA／TRT"| X1
+  CORE -->|"SE-45 CUDA／cuFFT／TRT／LibTorch"| X1
 ```
 
 細節展開：
 
-- **S-SHIP／S-EXPORT**：`SN-SH1`～`SN-SH4`、`SN-BX1`～`SN-BX3` 的內部節點（`N-R*`、`N-P*`、`N-X*`）、accepted target `N-T1`～`N-T4` 與實作狀態，見 [S-SHIP／S-EXPORT 總圖](ship_export_contracts_536.md#1-總圖)（本稿把它當成 S-SHIP／S-EXPORT 的展開圖讀，兩者關係見 §7）；本圖只畫到 profile 層。
+- **S-SHIP／S-EXPORT**：`SN-SH1`～`SN-SH4`、`SN-BX1`～`SN-BX3` 的內部節點（`N-R*`、`N-P*`、`N-X*`）、accepted target `N-T1`～`N-T4` 與實作狀態，見 [S-SHIP／S-EXPORT 展開圖](ship_export_contracts_536.md#1-總圖)（兩者關係見 §7）；本圖只畫到 profile 層。
 - **eval 幀循環**：stage 順序見 [README §3](README.md#3-當前主路徑) 與 [pipeline flow](../reference/pipeline_flow.md)；現行 full stack 各機制的角色見 [module interactions](module_interactions.md)。
 - **模型 bundle 與 runtime 分離**：見 [ADR 028](../decisions/028-model-bundle-runtime-separation.md) 與 [bundle 契約](model_bundle_contract_549.md)。
 
@@ -222,7 +229,7 @@ Evidence 欄只放 pointer，不代表在本 baseline 重新驗證過。驗證�
 | SN-ON1 | online 入口 | 05 | — | `main.py`、`run_8stream_perception.py` | `main.py` 的 `on_detection_finished` 是 `pass`；8stream `--workbench` 用到未定義的 `WorkbenchPool`（ledger E05） | observed as-is｜source-inspected | CAP-05；#537、#538 |
 | SN-ON2 | ingest | 05 | — | [mediamtx_client.py](../../src/saccade/media/mediamtx_client.py)、`dali_pipeline.py` | [media test](../../tests/unit/media/test_mediamtx_client.py)；DALI 分支呼叫未定義的 `watchdog_loop()`（ledger C4） | observed as-is｜source-inspected | CAP-05；#538 |
 | SN-ON3 | dispatcher／workbench | 05；02-04、05-01、05-02 | — | [dispatcher.py](../../src/saccade/perception/dispatcher.py) `AsyncDispatcher`、`WorkbenchPool` | [dispatcher test](../../tests/extended/test_dispatcher.py)（mock）；兩支的 queue／drop／callback 行為不同；WorkbenchPool 沒有可達的 in-tree 入口（E05）；見 §5 B0-F02 | observed as-is｜source-inspected | CAP-05；#537、#538 |
-| SN-ON4 | embedding → Redis | 06；06-01 | [api_spec](../modules/storage/api_spec.md) | `embedding_dispatcher.py`、`main.on_embeddings_ready` | 線上入口沒有 producer，只有 benchmark 合成呼叫（SE-21） | observed as-is｜source-inspected；鏈未閉合 | CAP-06；#538、#539 |
+| SN-ON4 | embedding → Redis | 06；06-01 | [api_spec](../modules/storage/api_spec.md) | `embedding_dispatcher.py`、`main.on_embeddings_ready` | `main.py run_perception` 在 `TRTFeatureExtractor` 可載入時建立並 `start()` consumer thread（SE-50）；但線上入口沒有 crop producer，只有 benchmark 合成呼叫（SE-21） | observed as-is｜source-inspected；鏈未閉合 | CAP-06；#538、#539 |
 | SN-ON5 | orchestrator | 06、07；06-01、07-01 | [cognition architecture](../modules/cognition/architecture.md) | [orchestrator.py](../../src/saccade/cognition/orchestrator.py) | [pipeline test](../../tests/integration/test_pipeline.py)；handler 吃掉錯誤後 batch 仍可 ACK（ledger E06） | observed as-is｜source-inspected | CAP-06；#537、#538 |
 | SN-ON6 | retrieval API | 06；06-02 | [api_spec](../modules/storage/api_spec.md) | [server.py](../../src/saccade/api/server.py) `app` | [API test](../../tests/unit/api/test_server.py)；repo 內沒有 uvicorn 啟動點，P3 的 host `unknown` | observed as-is｜source-inspected | CAP-06；#535 |
 | SN-ON7 | resource／SHM | 07；07-01、07-02 | [resource degradation](../modules/resource/architecture_degradation.md) | [resource_manager.py](../../src/saccade/resource/resource_manager.py) | NVML 失敗回零、缺 segment 回 NORMAL、無 freshness（ledger E07） | observed as-is｜source-inspected | CAP-07；#537、#538 |
@@ -237,7 +244,9 @@ Evidence 欄只放 pointer，不代表在本 baseline 重新驗證過。驗證�
 | SN-RD3 | native demo | 09；09-01 | — | 根 CMake `saccade_node` → [main.cpp](../../src/main.cpp) | 連結 `saccade_perception`、`saccade_tracking`、`saccade_media`，但 main.cpp 未接 tracker；需 `SACCADE_WITH_OPENCV` | observed as-is｜source-inspected；支持 `undecided` | CAP-09；#539 |
 | SN-K1 | tracker core | 01、02、03、05 | [ADR 026](../decisions/026-frozen-input-source-evolution.md)（frozen input） | 根 CMake `saccade_tracking` | CMake 在 configure 時拒絕它連結 `saccade_perception` 或 OpenCV（#465 PR-11） | implemented（依賴限制）｜source-inspected | CAP-01／02；#436 規則 |
 | SN-K2 | perception core | 01、03、05、09 | — | 根 CMake `saccade_perception` | `src/perception/trt_engine.cpp` 自 ledger baseline 起有變動（#549 S2-2），由 S-SHIP 實作狀態擁有 | observed as-is｜source-inspected | CAP-01／03；#549 |
-| SN-K3 | pybind 擴充 | 02、03、05；08-03 | ADR 025、[install matrix](../reference/runbooks/native_extension_install.md) | 根 CMake `pybind11_add_module`：`saccade_tracking_ext`、`saccade_eval_ext`（兩者在 `SACCADE_WITH_OPENCV` 下建置並連結 `saccade_opencv_host`）、`saccade_perception_ext`、`saccade_media_ext`、`saccade_cheb_gr_online_ext` | consumer venv 建置；`pip install` 只有 stub | 逐 extension 分開：`saccade_tracking_ext` 的 delivery 為 accepted＋implemented（ADR 025 只涵蓋 tracker delivery）；其他 extension 為 observed as-is，REQ-08-03 `undecided`｜原契約 | CAP-02、08；#441 |
+| SN-K3 | pybind 擴充 | 02、03、05；08-03 | ADR 025、[install matrix](../reference/runbooks/native_extension_install.md) | 根 CMake `pybind11_add_module`（shared module，連結 CORE 的 static library；SE-41、SE-42、SE-51、SE-52）：`saccade_tracking_ext`、`saccade_eval_ext`（兩者在 `SACCADE_WITH_OPENCV` 下建置並連結 `saccade_opencv_host`）、`saccade_perception_ext`、`saccade_media_ext`、`saccade_cheb_gr_online_ext` | consumer venv 建置；`pip install` 只有 stub | 逐 extension 分開：`saccade_tracking_ext` 的 delivery 為 accepted＋implemented（ADR 025 只涵蓋 tracker delivery）；其他 extension 為 observed as-is，REQ-08-03 `undecided`｜原契約 | CAP-02、08；#441 |
+| SN-K4 | media core | 05 | — | 根 CMake `saccade_media`（連結 `saccade_perception`、GStreamer） | 只經 `saccade_media_ext` 進 Python；`MediaMTXClient` 預設不走，需 `SACCADE_MEDIA_USE_CPP=1`；`saccade_node` 也連結它 | observed as-is｜source-inspected | CAP-05；#539 |
+| SN-K5 | 輔助 static library | 01、03、09 | — | 根 CMake `saccade_tracker_params`（`saccade_tracking` 與 shipping config 共用的參數 store，純 C++）；`saccade_opencv_host`、`saccade_eval_runner`（只在 `SACCADE_WITH_OPENCV` 下建置） | `opencv_host` 承接從 perception／tracking 拆出的 OpenCV CPU 路徑，`eval_runner` 是 `--cpp-threads` 背後的 C++ runner（#465 PR-11） | observed as-is｜source-inspected | CAP-01、03 |
 | SN-X1～X5 | 外部依賴 | — | — | — | 版本／環境見各契約；Redis／Chroma／MediaMTX 的部署 `unknown` | 外部 | — |
 
 ### 4.2 邊
@@ -261,6 +270,7 @@ Evidence 欄只放 pointer，不代表在本 baseline 重新驗證過。驗證�
 | SE-17 | X4→ON2 | RTSP → MediaMTXClient；8stream 明確傳入各 stream URL；`main.py` 未選 DALI 時交由 client 選路，可能使用預設 RTSP（§3） | 05-01 | 兩個 entrypoint 的來源選路不同；runtime 未驗證 |
 | SE-49 | D2→ON2 | 本地影片 → DALIMediaClient；`main.py` 以 `os.path.isfile(source_url)` 選路（§3） | 05-01 | DALI 分支的 `watchdog_loop()` 缺口見 SN-ON2 |
 | SE-19 | ON2→ON3 | ingest frame 經 producer 呼叫 `put_frame` → `asyncio.Queue(maxsize=100)`（AsyncDispatcher）；WorkbenchPool 的每 stream `queue.Queue(maxsize=4)` 沒有可達的 in-tree 入口 | 05-01 | drop／backpressure 政策未選 |
+| SE-50 | ON1→ON4 | `main.py run_perception` 在 `TRTFeatureExtractor` 可載入時建立 `EmbeddingDispatcher` 並 `start()` consumer thread，同一 extractor 也傳給 `AsyncDispatcher`；載入失敗則退回 IoU-only | 06-01 | consumer 起來但沒有 crop producer（SE-21）；生命週期歸 #538、#539 |
 | SE-18 | ON1→ON3 | 建立 dispatcher 並 `await start()` | 05-02 | stop／partial-start 語義未選（E05） |
 | SE-20 | ON3→K3 | AsyncDispatcher 直接 import native `GPUByteTracker`；WorkbenchPool 經 Workbench ext 與 facade | 02-04 | 見 §5 B0-F02 |
 | SE-21 | ON3⇢ON4 | ✗ 線上入口（`main.py`、8stream、AsyncDispatcher）沒有呼叫 `submit`／`put_crops`；只有 `scripts/benchmarks/` 的合成呼叫 | 05、06-01 | E05；gap，未執行 |
@@ -278,8 +288,8 @@ Evidence 欄只放 pointer，不代表在本 baseline 重新驗證過。驗證�
 | SE-35 | BX3⇒SH1 | tarball＋MANIFEST → `install.sh` → installed tree | 01-02 | S-SHIP `L-07`、`L-08`；公開發行未批准（#547） |
 | SE-36 | BX3⇒K3 | 在 consumer venv 建 extension | 08-03 | ADR 025 |
 | SE-37、SE-38 | SH4／EV5→RD2 | 離線讀檔比對 | 04-01 | 比對結果的 admissibility 歸原 research owner |
-| SE-39～SE-44 | CORE⇒SH3／K3／RD1／RD3 | static link（build 期）；每個 binary 各自一份。RD1 經 shipping 函式庫的 `_measurement` 變體連結 core；RD3 連結 core 但未使用 tracker | 01、02、04、09 | 同 source 不代表同 runtime 狀態或同參數來源 |
-| SE-45 | CORE→X1 | CUDA runtime、TensorRT、cuFFT | — | 版本 pin 見 #465／#549 契約 |
+| SE-39～SE-44、SE-51、SE-52 | CORE⇒SH3／K3／RD1／RD3 | static link（build 期）：把 static library 連進各 native 執行檔與各 extension `.so`，每個連結產物各自一份；K3 本身是 shared module，不屬 CORE。SE-51：`saccade_media` → `saccade_media_ext`；SE-52：`saccade_opencv_host` → `saccade_tracking_ext`／`saccade_eval_ext`，`saccade_eval_runner` → `saccade_eval_ext`。RD1 經 shipping 函式庫的 `_measurement` 變體連結 core；RD3 連結 core 但未使用 tracker | 01、02、04、09 | 同 source 不代表同 runtime 狀態或同參數來源 |
+| SE-45 | CORE→X1 | CUDA runtime；cuFFT（`saccade_tracking`、`saccade_perception`）；TensorRT＋LibTorch（`saccade_perception`） | — | 版本 pin 見 #465／#549 契約 |
 
 ## 5. 設計說明
 
@@ -289,7 +299,7 @@ Evidence 欄只放 pointer，不代表在本 baseline 重新驗證過。驗證�
 
 | ID | 邊界 | 理由與需求 | 設計｜執行點 |
 |:--|:--|:--|:--|
-| B0-D01 | profiles 區分使用入口與執行情境；process 邊界依 entrypoint／啟動模式判定，可共用 native source、Python 模組與 build 期產物（process 內呼叫見 B0-D07） | 各 profile 的使用者、輸入與支持義務不同（#535 CAP 表）；S-SHIP 的保證不外推到其他路徑（S-SHIP 總圖「為什麼這樣分」） | observed as-is｜S-SHIP 範圍內為 accepted |
+| B0-D01 | profiles 區分使用入口與執行情境；process 邊界依 entrypoint／啟動模式判定，可共用 native source、Python 模組與 build 期產物（process 內呼叫見 B0-D07） | 各 profile 的使用者、輸入與支持義務不同（#535 CAP 表）；S-SHIP 的保證不外推到其他路徑（S-SHIP／S-EXPORT 展開圖「為什麼這樣分」） | observed as-is｜S-SHIP 範圍內為 accepted |
 | B0-D02 | shipping 是單一 native process，不載入 Python、不讀 env 參數 | #465 shipping boundary；REQ-535-01-01／01-02 | accepted＋implemented｜[config loader sources test](../../tests/unit/test_shipping_config_loader_sources.py)、loader auditor、measurement 隔離 test |
 | B0-D03 | tracker core（SN-K1）不連結 perception 或 OpenCV | shipping runtime 連結它，不能經它帶入 perception／OpenCV（#465 PR-11） | implemented｜根 CMake configure 時 `FATAL_ERROR` |
 | B0-D04 | S-EXPORT／S-SHIP 的建置與模型交付邊界以檔案傳遞：preset → resolved config、checkpoint → export → attestation → package；eval／public-library 的 process 內共用模組與直接呼叫見 B0-D07、SE-13、SE-46／47 | CC-536-08-02 已核准 export → shipping 的接受條件；REQ-535-08-02 | S-EXPORT 為 accepted＋implemented｜其他交付 observed as-is |
