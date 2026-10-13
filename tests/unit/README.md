@@ -24,6 +24,7 @@
 | `test_native_head_parity_runner.py` | system | contract | active | The #465 PR-2 head parity runner implements its frozen declaration. |
 | `test_native_head_parity_tf32_off_runner.py` | system | contract | active | The #465 PR-2R runner is PR-2's gate with only the TF32-off head swapped in. |
 | `test_native_ingest_oracle_pins.py` | system | contract | active | Oracle pins for the native ingest (#465 Phase B PR-7, U3b-1). |
+| `test_native_missing_observed_537.py` | perception,tracking | diagnostic | active | #537 C0: pin what the tracker paths do when the native extension is missing. |
 | `test_native_track_oracle_pins.py` | system | contract | active | Oracle pins for the native end-to-end serial runtime (#465 Phase B PR-9). |
 | `test_native_track_parity.py` | system | contract | active | ``native_track_parity.py`` comparators on synthetic inputs (#465 PR-9, PR-10). |
 | `test_package_signature.py` | system | contract | active | The minisign signature of the package digest (#465 PR-C4). |
@@ -34,6 +35,7 @@
 | `test_resctl.py` | system | contract | active | Fail-closed contracts for tools/resctl.py, the cross-worktree resource lease CLI. |
 | `test_resolved_bridge_policy_config.py` | system | contract | active | Pin the resolved-config fingerprints the H0 declaration freezes. |
 | `test_resolved_shipping_config.py` | system | contract | active | The headline resolved shipping config equals what the Python oracle uses. |
+| `test_resource_degradation_observed_537.py` | resource | diagnostic | active | #537 C0: pin the observed resource degradation / VRAM-level SHM behavior. |
 | `test_saccade_track_completion_cli.py` | system | contract | active | ``saccade_track`` run completion at the real entrypoint, without a GPU (#536). |
 | `test_saccade_track_model_bundle_cli.py` | system | contract | active | ``saccade_track --model-bundle`` at the built entrypoints (#549 S2-1). |
 | `test_saccade_track_preflight_cli.py` | system | contract | active | ``saccade_track`` Gate A at the built entrypoint: refusals make no CUDA call (#536). |
