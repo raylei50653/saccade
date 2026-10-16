@@ -79,11 +79,20 @@ def spawn(shm_name: str) -> Iterator[Spawn]:
 
 
 def _wait_line(proc: subprocess.Popen[str], expected: str) -> None:
+    """Read one line byte by byte under a single deadline (never blocks past it)."""
     assert proc.stdout is not None
-    ready, _, _ = select.select([proc.stdout], [], [], TIMEOUT_S)
-    assert ready, f"child gave no output within {TIMEOUT_S}s"
-    line = proc.stdout.readline().strip()
-    assert line == expected, line
+    fd = proc.stdout.fileno()
+    deadline = time.monotonic() + TIMEOUT_S
+    line = b""
+    while not line.endswith(b"\n"):
+        remaining = deadline - time.monotonic()
+        assert remaining > 0, f"no full line within {TIMEOUT_S}s: {line!r}"
+        ready, _, _ = select.select([fd], [], [], remaining)
+        if ready:
+            chunk = os.read(fd, 1)
+            assert chunk, f"child closed stdout: {line!r}"
+            line += chunk
+    assert line.decode().strip() == expected, line
 
 
 def _kill_group(proc: subprocess.Popen[str]) -> None:

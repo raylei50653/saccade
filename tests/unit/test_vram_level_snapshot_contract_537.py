@@ -15,6 +15,8 @@ from __future__ import annotations
 import asyncio
 import os
 import struct
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Iterator
@@ -145,9 +147,26 @@ def test_non_regular_file_is_invalid(shm_name: str) -> None:
 
 
 def test_fifo_at_the_name_is_invalid_without_blocking(shm_name: str) -> None:
+    """Read in a child so a blocking regression fails instead of hanging pytest."""
     os.mkfifo(_path(shm_name))  # no writer peer: a blocking open would hang
-    snap = _reader().read_snapshot()
-    assert (snap.status, snap.reason) == (S.INVALID, "not a regular file")
+    code = (
+        "import saccade.resource.resource_manager as rm\n"
+        f"rm._SHM_NAME = {shm_name!r}\n"
+        "s = rm.VRAMLevelReader().read_snapshot()\n"
+        "print(s.status.value, s.reason)\n"
+    )
+    child = subprocess.Popen(
+        [sys.executable, "-c", code], stdout=subprocess.PIPE, text=True
+    )
+    try:
+        out, _ = child.communicate(timeout=30)
+    except subprocess.TimeoutExpired:
+        pytest.fail("reader blocked on a FIFO")
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.communicate()
+    assert out.strip() == "invalid not a regular file"
 
 
 def test_crc_covers_every_byte_but_its_own_field() -> None:
