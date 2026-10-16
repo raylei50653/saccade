@@ -16,7 +16,6 @@ import asyncio
 import os
 import struct
 import time
-import zlib
 from pathlib import Path
 from typing import Iterator
 from unittest import mock
@@ -63,8 +62,17 @@ def _record(
 ) -> bytes:
     fmt = rm._SNAPSHOT
     if crc is None:
-        crc = zlib.crc32(fmt.pack(level, version, 0, generation, decided_at_ns))
+        crc = rm._record_crc(fmt.pack(level, version, 0, generation, decided_at_ns))
     return fmt.pack(level, version, crc, generation, decided_at_ns)
+
+
+def _padded(record: bytes) -> bytes:
+    """Same record (and CRC field) with a nonzero reserved byte."""
+    return record[:2] + b"\x01" + record[3:]
+
+
+def _files(name: str) -> list[str]:
+    return sorted(p.name for p in Path(rm._SHM_DIR).glob(f"{name}*"))
 
 
 # ── V1-V4: status of a well-formed lifecycle ────────────────────────────────
@@ -113,11 +121,12 @@ def test_future_timestamp_is_invalid(shm_name: str) -> None:
         (_record(level=7), "level 7"),
         (_record(version=2), "version 2"),
         (_record(crc=1), "crc"),
+        (_padded(_record()), "padding"),
         (bytes([3]), "size 1"),  # legacy 1-byte segment
         (b"", "size 0"),  # writer died between create and size
         (_record() + b"\0", "size 25"),
     ],
-    ids=["level", "version", "crc", "legacy-1-byte", "empty", "oversized"],
+    ids=["level", "version", "crc", "padding", "legacy-1-byte", "empty", "oversized"],
 )
 def test_v5_v6_malformed_record_is_invalid(
     shm_name: str, payload: bytes, reason: str
@@ -135,21 +144,41 @@ def test_non_regular_file_is_invalid(shm_name: str) -> None:
         _path(shm_name).rmdir()
 
 
+def test_fifo_at_the_name_is_invalid_without_blocking(shm_name: str) -> None:
+    os.mkfifo(_path(shm_name))  # no writer peer: a blocking open would hang
+    snap = _reader().read_snapshot()
+    assert (snap.status, snap.reason) == (S.INVALID, "not a regular file")
+
+
+def test_crc_covers_every_byte_but_its_own_field() -> None:
+    record = _record()
+    for i in [*range(0, 4), *range(8, 24)]:
+        flipped = bytearray(record)
+        flipped[i] ^= 0x80
+        assert rm._record_crc(bytes(flipped)) != rm._record_crc(record), i
+
+
 def test_reader_never_raises(shm_name: str) -> None:
-    with mock.patch.object(rm.os, "pread", side_effect=RuntimeError("boom")):
+    with mock.patch.object(os, "pread", side_effect=RuntimeError("boom")):
         _path(shm_name).write_bytes(_record())
         snap = _reader().read_snapshot()
     assert (snap.status, snap.reason) == (S.INVALID, "unexpected RuntimeError")
 
 
 # ── V7, restart and recovery ─────────────────────────────────────────────────
-def test_v7_writer_close_reads_missing(shm_name: str) -> None:
+def test_v7_writer_close_retires_its_level(shm_name: str) -> None:
     writer = VRAMLevelWriter()
-    writer.write(L.REDUCED, NOW)
+    writer.write(L.EMERGENCY, NOW)
     writer.close()
     writer.close()  # idempotent
-    assert _reader().read_snapshot().status is S.MISSING
-    assert list(Path(rm._SHM_DIR).glob(f"{shm_name}*")) == []
+    snap = _reader().read_snapshot()
+    assert (snap.status, snap.level, snap.generation) == (
+        S.STALE,
+        None,
+        writer.generation,
+    )
+    assert _files(shm_name) == [shm_name]  # no temp left; name kept
+    assert writer.write(L.NORMAL, NOW) is False  # closed writer publishes nothing
 
 
 def test_closing_predecessor_keeps_successor_snapshot(shm_name: str) -> None:
@@ -162,6 +191,42 @@ def test_closing_predecessor_keeps_successor_snapshot(shm_name: str) -> None:
         assert (snap.status, snap.level, snap.generation) == (
             S.FRESH,
             L.NORMAL,
+            new.generation,
+        )
+    finally:
+        new.close()
+
+
+def test_close_racing_a_successor_never_leaves_it_missing_or_wrong(
+    shm_name: str,
+) -> None:
+    """A successor publishes between the predecessor's ownership check and its
+    retirement record (two live writers, unsupported): the successor reads
+    STALE until its next decision, never MISSING and never a wrong level."""
+    old = VRAMLevelWriter()
+    old.write(L.EMERGENCY, NOW)
+    successor: list[VRAMLevelWriter] = []
+    owns = old._owns_public_snapshot
+
+    def check_then_successor_publishes() -> bool:
+        result = owns()
+        successor.append(VRAMLevelWriter())
+        successor[0].write(L.NORMAL, NOW)
+        return result
+
+    with mock.patch.object(
+        old, "_owns_public_snapshot", check_then_successor_publishes
+    ):
+        old.close()
+    new = successor[0]
+    try:
+        snap = _reader().read_snapshot()
+        assert (snap.status, snap.level) == (S.STALE, None)
+        new.write(L.REDUCED, NOW)
+        snap = _reader().read_snapshot()
+        assert (snap.status, snap.level, snap.generation) == (
+            S.FRESH,
+            L.REDUCED,
             new.generation,
         )
     finally:
@@ -184,7 +249,7 @@ def test_restart_replaces_leftover_level_on_same_reader(shm_name: str) -> None:
                 level,
                 writer.generation,
             )
-    assert reader.read_snapshot().status is S.MISSING
+    assert reader.read_snapshot().status is S.STALE  # closed: level retired
 
 
 def test_writer_recovers_from_zero_byte_leftover_and_orphan_temps(
@@ -214,7 +279,7 @@ def test_v11_repeated_restarts(shm_name: str) -> None:
             assert (snap.status, snap.level) == (S.FRESH, L(i % 4))
             generations.add(snap.generation)
     assert len(generations) == 20
-    assert list(Path(rm._SHM_DIR).glob(f"{shm_name}*")) == []
+    assert _files(shm_name) == [shm_name]
 
 
 # ── writer API ───────────────────────────────────────────────────────────────
@@ -227,14 +292,37 @@ def test_write_rejects_missing_timestamp_and_bad_level(shm_name: str) -> None:
         assert _reader().read_snapshot().status is S.STALE
 
 
-def test_failed_publish_keeps_previous_snapshot(shm_name: str) -> None:
+@pytest.mark.parametrize(
+    "phase",
+    ["open", "write-error", "short-write", "close", "rename"],
+)
+def test_interrupted_publish_keeps_previous_snapshot(shm_name: str, phase: str) -> None:
+    """Each publication phase fails in turn: readers keep the last complete
+    record, no temp file is left, and the next publication succeeds."""
+    real_close = os.close
+    patches = {
+        "open": mock.patch.object(os, "open", side_effect=OSError("EMFILE")),
+        "write-error": mock.patch.object(os, "write", side_effect=OSError("EIO")),
+        "short-write": mock.patch.object(os, "write", return_value=3),
+        "close": mock.patch.object(
+            os,
+            "close",
+            side_effect=lambda fd: (
+                real_close(fd),
+                (_ for _ in ()).throw(OSError("EIO")),
+            ),
+        ),
+        "rename": mock.patch.object(os, "replace", side_effect=OSError("ENOSPC")),
+    }
     with VRAMLevelWriter() as writer:
         writer.write(L.REDUCED, NOW)
-        with mock.patch.object(rm.os, "replace", side_effect=OSError("ENOSPC")):
+        with patches[phase]:
             assert writer.write(L.EMERGENCY, NOW) is False
-        assert _reader().read_snapshot().level is L.REDUCED
-        assert not Path(writer._tmp).exists()
+        snap = _reader().read_snapshot()
+        assert (snap.status, snap.level) == (S.FRESH, L.REDUCED)
+        assert _files(shm_name) == [shm_name]
         assert writer.write(L.NORMAL, NOW) is True
+        assert _reader().read_snapshot().level is L.NORMAL
 
 
 def test_clock_is_boottime() -> None:

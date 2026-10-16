@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import ast
 import os
-import zlib
 from pathlib import Path
 from typing import Iterator
 from unittest import mock
@@ -147,7 +146,7 @@ def test_c3_reader_follows_writer_created_later(shm_name: str) -> None:
 def test_c3_out_of_range_level_is_invalid_not_raised(shm_name: str) -> None:
     fmt = rm._SNAPSHOT
     stamp = vram_level_clock_ns()
-    crc = zlib.crc32(fmt.pack(7, 1, 0, 1, stamp))
+    crc = rm._record_crc(fmt.pack(7, 1, 0, 1, stamp))
     (Path(rm._SHM_DIR) / shm_name).write_bytes(fmt.pack(7, 1, crc, 1, stamp))
     snap = _now_reader().read_snapshot()
     assert (snap.status, snap.level, snap.reason) == (
@@ -171,8 +170,8 @@ def test_b0_f07_reader_built_before_writer_restart_follows_new_writer(
             writer.write(level, vram_level_clock_ns())
             assert reader.read_snapshot().level is level
 
-    # After the writer stops, the same reader reports no snapshot.
-    assert reader.read_snapshot().status is VRAMReadStatus.MISSING
+    # After the writer stops, the same reader no longer sees a usable level.
+    assert reader.read_snapshot().status is VRAMReadStatus.STALE
 
 
 def test_b0_f07_full_mode_builds_orchestrator_before_dispatcher_start() -> None:

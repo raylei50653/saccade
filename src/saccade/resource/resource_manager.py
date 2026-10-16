@@ -128,10 +128,12 @@ class ResourceManager:
 # Freshness means "this level was decided at most max_age_ns ago" on
 # CLOCK_BOOTTIME (which keeps counting through suspend). Reader and writer must
 # share a time namespace. The record has no meaning across mixed old/new
-# versions: stop both sides before upgrading or rolling back.
+# versions: stop both sides (and their resource_tracker helpers) before
+# upgrading or rolling back.
 _SHM_DIR = "/dev/shm"
 _SHM_NAME = "saccade_vram_level"
-# level, version, pad, crc32 (of the record with crc=0), generation, decided_at_ns
+# level, version, pad (zero), crc32 (of all 24 bytes with this field zeroed),
+# generation, decided_at_ns
 _SNAPSHOT = struct.Struct("<BB2xIQQ")
 _SNAPSHOT_SIZE = _SNAPSHOT.size
 _SNAPSHOT_VERSION = 1
@@ -148,9 +150,13 @@ def _snapshot_path() -> str:
     return os.path.join(_SHM_DIR, _SHM_NAME)
 
 
+def _record_crc(record: bytes) -> int:
+    return zlib.crc32(record[:4] + b"\0\0\0\0" + record[8:])
+
+
 def _pack_snapshot(level: int, generation: int, decided_at_ns: int) -> bytes:
     unsigned = _SNAPSHOT.pack(level, _SNAPSHOT_VERSION, 0, generation, decided_at_ns)
-    crc = zlib.crc32(unsigned)
+    crc = _record_crc(unsigned)
     return _SNAPSHOT.pack(level, _SNAPSHOT_VERSION, crc, generation, decided_at_ns)
 
 
@@ -221,14 +227,26 @@ class VRAMLevelWriter:
             raise
 
     def close(self) -> None:
-        """Remove the public snapshot if it is still this writer's."""
+        """Retire this writer: replace its own snapshot with a no-decision record.
+
+        The public name is never removed. If a successor publishes between the
+        ownership check and the replacement (two live writers, unsupported),
+        its snapshot reads STALE until its next decision: never MISSING and
+        never a wrong FRESH level."""
         if self._closed:
             return
-        self._closed = True
-        _unlink_quietly(self._tmp)
+        try:
+            if self._owns_public_snapshot():
+                self._publish(_pack_snapshot(0, self.generation, 0))
+        except OSError:
+            pass
+        finally:
+            self._closed = True
+            _unlink_quietly(self._tmp)
+
+    def _owns_public_snapshot(self) -> bool:
         snapshot = VRAMLevelReader(max_age_ns=0).read_snapshot()
-        if snapshot.generation == self.generation:
-            _unlink_quietly(self._path)
+        return snapshot.generation == self.generation
 
     def __enter__(self) -> "VRAMLevelWriter":
         return self
@@ -259,7 +277,11 @@ class VRAMLevelReader:
 
     def _read(self) -> VRAMLevelSnapshot:
         try:
-            fd = os.open(_snapshot_path(), os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+            # O_NONBLOCK: a FIFO planted at the name must not block the loop.
+            fd = os.open(
+                _snapshot_path(),
+                os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+            )
         except FileNotFoundError:
             return VRAMLevelSnapshot(VRAMReadStatus.MISSING, None, reason="no snapshot")
         except OSError as e:
@@ -284,9 +306,9 @@ class VRAMLevelReader:
             return VRAMLevelSnapshot(
                 VRAMReadStatus.INVALID, None, reason=f"version {version}"
             )
-        if crc != zlib.crc32(
-            _SNAPSHOT.pack(level, version, 0, generation, decided_at_ns)
-        ):
+        if data[2:4] != b"\0\0":
+            return VRAMLevelSnapshot(VRAMReadStatus.INVALID, None, reason="padding")
+        if crc != _record_crc(data):
             return VRAMLevelSnapshot(VRAMReadStatus.INVALID, None, reason="crc")
         if level > DegradationLevel.EMERGENCY:
             return VRAMLevelSnapshot(

@@ -18,8 +18,8 @@
 |---|---|
 | **Pipeline stage** | 橫切（cross-cutting，VRAM 廣播）；見 [pipeline_flow.md](../../reference/pipeline_flow.md) §4.3 |
 | **輸入** | `pynvml` VRAM 佔用 % |
-| **輸出** | `DegradationLevel` 快照與決策時間（`/dev/shm/saccade_vram_level`，見 §6 契約）→ 各模組 reader |
-| **上游 → 下游** | `pynvml → ResourceManager (hysteresis) → VRAMLevelWriter(/dev/shm 快照) → reid / cognition / streaming readers` |
+| **輸出** | `DegradationLevel` 快照與決策時間（`/dev/shm/saccade_vram_level`，見 §6 契約）→ cognition orchestrator（目前唯一的 reader） |
+| **上游 → 下游** | `pynvml → ResourceManager (hysteresis) → VRAMLevelWriter(/dev/shm 快照) → cognition orchestrator`（目前唯一的 reader） |
 
 ## ⚖️ GO / NO-GO 決策
 

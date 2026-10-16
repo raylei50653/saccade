@@ -79,8 +79,8 @@ class Harness:
         async def rag(query: str) -> None:
             self.rag.append(query)
 
-        orchestrator.memory_store.add_memory = add_memory  # type: ignore[method-assign]
-        orchestrator.redis_cache.acknowledge = acknowledge  # type: ignore[method-assign]
+        orchestrator.memory_store.add_memory = add_memory  # type: ignore[method-assign,assignment]
+        orchestrator.redis_cache.acknowledge = acknowledge  # type: ignore[method-assign,assignment]
         orchestrator._trigger_rag_analysis = rag  # type: ignore[method-assign]
 
     def step(
