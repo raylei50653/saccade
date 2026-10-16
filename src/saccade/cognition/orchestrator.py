@@ -5,7 +5,12 @@ from typing import Dict, Any, List, Tuple, Optional, Set
 from saccade.storage.chroma_store import ChromaStore
 from saccade.storage.redis_cache import RedisCache
 from saccade.pipeline.health import HealthChecker, render
-from saccade.resource.resource_manager import DegradationLevel, VRAMLevelReader
+from saccade.resource.resource_manager import (
+    DegradationLevel,
+    VRAMLevelReader,
+    VRAMLevelSnapshot,
+    VRAMReadStatus,
+)
 from dotenv import load_dotenv
 
 # LlamaIndex 整合
@@ -36,6 +41,10 @@ class PipelineOrchestrator:
         self.redis_cache = RedisCache()
         self.memory_store = ChromaStore()
         self._vram_reader = VRAMLevelReader()
+        self._vram_last_status: Optional[VRAMReadStatus] = None
+        # Events counted per handled event: shed = dropped under a FRESH
+        # EMERGENCY; unknown = handled while the level was not FRESH.
+        self._vram_counters: Dict[str, int] = {"shed_events": 0, "unknown_events": 0}
 
         # 由於拔除 VLM，並發控制只需限制資料庫寫入頻率
         self.semaphore = asyncio.Semaphore(32)
@@ -160,6 +169,27 @@ class PipelineOrchestrator:
         except Exception as e:
             print(f"❌ [RAG Agent Error] {e}")
 
+    def vram_policy_stats(self) -> Dict[str, Any]:
+        """Counters of the VRAM-level consumer policy (#537 B0-F07)."""
+        last = self._vram_last_status
+        return {**self._vram_counters, "last_status": last.value if last else None}
+
+    def _read_vram_snapshot(self) -> VRAMLevelSnapshot:
+        try:
+            snapshot = self._vram_reader.read_snapshot()
+        except Exception as e:  # defensive: a read must not abort the batch
+            snapshot = VRAMLevelSnapshot(
+                VRAMReadStatus.INVALID, None, reason=f"reader raised {type(e).__name__}"
+            )
+        if snapshot.status is not self._vram_last_status:
+            prev = self._vram_last_status.value if self._vram_last_status else "none"
+            print(
+                f"[Orchestrator] VRAM level status {prev} -> {snapshot.status.value}"
+                f" ({snapshot.reason or snapshot.level}); {self._vram_counters}"
+            )
+            self._vram_last_status = snapshot.status
+        return snapshot
+
     async def handle_cognitive_event(self, event_data: Dict[str, Any]) -> None:
         """處理 YOLO 觸發的事件並持久化"""
         async with self.semaphore:
@@ -175,12 +205,18 @@ class PipelineOrchestrator:
             risk_objects = {"knife", "gun", "fire", "smoke", "accident"}
             is_anomaly = any(obj.lower() in risk_objects for obj in yolo_objects)
 
-            # 3. VRAM 壓力感知：依降級等級決定要做多少工作
-            vram_level = self._vram_reader.read()
-            if vram_level >= DegradationLevel.EMERGENCY and not is_anomaly:
-                # VRAM >96%：只保留異常事件，普通 frame 直接丟棄
-                return
-            skip_rag = vram_level >= DegradationLevel.FAST_PATH
+            # 3. VRAM 壓力感知：只有 FRESH 的等級能卸載事件
+            snapshot = self._read_vram_snapshot()
+            if snapshot.status is VRAMReadStatus.FRESH and snapshot.level is not None:
+                if snapshot.level >= DegradationLevel.EMERGENCY and not is_anomaly:
+                    # VRAM >96%：只保留異常事件，普通 frame 刻意卸載
+                    self._vram_counters["shed_events"] += 1
+                    return
+                skip_rag = snapshot.level >= DegradationLevel.FAST_PATH
+            else:
+                # 等級未知：嘗試持久化全部事件，不啟動新的 RAG
+                self._vram_counters["unknown_events"] += 1
+                skip_rag = True
 
             # 4. 寫入 ChromaDB
             try:
@@ -252,7 +288,6 @@ class PipelineOrchestrator:
             await self.start_cognition_loop()
         finally:
             await self.redis_cache.disconnect()
-            self._vram_reader.close()
 
 
 async def main() -> None:

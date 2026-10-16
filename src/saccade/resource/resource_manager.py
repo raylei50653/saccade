@@ -1,8 +1,14 @@
-import pynvml
+import os
+import secrets
+import stat
+import struct
+import time
+import zlib
 from dataclasses import dataclass
-from enum import IntEnum
-from multiprocessing.shared_memory import SharedMemory
-from typing import Optional
+from enum import Enum, IntEnum
+from typing import Callable, Optional
+
+import pynvml
 
 
 class DegradationLevel(IntEnum):
@@ -110,30 +116,119 @@ class ResourceManager:
             pynvml.nvmlShutdown()
 
 
+# ── VRAM-level snapshot (#537 B0-F07) ────────────────────────────────────────
+# The writer publishes each snapshot as a complete small file under /dev/shm:
+# write a private temp file, then rename() it over the public name. A reader
+# opens the name, preads the whole record and closes it, so every read sees
+# either the whole old snapshot or the whole new one, follows a restarted
+# writer on its next read, and holds nothing that could keep a dead inode alive.
+# No SharedMemory object is used on either side, so no resource_tracker can
+# unlink another process's snapshot.
+#
+# Freshness means "this level was decided at most max_age_ns ago" on
+# CLOCK_BOOTTIME (which keeps counting through suspend). Reader and writer must
+# share a time namespace. The record has no meaning across mixed old/new
+# versions: stop both sides before upgrading or rolling back.
+_SHM_DIR = "/dev/shm"
 _SHM_NAME = "saccade_vram_level"
-_SHM_SIZE = 1
+# level, version, pad, crc32 (of the record with crc=0), generation, decided_at_ns
+_SNAPSHOT = struct.Struct("<BB2xIQQ")
+_SNAPSHOT_SIZE = _SNAPSHOT.size
+_SNAPSHOT_VERSION = 1
+_TMP_INFIX = ".tmp."
+DEFAULT_VRAM_LEVEL_MAX_AGE_NS = 1_000_000_000
+
+
+def vram_level_clock_ns() -> int:
+    """The clock a VRAM-level decision is stamped with and aged against."""
+    return time.clock_gettime_ns(time.CLOCK_BOOTTIME)
+
+
+def _snapshot_path() -> str:
+    return os.path.join(_SHM_DIR, _SHM_NAME)
+
+
+def _pack_snapshot(level: int, generation: int, decided_at_ns: int) -> bytes:
+    unsigned = _SNAPSHOT.pack(level, _SNAPSHOT_VERSION, 0, generation, decided_at_ns)
+    crc = zlib.crc32(unsigned)
+    return _SNAPSHOT.pack(level, _SNAPSHOT_VERSION, crc, generation, decided_at_ns)
+
+
+class VRAMReadStatus(Enum):
+    FRESH = "fresh"  # valid record, decided within max_age_ns
+    STALE = "stale"  # valid record, but no decision yet or decided too long ago
+    MISSING = "missing"  # no published snapshot
+    INVALID = "invalid"  # unreadable, malformed, foreign version or future stamp
+
+
+@dataclass(frozen=True)
+class VRAMLevelSnapshot:
+    status: VRAMReadStatus
+    level: Optional[DegradationLevel]  # set only when status is FRESH
+    generation: Optional[int] = None
+    age_ns: Optional[int] = None
+    reason: str = ""
 
 
 class VRAMLevelWriter:
-    """Dispatcher 端：建立具名 shared memory 並廣播目前降級等級。"""
+    """Dispatcher 端：以原子 rename 發佈降級等級快照（單一 writer）。"""
 
     def __init__(self) -> None:
-        try:
-            self._shm = SharedMemory(name=_SHM_NAME, create=True, size=_SHM_SIZE)
-        except FileExistsError:
-            stale = SharedMemory(name=_SHM_NAME, create=False, size=_SHM_SIZE)
-            stale.close()
-            stale.unlink()
-            self._shm = SharedMemory(name=_SHM_NAME, create=True, size=_SHM_SIZE)
-        self._shm.buf[0] = 0  # type: ignore[index]
+        self._path = _snapshot_path()
+        self.generation = secrets.randbits(63) | 1
+        self._tmp = f"{self._path}{_TMP_INFIX}{os.getpid()}.{self.generation:x}"
+        self._closed = False
+        self._write_failed = False
+        _remove_orphan_temps(self._path)
+        # A valid record with no decision: readers see STALE, never a leftover
+        # level from a previous writer.
+        self._publish(_pack_snapshot(0, self.generation, 0))
 
-    def write(self, level: DegradationLevel) -> None:
-        self._shm.buf[0] = int(level)  # type: ignore[index]
+    def write(self, level: DegradationLevel, decided_at_ns: int) -> bool:
+        """Publish `level`, decided at `decided_at_ns` (`vram_level_clock_ns()`
+        read before the decision). Returns False if publication failed; readers
+        then age the previous snapshot into STALE."""
+        level = DegradationLevel(level)
+        if decided_at_ns <= 0:
+            raise ValueError(f"decided_at_ns must be positive, got {decided_at_ns}")
+        try:
+            self._publish(_pack_snapshot(int(level), self.generation, decided_at_ns))
+        except OSError as e:
+            if not self._write_failed:
+                print(f"⚠️ [VRAMLevelWriter] publish failed: {e}")
+            self._write_failed = True
+            return False
+        self._write_failed = False
+        return True
+
+    def _publish(self, record: bytes) -> None:
+        if self._closed:
+            raise OSError("VRAMLevelWriter is closed")
+        fd = os.open(
+            self._tmp,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+            0o600,
+        )
+        try:
+            try:
+                if os.write(fd, record) != len(record):
+                    raise OSError("short write")
+            finally:
+                os.close(fd)
+            os.replace(self._tmp, self._path)
+        except BaseException:
+            _unlink_quietly(self._tmp)
+            raise
 
     def close(self) -> None:
-        self._shm.buf.release()  # type: ignore[union-attr]
-        self._shm.close()
-        self._shm.unlink()
+        """Remove the public snapshot if it is still this writer's."""
+        if self._closed:
+            return
+        self._closed = True
+        _unlink_quietly(self._tmp)
+        snapshot = VRAMLevelReader(max_age_ns=0).read_snapshot()
+        if snapshot.generation == self.generation:
+            _unlink_quietly(self._path)
 
     def __enter__(self) -> "VRAMLevelWriter":
         return self
@@ -143,36 +238,104 @@ class VRAMLevelWriter:
 
 
 class VRAMLevelReader:
-    """Orchestrator 端：附掛 shared memory，讀取 dispatcher 廣播的降級等級。"""
+    """Orchestrator 端：每次讀取都依名稱開檔讀完整快照；不持有任何資源。"""
 
-    def __init__(self) -> None:
-        self._shm: Optional[SharedMemory] = None
-        self._attach()
+    def __init__(
+        self,
+        max_age_ns: int = DEFAULT_VRAM_LEVEL_MAX_AGE_NS,
+        clock: Callable[[], int] = vram_level_clock_ns,
+    ) -> None:
+        self._max_age_ns = max_age_ns
+        self._clock = clock
 
-    def _attach(self) -> None:
+    def read_snapshot(self) -> VRAMLevelSnapshot:
+        """Never raises: every failure is a non-FRESH status."""
         try:
-            self._shm = SharedMemory(name=_SHM_NAME, create=False, size=_SHM_SIZE)
+            return self._read()
+        except Exception as e:  # noqa: BLE001 - a read must not abort a batch
+            return VRAMLevelSnapshot(
+                VRAMReadStatus.INVALID, None, reason=f"unexpected {type(e).__name__}"
+            )
+
+    def _read(self) -> VRAMLevelSnapshot:
+        try:
+            fd = os.open(_snapshot_path(), os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
         except FileNotFoundError:
-            pass  # dispatcher not yet started; read() will return NORMAL
+            return VRAMLevelSnapshot(VRAMReadStatus.MISSING, None, reason="no snapshot")
+        except OSError as e:
+            return VRAMLevelSnapshot(
+                VRAMReadStatus.INVALID, None, reason=f"open {type(e).__name__}"
+            )
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                return VRAMLevelSnapshot(
+                    VRAMReadStatus.INVALID, None, reason="not a regular file"
+                )
+            data = os.pread(fd, _SNAPSHOT_SIZE + 1, 0)
+        finally:
+            os.close(fd)
 
-    def read(self) -> DegradationLevel:
-        if self._shm is None:
-            self._attach()
-        if self._shm is None:
-            return DegradationLevel.NORMAL
-        return DegradationLevel(self._shm.buf[0])  # type: ignore[index]
+        if len(data) != _SNAPSHOT_SIZE:
+            return VRAMLevelSnapshot(
+                VRAMReadStatus.INVALID, None, reason=f"size {len(data)}"
+            )
+        level, version, crc, generation, decided_at_ns = _SNAPSHOT.unpack(data)
+        if version != _SNAPSHOT_VERSION:
+            return VRAMLevelSnapshot(
+                VRAMReadStatus.INVALID, None, reason=f"version {version}"
+            )
+        if crc != zlib.crc32(
+            _SNAPSHOT.pack(level, version, 0, generation, decided_at_ns)
+        ):
+            return VRAMLevelSnapshot(VRAMReadStatus.INVALID, None, reason="crc")
+        if level > DegradationLevel.EMERGENCY:
+            return VRAMLevelSnapshot(
+                VRAMReadStatus.INVALID, None, generation, reason=f"level {level}"
+            )
+        if decided_at_ns == 0:
+            return VRAMLevelSnapshot(
+                VRAMReadStatus.STALE, None, generation, reason="no decision yet"
+            )
+        age_ns = self._clock() - decided_at_ns
+        if age_ns < 0:
+            return VRAMLevelSnapshot(
+                VRAMReadStatus.INVALID, None, generation, age_ns, "future timestamp"
+            )
+        if age_ns > self._max_age_ns:
+            return VRAMLevelSnapshot(
+                VRAMReadStatus.STALE, None, generation, age_ns, "expired"
+            )
+        return VRAMLevelSnapshot(
+            VRAMReadStatus.FRESH, DegradationLevel(level), generation, age_ns
+        )
 
-    def close(self) -> None:
-        if self._shm is not None:
-            self._shm.buf.release()  # type: ignore[union-attr]
-            self._shm.close()
-            self._shm = None
 
-    def __enter__(self) -> "VRAMLevelReader":
-        return self
+def _unlink_quietly(path: str) -> None:
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
 
-    def __exit__(self, *_: object) -> None:
-        self.close()
+
+def _remove_orphan_temps(path: str) -> None:
+    """Remove temp files left by writers that died between create and rename."""
+    prefix = os.path.basename(path) + _TMP_INFIX
+    try:
+        names = os.listdir(os.path.dirname(path))
+    except OSError:
+        return
+    for name in names:
+        if not name.startswith(prefix):
+            continue
+        pid_text = name[len(prefix) :].split(".", 1)[0]
+        try:
+            os.kill(int(pid_text), 0)
+            continue  # owner still alive
+        except ProcessLookupError:
+            pass
+        except (ValueError, PermissionError):
+            continue
+        _unlink_quietly(os.path.join(os.path.dirname(path), name))
 
 
 if __name__ == "__main__":

@@ -205,12 +205,13 @@ not the headline architecture.
 
 **VRAM 狀態同步（具名 shared memory）**
 
-`AsyncDispatcher`（perception 端；分開啟動時為獨立進程，見下段）持有 `VRAMLevelWriter`，每次 `decide_degradation_level()` 後將 `DegradationLevel`（0–3）寫入 POSIX named shared memory `saccade_vram_level`（1 byte）。`PipelineOrchestrator`（分開啟動時為獨立進程，見下段）持有 `VRAMLevelReader`，在每個 `handle_cognitive_event` 入口讀取：
+`AsyncDispatcher`（perception 端；分開啟動時為獨立進程，見下段）持有 `VRAMLevelWriter`，每次 `decide_degradation_level()` 後把 `DegradationLevel`（0–3）與決策開始時間寫成 `/dev/shm/saccade_vram_level` 的快照（寫暫存檔再 rename）。`PipelineOrchestrator`（分開啟動時為獨立進程，見下段）持有 `VRAMLevelReader`，在每個 `handle_cognitive_event` 入口重新讀取；只有 FRESH 的 level 會生效：
 
 - `FAST_PATH (>92%)`：跳過 RAG 分析（停止 HuggingFaceEmbedding GPU 呼叫）
 - `EMERGENCY (>96%)`：丟棄非異常 frame，不寫 ChromaDB
+- 不是 FRESH（STALE／MISSING／INVALID）：所有事件都嘗試寫入，不啟動新的 RAG
 
-分開以 `main.py --mode perception`／`--mode orchestrator` 啟動時，兩者是沒有共同父進程的兩個 process，所以用具名 shared memory 而非 `multiprocessing.Value`；`--mode full` 則在同一 process 的同一 event loop 跑兩者，level 仍經具名 segment 傳遞（見[系統總圖](system_overview_536.md#52-本次追查的發現) B0-F01、B0-F07）。Writer 啟動時會 unlink 前次崩潰留下的 stale segment 再重建；但 reader 只在尚未附掛時重新附掛，若它先附掛到舊 segment（`--mode full` 先建構 orchestrator 再執行 `dispatcher.start()`，或分開啟動時 orchestrator 先起），會一直讀舊 segment 的 level。舊 reader 這個行為已由 #537 C0 的無 GPU 測試重現；`--mode full` 的建構順序只經 source 判讀（B0-F07，見 [C0-08](failure_degradation_537.md#2-capabilityfailure-矩陣observed-as-is)）。Reader 找不到 segment 時 fallback 為 NORMAL，不阻塞（C0-06）。三階 hysteresis 的實際轉換和文件不一致，見 [§3 轉換表](failure_degradation_537.md#3-降級轉換表現況與已採納目標)。
+分開以 `main.py --mode perception`／`--mode orchestrator` 啟動時，兩者是沒有共同父進程的兩個 process，所以用 `/dev/shm` 下的具名快照而非 `multiprocessing.Value`；`--mode full` 則在同一 process 的同一 event loop 跑兩者，level 仍經同一份快照傳遞（見[系統總圖](system_overview_536.md#52-本次追查的發現) B0-F01）。修復前，reader 會一直附掛在舊 segment 上（B0-F07，[C0-08](failure_degradation_537.md#2-capabilityfailure-矩陣observed-as-is)）；修復後，reader 每次都依名稱重讀，writer 重啟後的下一次讀取就會跟上，找不到快照時讀為 MISSING 而不是 NORMAL（[C0 §7](failure_degradation_537.md#7-b0-f07-修復c0-060708-收斂)、[契約](../modules/resource/architecture_degradation.md#6-vram-level-跨程序快照契約537-b0-f07)）。三階 hysteresis 的實際轉換和文件不一致，見 [§3 轉換表](failure_degradation_537.md#3-降級轉換表現況與已採納目標)。
 
 **Dispatcher GPU Tracker LRU**
 
