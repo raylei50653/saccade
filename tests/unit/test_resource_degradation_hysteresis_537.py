@@ -130,7 +130,8 @@ def test_t5_oscillation_inside_deadband_is_stable(
 
 
 # ── T6: structural properties ───────────────────────────────────────────────
-GRID = [round(x * 0.1, 1) for x in range(1011)]  # 0.0 .. 101.0
+# Supported domain only; out-of-domain usage stays in T7 (O0, undecided).
+GRID = [round(x * 0.1, 1) for x in range(1001)]  # 0.0 .. 100.0
 
 
 @pytest.mark.parametrize("current", [N, R, F, E], ids=lambda c: c.name)
