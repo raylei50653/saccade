@@ -11,5 +11,6 @@
 | `test_multistream_mamba.py` | detection,perception,cross-module | contract | active | Integration tests for the multi-stream batched Mamba detector. |
 | `test_phase_b_parity.py` | eval,tracking,cross-module | contract | active | Phase B parity: C++ TrackletLifecycleMerger and IdentityResolver must produce byte-equal IDs, alias… |
 | `test_pipeline.py` | perception,cognition | behavior | active | Integration tests for the entropy-trigger + pipeline orchestrator event flow (perception.entropy + … |
+| `test_vram_level_snapshot_xproc_537.py` | resource | contract | active | #537 B0-F07: VRAM-level snapshot across real processes (no GPU). |
 
 <!-- END generated test index -->

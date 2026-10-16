@@ -27,6 +27,7 @@
 | `test_native_missing_observed_537.py` | perception,tracking | diagnostic | active | #537 C0: pin what the tracker paths do when the native extension is missing. |
 | `test_native_track_oracle_pins.py` | system | contract | active | Oracle pins for the native end-to-end serial runtime (#465 Phase B PR-9). |
 | `test_native_track_parity.py` | system | contract | active | ``native_track_parity.py`` comparators on synthetic inputs (#465 PR-9, PR-10). |
+| `test_orchestrator_vram_policy_537.py` | cognition,resource | behavior | active | #537 B0-F07: orchestrator consumer policy for VRAM-level snapshots. |
 | `test_package_signature.py` | system | contract | active | The minisign signature of the package digest (#465 PR-C4). |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
 | `test_post_detector_host_oracle_pins.py` | system | contract | active | Oracle pins for the native post-detector replay host (#465 Phase B PR-5, U3a). |
@@ -57,5 +58,6 @@
 | `test_tf32_off_head_drift_stage_runner.py` | system | contract | active | The TF32-off stage-localization runner implements its exploratory declaration. |
 | `test_tracker_block_divergence_465_r2_runner.py` | system | contract | active | The tracker block-divergence r2 runner implements its exploratory declaration. |
 | `test_tracker_block_divergence_465_runner.py` | system | contract | active | The tracker block-divergence runner implements its exploratory declaration. |
+| `test_vram_level_snapshot_contract_537.py` | resource | contract | active | #537 B0-F07: VRAM-level snapshot contract (rename-published record, stateless reader). |
 
 <!-- END generated test index -->

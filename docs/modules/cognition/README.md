@@ -9,7 +9,7 @@
   * 將 ChromaDB 包裝成 `ChromaVectorStore` 並加載 `ReActAgent`。
   * 註冊 **Visual Re-query 工具**：包裝成 `FunctionTool` 嵌入 `ReActAgent`，當 LLM 需要確認特徵時，可透過傳入的 `track_id` 主動檢索 ChromaDB 中的歷史視覺向量特徵。
 * **VRAM 壓力感知整合**：
-  * 通過 `VRAMLevelReader` 讀取具名共享記憶體。當為 `FAST_PATH` 狀態時跳過大模型 RAG 推理，僅做記憶寫入；當為 `EMERGENCY` 狀態時，非 anomaly 異常影格一律丟棄，不寫入 ChromaDB，保證顯存絕對安全。
+  * 每個事件都透過 `VRAMLevelReader.read_snapshot()` 讀取 dispatcher 發佈的降級快照。FRESH `FAST_PATH` 時不啟動新的 RAG，只寫入記憶；FRESH `EMERGENCY` 時刻意丟棄非 anomaly 事件（計入 `shed_events`）。level 不是 FRESH（STALE／MISSING／INVALID）時，所有事件都嘗試寫入、不啟動新的 RAG，並計入 `unknown_events`；計數器由 `vram_policy_stats()` 提供。這不保證不遺失資料，也不保證不使用 GPU，詳見 [resource 契約](../resource/architecture_degradation.md#6-vram-level-跨程序快照契約537-b0-f07)。
 
 ## 🔗 I/O & Dataflow
 

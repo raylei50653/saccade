@@ -5,7 +5,8 @@ what the code at the C0 baseline does, including behavior that the adopted
 target (D-537-2, docs/modules/resource/architecture_degradation.md §5) or
 REQ-535-07-01 says is wrong. A later fix PR changes the code and these
 expectations together; the matrix lives in
-docs/architecture/failure_degradation_537.md.
+docs/architecture/failure_degradation_537.md. The B0-F07 fix flipped the
+VRAM-level snapshot tests (C0-06/07/08) to the target semantics.
 """
 
 # scope: resource
@@ -16,7 +17,6 @@ from __future__ import annotations
 
 import ast
 import os
-from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Iterator
 from unittest import mock
@@ -30,7 +30,9 @@ from saccade.resource.resource_manager import (
     ResourceManager,
     VRAMLevelReader,
     VRAMLevelWriter,
+    VRAMReadStatus,
     VRAMStats,
+    vram_level_clock_ns,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -109,90 +111,73 @@ def test_c3_nvml_init_failure_decays_emergency_to_normal() -> None:
     assert seen == [L.FAST_PATH, L.REDUCED, L.NORMAL]
 
 
-# ── C3 / B0-F07: VRAM-level shared memory ────────────────────────────────────
+# ── C3 / B0-F07: VRAM-level snapshot (flipped from observed to target) ──────
+# C0-06/07/08 were fixed by the F07 PR; the full contract lives in
+# test_vram_level_snapshot_contract_537.py and the cross-process sequences in
+# tests/integration/test_vram_level_snapshot_xproc_537.py.
 @pytest.fixture
 def shm_name(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
-    """Route reader/writer to a private segment so a live service is untouched."""
+    """Route reader/writer to a private name so a live service is untouched."""
     name = f"saccade_vram_level_t537_{os.getpid()}"
     monkeypatch.setattr(rm, "_SHM_NAME", name)
     yield name
-    try:
-        leftover = SharedMemory(name=name, create=False)
-    except FileNotFoundError:
-        return
-    leftover.close()
-    leftover.unlink()
+    for path in Path(rm._SHM_DIR).glob(f"{name}*"):
+        path.unlink()
 
 
-def test_c3_reader_without_segment_reads_normal(shm_name: str) -> None:
-    reader = VRAMLevelReader()
-    try:
-        assert reader.read() is L.NORMAL
-    finally:
-        reader.close()
+def _now_reader() -> VRAMLevelReader:
+    return VRAMLevelReader(max_age_ns=10**12)
 
 
-def test_c3_reader_attaches_to_writer_created_later(shm_name: str) -> None:
-    reader = VRAMLevelReader()
-    try:
-        # Same reader: missing segment reads NORMAL, then attaches once it exists.
-        assert reader.read() is L.NORMAL
-        writer = VRAMLevelWriter()
-        try:
-            writer.write(L.FAST_PATH)
-            assert reader.read() is L.FAST_PATH
-        finally:
-            writer.close()
-    finally:
-        reader.close()
+def test_c3_reader_without_segment_reads_missing_not_normal(shm_name: str) -> None:
+    snap = _now_reader().read_snapshot()
+    assert (snap.status, snap.level) == (VRAMReadStatus.MISSING, None)
 
 
-def test_c3_reader_rejects_out_of_range_byte(shm_name: str) -> None:
-    writer = VRAMLevelWriter()
-    reader = VRAMLevelReader()
-    try:
-        writer._shm.buf[0] = 7  # type: ignore[index]
-        with pytest.raises(ValueError, match="7 is not a valid DegradationLevel"):
-            reader.read()
-    finally:
-        reader.close()
-        writer.close()
+def test_c3_reader_follows_writer_created_later(shm_name: str) -> None:
+    reader = _now_reader()
+    assert reader.read_snapshot().status is VRAMReadStatus.MISSING
+    with VRAMLevelWriter() as writer:
+        writer.write(L.FAST_PATH, vram_level_clock_ns())
+        snap = reader.read_snapshot()
+        assert (snap.status, snap.level) == (VRAMReadStatus.FRESH, L.FAST_PATH)
 
 
-def test_b0_f07_reader_attached_before_writer_restart_keeps_stale_level(
+def test_c3_out_of_range_level_is_invalid_not_raised(shm_name: str) -> None:
+    fmt = rm._SNAPSHOT
+    stamp = vram_level_clock_ns()
+    crc = rm._record_crc(fmt.pack(7, 1, 0, 1, stamp))
+    (Path(rm._SHM_DIR) / shm_name).write_bytes(fmt.pack(7, 1, crc, 1, stamp))
+    snap = _now_reader().read_snapshot()
+    assert (snap.status, snap.level, snap.reason) == (
+        VRAMReadStatus.INVALID,
+        None,
+        "level 7",
+    )
+
+
+def test_b0_f07_reader_built_before_writer_restart_follows_new_writer(
     shm_name: str,
 ) -> None:
-    # A previous writer died without unlinking its segment.
+    # A previous writer died at EMERGENCY without removing its snapshot.
     crashed = VRAMLevelWriter()
-    crashed.write(L.EMERGENCY)
-    crashed._shm.close()
+    crashed.write(L.EMERGENCY, vram_level_clock_ns())
 
-    stale_reader = VRAMLevelReader()  # orchestrator built first
-    try:
-        writer = VRAMLevelWriter()  # dispatcher.start(): unlink stale, recreate
-        try:
-            assert stale_reader.read() is L.EMERGENCY
-            for level in (L.NORMAL, L.REDUCED):
-                writer.write(level)
-                assert stale_reader.read() is L.EMERGENCY
+    reader = _now_reader()  # orchestrator built first
+    with VRAMLevelWriter() as writer:  # dispatcher.start()
+        assert reader.read_snapshot().status is VRAMReadStatus.STALE
+        for level in (L.NORMAL, L.REDUCED):
+            writer.write(level, vram_level_clock_ns())
+            assert reader.read_snapshot().level is level
 
-            fresh_reader = VRAMLevelReader()
-            try:
-                assert fresh_reader.read() is L.REDUCED
-            finally:
-                fresh_reader.close()
-        finally:
-            writer.close()
-
-        # After the writer stops, the old reader still reports its last value.
-        assert stale_reader.read() is L.EMERGENCY
-    finally:
-        stale_reader.close()
+    # After the writer stops, the same reader no longer sees a usable level.
+    assert reader.read_snapshot().status is VRAMReadStatus.STALE
 
 
 def test_b0_f07_full_mode_builds_orchestrator_before_dispatcher_start() -> None:
     """`main.py --mode full` evaluates PipelineOrchestrator() as a gather()
-    argument, so its reader attaches before run_perception() starts the writer."""
+    argument, so its reader exists before run_perception() starts the writer.
+    Kept after F07: the order is unchanged, the stateless reader makes it harmless."""
     tree = ast.parse((REPO / "main.py").read_text(encoding="utf-8"))
     run_full = next(
         node

@@ -27,6 +27,7 @@ from saccade.resource.resource_manager import (
     DegradationLevel,
     ResourceManager,
     VRAMLevelWriter,
+    vram_level_clock_ns,
 )
 
 try:
@@ -621,10 +622,11 @@ class AsyncDispatcher:
             batch_items: list[_QueuedFrame | tuple[str, torch.Tensor, float]] = [
                 first_item
             ]
+            decided_at_ns = vram_level_clock_ns()
             level = self.resource_manager.decide_degradation_level()
             self._current_level = level
             if self._vram_writer is not None:
-                self._vram_writer.write(level)
+                self._vram_writer.write(level, decided_at_ns)
             current_max = self.max_batch if level < DegradationLevel.FAST_PATH else 2
             deadline = time.perf_counter() + max(self.batch_timeout_ms, 0.0) / 1000.0
 
