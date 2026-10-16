@@ -24,6 +24,22 @@ L6 是 Saccade 的「決策大腦」，負責高層級的 VRAM 資源監控與�
 - 升級門檻：85% / 92% / 96%
 - 降級恢復：需降至觸發點 **-5%** 才恢復上一級，防止臨界點頻繁切換（Thrashing）。
 
+`ResourceManager.decide_degradation_level()` 每次決策的精確語義（#537 D-537-2，C2 修復後的現行行為）：
+
+| 方向 | 條件 | 結果 |
+|---|---|---|
+| 升級 | usage > 96 ／ > 92 ／ > 85，且對應級別高於目前級別 | 立即升到該級，可跨級（例如 NORMAL 直接到 EMERGENCY） |
+| 恢復 | 目前 EMERGENCY 且 usage < 91 ／ FAST_PATH 且 < 87 ／ REDUCED 且 < 80 | 只降一級 |
+| 維持 | 其他情況 | 不變；高階狀態不會因 usage 落在較低的升級區段而被改低 |
+
+- 比較都是嚴格的：等於升級門檻不升級，等於恢復門檻不恢復。
+- 一次決策不會同時升級又恢復，也不會一次降兩級。從 EMERGENCY 回到 NORMAL 至少要 3 次決策。
+- 決策頻率：dispatcher 每個 batch 決策一次，閒置時不決策；沒有最短停留時間（F0）。
+- 初值：新的 `ResourceManager` 從 NORMAL 開始，第一次決策就升到 usage 對應的級別，不繼承前一個 writer 的狀態（R0）。
+- 不在本契約內：NVML 不可用（C0-05，REQ-535-07-01）；NaN、負值或超過 100 的 usage（目前 NaN 維持原級、負值降一級、>100 升到 EMERGENCY，只是現況，不是支持契約）。
+
+契約測試在 `tests/unit/test_resource_degradation_hysteresis_537.py`；修復前的轉換表與修復紀錄見 [#537 C0 §3、§8](../../architecture/failure_degradation_537.md#8-c2-遲滯修復c0-04-收斂)。
+
 ## 6. VRAM-level 跨程序快照契約（#537 B0-F07）
 
 Dispatcher 端的 `VRAMLevelWriter` 把每次決策發佈為一份完整快照；orchestrator 端的 `VRAMLevelReader` 每次讀取都重新讀取這份快照。程式在 `src/saccade/resource/resource_manager.py`，失敗矩陣與修復前的行為見 [#537 C0 §7](../../architecture/failure_degradation_537.md#7-b0-f07-修復c0-060708-收斂)。

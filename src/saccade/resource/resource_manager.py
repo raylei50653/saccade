@@ -88,6 +88,8 @@ class ResourceManager:
             new_level = DegradationLevel.FAST_PATH
         elif usage > UP_REDUCED:
             new_level = DegradationLevel.REDUCED
+        # 升級只能往上：不得覆蓋仍應保留的較高級別 (#537 D-537-2)
+        new_level = max(new_level, self.current_level)
 
         # 2. 降階邏輯 (負載減少) - 只有當負載下降超過 HYSTERESIS 時才回歸
         if self.current_level == DegradationLevel.EMERGENCY and usage < (

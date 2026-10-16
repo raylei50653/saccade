@@ -36,6 +36,7 @@
 | `test_resctl.py` | system | contract | active | Fail-closed contracts for tools/resctl.py, the cross-worktree resource lease CLI. |
 | `test_resolved_bridge_policy_config.py` | system | contract | active | Pin the resolved-config fingerprints the H0 declaration freezes. |
 | `test_resolved_shipping_config.py` | system | contract | active | The headline resolved shipping config equals what the Python oracle uses. |
+| `test_resource_degradation_hysteresis_537.py` | resource | contract | active | #537 C2: degradation-level hysteresis contract (D-537-2). |
 | `test_resource_degradation_observed_537.py` | resource | diagnostic | active | #537 C0: pin the observed resource degradation / VRAM-level SHM behavior. |
 | `test_saccade_track_completion_cli.py` | system | contract | active | ``saccade_track`` run completion at the real entrypoint, without a GPU (#536). |
 | `test_saccade_track_model_bundle_cli.py` | system | contract | active | ``saccade_track --model-bundle`` at the built entrypoints (#549 S2-1). |
