@@ -455,3 +455,86 @@ WB-01、09、11、12、13 不變（[observed 測試](../../tests/unit/test_workb
 - `start()` 另外檢查存活的 worker 或 batcher：由 STOPPED 的不變式涵蓋。
 
 host 層的保證不能取代 D2-GPU 的 buffer lifetime 驗證。
+
+## 14. #538 caller lifecycle：`main.py` 與 `run_8stream_perception.py`
+
+本節記錄 caller lifecycle 修復 PR（stack 在 D2-WB-1 之上），範圍依 owner 最終裁決（2026-10-17）只限於這兩個入口。目的是把 R-1、D2-AD、D2-WB-1 修好的元件接回真正的呼叫端，不重新設計 tracker，也不擴大 online-service 的支持範圍。
+
+**Owner 裁決**（引用）：
+
+- `main.py --mode full` 明確改為 geometry-only tracking：不再傳 extractor 給 AsyncDispatcher，也不保留一套沒有被使用的 SigLIP／EmbeddingDispatcher 初始化流程。
+  - 啟動紀錄要寫明 `online tracking = geometry-only`、`ReID = unsupported in this path`。
+  - 使用者明確要求 ReID 時要 fail-fast，不得靜默改成純幾何模式。
+- `main.py`：正常停止、worker 失敗、producer 例外與取消時，都要嘗試 `dispatcher.stop()`。`run_full()` 在其中一個子任務失敗時，要取消並收斂其他子任務，不能留下 orchestrator 繼續執行。
+- `run_8stream_perception.py`：使用完整的 `try/finally`。即使 `dispatcher.stop()` 或 `pool.stop()` 拋例外，也要繼續釋放不依賴存活 worker 的資源（resource manager、telemetry）。
+- 例外不能被清理例外覆蓋：保留原始的 worker failure，後續清理錯誤作為附加診斷。
+- producer 捕捉例外後只印出錯誤，以及 stats loop 不會因 worker FAILED 而結束，兩者都要修正。
+- `WorkbenchPool.stop()` timeout 時，不得強制釋放仍被 worker 使用的 batcher。
+- `--workbench` 的 demo 接線可以修正，但沒有實際驗證之前仍標為不支援。
+
+**修改**：
+
+- `main.py`：
+  - 移除 `TRTFeatureExtractor`、`EmbeddingDispatcher`、`on_embeddings_ready` 與它們的全域資源（`RedisCache`、`SemanticDriftHandler`）。
+  - `run_perception()` 建立 AsyncDispatcher 時不傳 extractor，並印出上述啟動紀錄。
+  - 新增 `--reid`：在 `perception`／`full` 模式下以 `parser.error` 退出（exit 2）。
+  - `on_detection_finished()` 仍是 no-op，docstring 寫明 `--mode full` 沒有接通 detection→embedding→Redis→cognition。
+- `main.py` 的 lifecycle：
+  - `supervise(tasks, watchers)`：等待所有 task 結束；任何一個 task 或 watcher 第一次失敗，就取消其他全部，等它們結束後再拋出第一個錯誤。之後的錯誤，只要不是同一個失敗（`__cause__` 相同），都附為 note。
+  - `raise_when_failed(dispatcher)`：每 0.1 s 檢查一次，dispatcher 變為 FAILED 就拋 `DispatcherFailed`，讓 producer 閒置時也能察覺失敗。
+  - `run_perception()` 在任何結束路徑都會呼叫 `dispatcher.stop()`。有原始錯誤時，清理錯誤只附為 note；`stop()` 重新拋出同一個失敗時不重複記錄，但保留它自己附帶的清理 note。
+  - `run_full()` 改用 `supervise()`。
+  - 為了在無 GPU 的子程序中測試，`run_perception()`／`run_full()` 加了 keyword-only 參數（detector factory、producer、streams、source、orchestrator factory），預設值都是原本的行為。
+- `run_8stream_perception.py`：
+  - producer 捕捉例外後改為 log 並重新拋出。
+  - stats loop 改成 watcher，另加 `_raise_when_failed()`（dispatcher 或 pool 變為 FAILED 時拋出）。
+  - `run_multistream_perception()` 用單一外層 `try/finally`，每建立一項資源就登記它的清理步驟，結束時依相反順序逐一執行（`dispatcher.stop()` → `resource_manager.close()` → `telemetry.stop()`，或 `pool.stop()` → `telemetry.stop()`），每一步各自 try。
+  - `pool.stop()` timeout 時，batcher 由 pool 保留（D2-WB-1）；telemetry 照常停止。
+  - `--workbench`：補上 `WorkbenchPool` 的 import，`_on_result_workbench` 改為同步函式。help 文字標為 unsupported（沒有端到端驗證）。
+
+**證據**（[test_caller_lifecycle_538.py](../../tests/unit/test_caller_lifecycle_538.py)，16 個情境）：
+
+- 每個情境都在獨立子程序中執行真正的入口函式，並設外部 timeout。
+- media、detector、orchestrator 與 VRAM writer 都是 fake，native 檢查被略過，所以不需要 GPU、Redis 或 RTSP。
+- WorkbenchPool 的情境沿用 D2-WB 的 fake。
+
+| 入口 | 情境 | 結果 |
+|:--|:--|:--|
+| `main.py` | 正常結束 | `stop()` 已呼叫（STOPPED，writer 關閉一次），producer 都釋放；啟動紀錄含 geometry-only 與 ReID unsupported，沒有 SigLIP |
+| | worker 失敗 | 拋 `DispatcherFailed`（`__cause__` 是 detector 的 `RuntimeError`）；producer 都被取消並釋放；dispatcher 已停止 |
+| | worker 失敗，而 producer 閒置 | watcher 察覺失敗，結果同上 |
+| | producer 例外 | 其他 producer 被取消；拋原始的 `ValueError`；dispatcher 已停止 |
+| | 取消 | dispatcher 已停止；拋 `CancelledError` |
+| | producer 例外，同時 `writer.close()` 失敗 | 仍拋原始的 `ValueError`，`OSError('close failed')` 附為 note |
+| | `run_full`：perception 失敗 | `run_full()` 返回之前，orchestrator 已被取消 |
+| | `run_full`：orchestrator 失敗 | `run_full()` 返回之前，perception 的 dispatcher 已停止 |
+| | `--reid` | exit 2，訊息為 ReID unsupported，沒有建立 dispatcher |
+| 8stream（AsyncDispatcher） | worker 失敗 | `DispatcherFailed`；dispatcher 已停止、resource manager 已關閉、telemetry 已停止、media 都釋放 |
+| | worker 失敗，同時 `dispatcher.stop()` 的清理失敗 | 其餘清理照常執行；原始失敗保留，`close failed` 在 note 中 |
+| | worker 失敗，而 stream 閒置 | watcher 察覺失敗 |
+| | producer 讀取錯誤 | 錯誤不被吞掉（`OSError`），清理全部執行 |
+| | 取消 | 清理全部執行 |
+| 8stream（WorkbenchPool） | worker 失敗 | `WorkbenchPoolFailed`；pool 為 STOPPED、batcher 已 shutdown、telemetry 已停止 |
+| | 取消時 worker 卡住 | `pool.stop()` timeout 附為 note；pool 維持 STOPPING，batcher **沒有** shutdown；telemetry 仍停止 |
+
+負控制（只替換入口檔案；harness 與輸出在 `results/caller_20261017/`，gitignored）：
+
+| 變體 | 結果 |
+|:--|:--|
+| 修復前的兩個入口（`bbfd8785`） | 16 個全部失敗。新的 keyword-only 參數不存在，所以失敗以結構性為主 |
+| `main.py` 出錯時不呼叫 `stop()` | 7 個失敗 |
+| 移除 `main.py` 的 watcher | 1 個失敗（producer 閒置） |
+| 清理錯誤覆蓋原始錯誤 | 1 個失敗 |
+| `run_full` 改回 `gather` | 2 個失敗（初版測試在 `asyncio.run` 收尾時才檢查，會讓這個 mutation 通過；已改為在返回前檢查） |
+| 接受 `--reid` | 1 個失敗 |
+| 8stream 的 producer 吞掉例外 | 2 個失敗 |
+| 8stream 的清理步驟不隔離 | 5 個失敗 |
+| 移除 8stream 的 watcher | 1 個失敗 |
+| 8stream 在 `pool.stop()` 之後強制 shutdown batcher | 1 個失敗 |
+
+**沒有處理**：
+
+- 沒有執行真實的 `main.py`、RTSP、DALI、Redis、Chroma 或 GPU，`--workbench` 仍標為不支援。
+- `on_detection_finished()` 仍是 no-op，`--mode full` 沒有接通 detection→cognition。
+- orchestrator 自己被取消時的清理不在本 PR 範圍。
+- 兩個入口各有一份 `supervise` 與 `same_failure`；範圍限定在這兩個檔案，所以沒有抽成共用模組。

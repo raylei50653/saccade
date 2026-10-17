@@ -5,6 +5,7 @@
 
 | Test | Scope | Function | Lifecycle | Summary |
 |------|-------|----------|-----------|---------|
+| `test_caller_lifecycle_538.py` | perception,pipeline | contract | active | #538 caller lifecycle: main.py and run_8stream_perception.py stop their workers and resources. |
 | `test_check_association_tools.py` | eval | contract | active | Unit tests for scripts/tools/check_association_tools.py. |
 | `test_compiled_head_reverse_engineering_runner.py` | system | contract | active | The #465 compiled-head reverse-engineering runner implements its frozen declaration. |
 | `test_config_consistency.py` | eval | contract | active | Guard against silent divergence across the three config layers. |
