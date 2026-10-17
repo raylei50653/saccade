@@ -11,11 +11,11 @@ import torch
 
 from saccade.perception.detector_trt import TRTYoloDetector, BatchingTRTDetector
 from saccade.perception.online_telemetry import OnlineTelemetry
-
-try:
-    from saccade_tracking_ext import GPUByteTracker
-except ImportError:
-    GPUByteTracker = Any
+from saccade.perception.online_tracker_adapter import (
+    OnlineTrackerAdapter,
+    OnlineTrackerUnavailable,
+    native_unavailable_reason,
+)
 
 try:
     from saccade_tracking_ext import nv12_to_chw_letterbox as _nv12_letterbox_kernel
@@ -456,6 +456,13 @@ class AsyncDispatcher:
         stats_window: int = 512,
         telemetry: OnlineTelemetry | None = None,
     ):
+        if extractor is not None:
+            # #537 R-1: only geometry-only tracking is supported. The tracker
+            # never received embeddings here, so ReID is refused, not implied.
+            raise ValueError(
+                "AsyncDispatcher supports geometry-only tracking; "
+                "extractor/ReID is not supported (#537 R-1)"
+            )
         self.detector = detector
         self.resource_manager = resource_manager
         self.max_batch = max_batch
@@ -484,9 +491,7 @@ class AsyncDispatcher:
         self._batch_build_ms: deque[float] = deque(maxlen=stats_window)
 
     def _make_tracker(self) -> Any:
-        return GPUByteTracker(
-            max_objects=100, embedding_dim=768 if self.extractor else 0
-        )
+        return OnlineTrackerAdapter(max_objects=100)
 
     def get_tracker(self, stream_id: str) -> Any:
         if stream_id in self.trackers:
@@ -510,6 +515,9 @@ class AsyncDispatcher:
             del tracker
 
     async def start(self) -> None:
+        reason = native_unavailable_reason()
+        if reason is not None:
+            raise OnlineTrackerUnavailable(reason)
         self._running = True
         try:
             self._vram_writer = VRAMLevelWriter()
@@ -561,6 +569,9 @@ class AsyncDispatcher:
             "queue_depth": self.queue.qsize(),
             "active_streams": len(self.trackers),
             "current_level": self._current_level.name,
+            # The level only caps the batch size; the tracker itself is never
+            # degraded (#537 R-1).
+            "tracker_degradation": "none",
             "max_batch": self.max_batch,
             "batch_timeout_ms": self.batch_timeout_ms,
             "mean_batch_size": round(float(np.mean(batch_sizes)), 3)
@@ -627,7 +638,11 @@ class AsyncDispatcher:
             self._current_level = level
             if self._vram_writer is not None:
                 self._vram_writer.write(level, decided_at_ns)
-            current_max = self.max_batch if level < DegradationLevel.FAST_PATH else 2
+            current_max = (
+                self.max_batch
+                if level < DegradationLevel.FAST_PATH
+                else min(self.max_batch, 2)
+            )
             deadline = time.perf_counter() + max(self.batch_timeout_ms, 0.0) / 1000.0
 
             while len(batch_items) < current_max:
@@ -701,19 +716,9 @@ class AsyncDispatcher:
                 continue
 
             tracker = self.get_tracker(item.stream_id)
-            if level >= DegradationLevel.FAST_PATH:
-                tracker.set_degradation_params(level)
-                tracked_ids, tracked_boxes, tracked_classes = tracker.update(
-                    boxes, scores, classes
-                )
-            else:
-                tracked_ids, tracked_boxes, tracked_classes = tracker.update(
-                    boxes,
-                    scores,
-                    classes,
-                    frame_tensor=item.frame,
-                    stream_id=hash(item.stream_id) & 0x7FFFFFFF,
-                )
+            tracked_ids, tracked_boxes, tracked_classes = tracker.update(
+                boxes, scores, classes
+            )
 
             tracked_kpts = (
                 _match_keypoints_to_tracks(tracked_boxes, boxes, keypoints)

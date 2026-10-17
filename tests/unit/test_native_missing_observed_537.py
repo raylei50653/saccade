@@ -5,6 +5,10 @@ baseline. They do not choose where a missing capability should be rejected;
 that stays open under REQ-535-02-01 / 02-04. Each case runs in a fresh
 interpreter with ``saccade_tracking_ext`` blocked, so a locally built
 extension does not change the result.
+
+The C0-03 dispatcher case moved to test_dispatcher_tracker_contract_537.py
+after the #537 R-1 fix: the dispatcher now refuses with
+``OnlineTrackerUnavailable`` instead of failing at the first tracker.
 """
 
 # scope: perception, tracking
@@ -23,7 +27,7 @@ import torch
 
 REPO = Path(__file__).resolve().parents[2]
 
-KEYS = {"is_cuda", "dets3", "dets0", "binding", "get_tracker"}
+KEYS = {"is_cuda", "dets3", "dets0"}
 _BLOCK = "import sys\nsys.modules['saccade_tracking_ext'] = None\n"
 
 _FACADE = """
@@ -39,18 +43,6 @@ for name, n in (('dets3', 3), ('dets0', 0)):
         print(name, repr(t.update(b[:n], s[:n], c[:n])))
     except Exception as e:
         print(name, type(e).__name__, e)
-"""
-
-_DISPATCHER = """
-from unittest import mock
-import saccade.perception.dispatcher as d
-print('binding', d.GPUByteTracker)
-disp = d.AsyncDispatcher(detector=mock.MagicMock(), resource_manager=mock.MagicMock())
-try:
-    disp.get_tracker('cam0')
-    print('get_tracker ok')
-except Exception as e:
-    print('get_tracker', type(e).__name__, e)
 """
 
 
@@ -93,11 +85,4 @@ def test_c1_facade_stub_output_matches_a_legal_empty_frame() -> None:
         "is_cuda False",
         "dets3 []",
         "dets0 []",
-    ]
-
-
-def test_b0_f02_dispatcher_without_extension_fails_at_first_tracker() -> None:
-    assert _run(_DISPATCHER, hide_cuda=True) == [
-        "binding typing.Any",
-        "get_tracker TypeError Any cannot be instantiated",
     ]

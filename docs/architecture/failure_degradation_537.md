@@ -29,7 +29,7 @@
 |:--|:--|:--|:--|:--|:--|:--|
 | C0-01 | public-library、eval／SN-PL2 | native 擴充缺失，有 CUDA | facade `GPUByteTracker.update()` 對 3 個或 0 個 detection 都回 `[]` | 只有 `is_cuda == False`；呼叫端若不查就看不出差別 | reproduced（gpu 標記） | REQ-535-02-01、02-03；#441 |
 | C0-02 | public-library、eval／SN-PL2 | native 擴充缺失，沒有 CUDA | `update()` 在進入 stub 前就拋 `RuntimeError`；訊息依 driver 環境而不同（例如 `No CUDA GPUs are available` 或 `Found no NVIDIA driver ...`），測試只釘住例外型別 | 例外 | reproduced | REQ-535-02-01 |
-| C0-03 | online-service／SN-ON3（B0-F02） | native 擴充缺失 | `AsyncDispatcher` 直接 import 失敗後，名稱綁成 `typing.Any`；`get_tracker()` 拋 `TypeError: Any cannot be instantiated`。`_process_batch` 只在 batch 有 detection 時才建 tracker，所以空幀 batch 不會觸發這個錯誤 | 例外，出現時間依輸入而定 | reproduced（`get_tracker`）；觸發時間為 source-inspected | REQ-535-02-04 |
+| C0-03 | online-service／SN-ON3（B0-F02） | native 擴充缺失 | `AsyncDispatcher` 直接 import 失敗後，名稱綁成 `typing.Any`；`get_tracker()` 拋 `TypeError: Any cannot be instantiated`。`_process_batch` 只在 batch 有 detection 時才建 tracker，所以空幀 batch 不會觸發這個錯誤 | 例外，出現時間依輸入而定 | reproduced（`get_tracker`）；觸發時間為 source-inspected | REQ-535-02-04；**已由 R-1 修復，見 §10** |
 | C0-04 | online-service／SN-ON7 | VRAM usage 接近門檻 | 轉換表見 §3：FAST_PATH 實質上沒有遲滯，EMERGENCY 的轉換不單調，在 91～92 會一次跳兩級 | dispatcher `get_stats()["current_level"]`；轉換時 stdout 有一行 print | reproduced | REQ-535-07-02；D-537-2 |
 | C0-05 | online-service／SN-ON7 | NVML init 失敗 | `get_stats()` 全部回 0。目前若為 EMERGENCY，連續 3 次決策會依序降為 FAST_PATH → REDUCED → NORMAL | 只有 init 時一行 print「Degradation disabled」；level 顯示 NORMAL | reproduced | REQ-535-07-01 |
 | C0-06 | online-service／SE-23、SE-24 | 沒有 writer（SHM segment 不存在） | `VRAMLevelReader.read()` 回 NORMAL；writer 之後才建立時，reader 能重新附掛 | 無 | reproduced | REQ-535-07-01；**已由 F07 修復，見 §7** |
@@ -37,7 +37,7 @@
 | C0-08 | online-service／SE-23、SE-24（**B0-F07**） | 前次崩潰留下 segment，而且 reader 比 writer 先附掛 | writer unlink 並重建後，舊 reader 一直讀到舊值（測試中為 EMERGENCY）；新建立的 reader 讀得到新值；writer 關閉後，舊 reader 仍讀到最後的值。`main.py --mode full` 把 `PipelineOrchestrator()` 當 `gather()` 的參數，依 source 判讀 reader 會比 `dispatcher.start()` 先建立。卡在 EMERGENCY 時，`handle_cognitive_event()` 對非 anomaly 事件不寫入 ChromaDB 就返回，`process_event_batch()` 仍 ACK 整批，這些事件不會重送 | 無；level 看起來有效 | SHM 行為 reproduced；`main.py` 建構順序為 source-inspected（AST 測試靜態釘住，沒有執行 `run_full()`）；「orchestrator 持續丟棄非 anomaly 事件且仍 ACK」為 source-inspected（`src/saccade/cognition/orchestrator.py` 的 `handle_cognitive_event()`／`process_event_batch()`，沒有端到端測試） | REQ-535-07-01；#538 判準；D-537-3；**已由 F07 修復，見 §7** |
 | C0-09 | online-service／SN-ON3 | WorkbenchPool 路徑 | `get_stats()` 固定回 `current_level: "NORMAL"`，這條路徑沒有接 resource manager | stats 看起來健康 | source-inspected | REQ-535-07-02 |
 | C0-10 | shipping／SN-SH2、SN-SH4 | run 中途失敗 | 狀態值與 completion journal 由 CC-536-01-01 定義並已實作（source-level）；轉換語義歸 #537，C0 沒有重查 | journal `state`、exit code | 引用原卡 | REQ-535-01-01 |
-| C0-11 | online-service／SN-ON3 | native 擴充存在，batch 有 detection（任何 level） | dispatcher 對 tracker 的兩種呼叫都不被支援：level ≥ FAST_PATH 時 `set_degradation_params` 拋 `AttributeError`；低於 FAST_PATH 時 `update(..., frame_tensor=, stream_id=)` 拋 `TypeError`。worker task 隨即結束 | 沒有任何地方記錄；`stop()` 時才把例外拋出 | reproduced（strict fake；native binding 以 gpu 標記測試） | REQ-535-05-\*、07-02；#538 D2；**後補列，見 §9** |
+| C0-11 | online-service／SN-ON3 | native 擴充存在，batch 有 detection（任何 level） | dispatcher 對 tracker 的兩種呼叫都不被支援：level ≥ FAST_PATH 時 `set_degradation_params` 拋 `AttributeError`；低於 FAST_PATH 時 `update(..., frame_tensor=, stream_id=)` 拋 `TypeError`。worker task 隨即結束 | 沒有任何地方記錄；`stop()` 時才把例外拋出 | reproduced（strict fake；native binding 以 gpu 標記測試） | REQ-535-05-\*、07-02；#538 D2；**後補列，見 §9；已由 R-1 修復，見 §10** |
 
 ## 3. 降級轉換表：現況與已採納目標
 
@@ -87,7 +87,7 @@ F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義�
 | C0-06～C0-08 | 已由 F07 修復（§7）；T 預設值、多 writer、shutdown 仍待 #538 | #538 |
 | C0-09 | WorkbenchPool 是否支援 resource degradation | REQ-535-07-02 |
 | C2 其他參數 | 重啟初值與決策頻率已裁決（R0、F0，見 §8）；非法 usage（NaN、負值、>100）只在 C2 PR 內維持現況（O0），不構成支持契約，仍待裁決 | D-537-2 未涵蓋 |
-| R-1（C0-11） | dispatcher↔tracker 的呼叫契約（範圍比 degradation API 大，見 §9）；worker task 異常終止後的錯誤傳遞、health、stop 與 shutdown 語義 | #537 C0-11；#538 D2 |
+| R-1（C0-11） | 呼叫契約已由 R-1 修復（§10）；worker task 異常終止後的錯誤傳遞、health、stop 與 shutdown 語義依 §10 的切片順序處理 | #537 C0-11；#538 D2-AD、D2-WB-0／1、D2-GPU |
 | health CLI、orchestrator 錯誤後的 ACK | 報告 unknown 的方式；ACK 語義 | REQ-535-07-03；REQ-535-06-01（#538） |
 
 建議順序：先提出 C0-08（B0-F07）的修復方案給 owner，方案要包含事件持久化與 ACK 的負控制（非 anomaly 事件在舊 reader 下不得未寫入就被 ACK）；C2 依 D-537-2 另開 PR，附上目標測試和負控制。每個修復 PR 只處理一類行為。
@@ -177,7 +177,7 @@ F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義�
 
 ## 9. C0-11：dispatcher↔tracker 呼叫契約（R-1 現況）
 
-本節是 C0 之後補上的特徵列，**只固定現況，不修復也不選定目標契約**（比照 D-537-1）。Source baseline 為 `main@82126e7c`（#598 merge，2026-10-17）。R-1 原本記為「native tracker 沒有 degradation API」（§8）；核對後發現範圍更大：**dispatcher 對 tracker 的整個呼叫形式在 repo 內都沒有實作**，不只缺 FAST_PATH 用的方法。
+本節是 C0 之後補上的特徵列，**只固定現況，不修復也不選定目標契約**（比照 D-537-1）。修復記錄在 §10，本節保留為修復前的基線。Source baseline 為 `main@82126e7c`（#598 merge，2026-10-17）。R-1 原本記為「native tracker 沒有 degradation API」（§8）；核對後發現範圍更大：**dispatcher 對 tracker 的整個呼叫形式在 repo 內都沒有實作**，不只缺 FAST_PATH 用的方法。
 
 **呼叫端與實作的落差**：
 
@@ -199,7 +199,7 @@ dispatcher 透過 `_make_tracker()` 直接建立 native binding，不經 facade�
 
 | 測試 | 涵蓋 | 環境 |
 |:--|:--|:--|
-| [test_dispatcher_tracker_contract_observed_537.py](../../tests/unit/test_dispatcher_tracker_contract_observed_537.py) | facade 的簽名與方法（`inspect`）；native binding 沒有 degradation 方法、`update` 的參數與回傳型別（需要 native 擴充，沒有時略過）；在 native tracker 上實際呼叫三種形式（`gpu` 標記）；用與 binding 介面相同的 strict fake，在四個 level 下讓 worker 結束，例外型別依 level 而不同；空幀不觸發；worker 結束後的狀態（上段 D2 觀察） | strict fake 不需 GPU；native 呼叫只在本機 CUDA 執行過 |
+| [test_dispatcher_tracker_contract_observed_537.py](../../tests/unit/test_dispatcher_tracker_contract_observed_537.py) | facade 的簽名與方法（`inspect`）；native binding 沒有 degradation 方法、`update` 的參數與回傳型別（需要 native 擴充，沒有時略過）；在 native tracker 上實際呼叫三種形式（`gpu` 標記）；用與 binding 介面相同的 strict fake，在四個 level 下讓 worker 結束，例外型別依 level 而不同；空幀不觸發；worker 結束後的狀態（上段 D2 觀察）。R-1 修復後，讓 worker 結束與空幀這兩組改為 §10 的契約測試，D2 觀察改由注入的 tracker 錯誤觸發 | strict fake 不需 GPU；native 呼叫只在本機 CUDA 執行過 |
 
 function 標籤是 `diagnostic`。要修復時，必須在同一個 PR 把這些測試改成目標契約，並說明依據哪一條裁決。
 
@@ -212,3 +212,58 @@ function 標籤是 `diagnostic`。要修復時，必須在同一個 PR 把這些
 | worker 失敗的傳遞、health、stop、shutdown | 由 #538 D2 定義 | #538 D2 |
 
 **限制**：沒有執行 `main.py` 或完整 online service；native 呼叫只確認到 pybind11 的參數檢查，沒有往下執行 tracker。strict fake 只模擬 binding 中與 dispatcher 有關的部分。
+
+## 10. R-1 修復：OnlineTrackerAdapter（C0-11、C0-03 收斂）
+
+本節記錄 R-1 的修復 PR，§9 保留為修復前的基線。Owner 在 2026-10-17 的工作 session 裁決，授權受限實作與 Draft PR，**不授權 merge 或部署**。
+
+**Owner 裁決**（2026-10-17）：
+
+| 項目 | 決定 |
+|:--|:--|
+| tracker 契約 | 新增內部 `OnlineTrackerAdapter`，底層用既有的 Python facade 連到 native binding。輸入統一為 `boxes／scores／classes`，把 `list[TrackResult]` 轉成 callback 需要的 `(ids, boxes, classes)` tensor。native 不可用時明確拒絕，不讓 stub 回空結果冒充成功 |
+| 範圍 | 只修 geometry-only tracking；extractor／ReID 組合沒有驗證過，要明確拒絕。不改 public API、native tracker 演算法或 CUDA kernel，也不重寫 raw pointer 管理 |
+| FAST_PATH／EMERGENCY | 只調整 batch：NORMAL／REDUCED 用 `max_batch`，FAST_PATH／EMERGENCY 用 `min(max_batch, 2)`。不新增 `set_degradation_params()`，不改 tracker 參數；resource level 與 tracker 實際套用的降級要分開表示，不得宣稱 tracker 已降級；不得用 `hasattr()` 靜默略過 |
+| #538 D2 | 拆成獨立 PR，依序為 R-1 Fix → D2-AD（AsyncDispatcher worker failure、health、錯誤傳遞、queue accounting、stop／finally cleanup）→ D2-WB-0（WorkbenchPool CPU lifecycle 契約與故障注入）→ D2-WB-1（WorkbenchPool 有界停止與資源釋放修復）→ D2-GPU（CUDA stream／event、buffer lifetime、late callback） |
+| 限制 | 不改 #465 shipping、既有 MOT parity、runtime identity 或 frozen tracker 行為；本修復不等於 REQ-535-05-\* 的完整支持批准 |
+
+**修改**：
+
+- 新模組 [online_tracker_adapter.py](../../src/saccade/perception/online_tracker_adapter.py)：
+  - `OnlineTrackerAdapter.update(boxes, scores, classes)` 呼叫 facade 的 `update()`，再把每個 `TrackResult` 的 `obj_id`、`x1..y2`、`class_id` 轉成 int32／float32／int32 tensor，放回輸入所在的 device。
+  - 建構時，`native_unavailable_reason()` 若回報原因（擴充無法 import、facade 綁的是 stub，或沒有 CUDA），就拋 `OnlineTrackerUnavailable`。
+  - 輸入不是 CUDA tensor 時拋 `ValueError`，因為 facade 會把 `data_ptr()` 交給 CUDA kernel。
+- [dispatcher.py](../../src/saccade/perception/dispatcher.py)：
+  - `_make_tracker()` 改為建立 adapter。
+  - `_process_batch()` 在任何 level 都只呼叫 `update(boxes, scores, classes)`。
+  - batch 上限改為 `min(max_batch, 2)`。修復前固定是 2，所以 `max_batch=1` 時會反而放大。
+  - `start()` 在建立 writer 與 worker 之前先做 native preflight，失敗就拋 `OnlineTrackerUnavailable`。
+  - 傳入 extractor 時，建構子拋 `ValueError`。
+  - `get_stats()` 新增 `tracker_degradation: "none"`。
+  - 移除對 `saccade_tracking_ext.GPUByteTracker` 的直接 import。
+
+**修復後的行為**：
+
+| ID | 修復前 | 修復後 |
+|:--|:--|:--|
+| C0-11 | 有 detection 的第一個 batch 讓 worker 結束（FAST_PATH 以上是 `AttributeError`，以下是 `TypeError`） | 四個 level 都經 adapter 追蹤，callback 收到 `(ids, boxes, classes)` tensor |
+| C0-03 | native 缺失時，第一個有 detection 的 batch 才在 `get_tracker()` 拋 `TypeError: Any cannot be instantiated` | `start()` 立即拋 `OnlineTrackerUnavailable`，不建立 writer 與 worker；直接呼叫 `get_tracker()` 或建立 adapter 也拋同一種例外 |
+| 降級 | FAST_PATH 以上呼叫不存在的 tracker 方法；batch 上限固定 2 | 只限制 batch 為 `min(max_batch, 2)`；`get_stats()` 的 `current_level` 是 resource level，`tracker_degradation` 固定為 `"none"` |
+| extractor | 只決定 `embedding_dim=768`，tracker 從沒收到 embedding | 建構時拒絕 |
+
+**沒有改變的部分**：worker 失敗的語義（§9 的 D2 觀察）保留現況，由 D2-AD 處理。adapter 不吞 tracker 的錯誤，tracker 拋例外時 worker 仍會結束。facade、native binding、tracker 演算法與 CUDA kernel 都沒有改。`main.py --mode full` 在 SigLIP extractor 載入成功時，會把 extractor 傳給 dispatcher，因此現在會在建構時被拒絕（修復前是在第一個有 detection 的 batch 失敗）。`main.py` 沒有改，要不要改由 owner 決定。
+
+**證據**：
+
+| 測試 | 涵蓋 | 環境 |
+|:--|:--|:--|
+| [test_dispatcher_tracker_contract_537.py](../../tests/unit/test_dispatcher_tracker_contract_537.py) | adapter 的輸出格式與空結果形狀；adapter 沒有降級方法；strict fake（真實 facade 類別的 `create_autospec`）拒絕修復前的兩種呼叫（負控制）；四個 level 都追蹤成功、worker 存活、`tracker_degradation == "none"`；6 組 batch 上限；空幀不建立 tracker；extractor 被拒絕；tracker 錯誤仍讓 worker 結束；`start()` 在任何副作用之前拒絕；封鎖擴充的子程序中（有／無 CUDA 環境），`start()`、`get_tracker()` 與 adapter 都拋 `OnlineTrackerUnavailable` | host-only：不需 GPU |
+| 同一檔，`gpu` 標記 | 真實 native：adapter smoke（device、dtype、形狀；穩定 detection 最後成為一條 track；空輸入；CPU 輸入被拒絕）；dispatcher 在 NORMAL 與 FAST_PATH 下端到端追蹤 5 幀 | GPU-validated：只在本機 CUDA 執行過 |
+| [test_dispatcher.py](../../tests/extended/test_dispatcher.py) | mock tracker 改為 adapter 的 `create_autospec`，不再接受不存在的方法；FAST_PATH 測試改為檢查同一個 `update` 呼叫；extractor 測試改為檢查拒絕；host-only 測試以 fixture 略過 preflight | host-only |
+| [test_dispatcher_tracker_contract_observed_537.py](../../tests/unit/test_dispatcher_tracker_contract_observed_537.py)、[test_native_missing_observed_537.py](../../tests/unit/test_native_missing_observed_537.py) | 修復後失效的 diagnostic 斷言（§9 的 worker 結束與空幀、C0-03）移到上面的契約測試；facade／native 的介面檢查與 D2 觀察保留 | — |
+
+負控制與 mutation 的輸出附在 PR 描述：同一個 harness 只替換 source，用本 PR 的契約測試與 extended 測試（共 47 個）執行。修復前的 `dispatcher.py`（只補上測試會 patch 的兩個名稱，不改行為）有 21 個行為斷言失敗；7 個 mutation（batch 上限固定 2、移除 preflight、adapter 退回 stub、adapter 加上空的降級方法、接受 extractor、adapter 回傳原始 list、stats 把 level 當成 tracker 降級）各自造成 1～15 個失敗。
+
+**未驗證**：沒有執行 `main.py`、完整 online service、真實 detector 或 RTSP／DALI 輸入；GPU 證據只涵蓋合成的 detection。adapter 每次呼叫都會建立 host tensor 再複製到 device，沒有量測延遲。多條 stream 共用 CUDA stream 的行為沒有驗證（歸 D2-GPU）。
+
+**Runtime identity**：`dispatcher.py` 與新模組都屬於 `decision_relevant`，修改後 implementation 軸會落後，staleness checker 會 fail closed。重新發佈需要 owner 決定，見 PR 描述。

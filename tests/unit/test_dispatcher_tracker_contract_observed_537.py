@@ -1,19 +1,20 @@
-"""#537 C0-11: pin how AsyncDispatcher calls its tracker, and what happens after that call fails.
+"""#537 C0-11: pin the tracker surfaces behind AsyncDispatcher, and what a dead worker leaves behind.
 
-Characterization only (R-1). These record the status quo on ``main@82126e7c``.
-They do not choose the target contract; that needs an owner decision.
+Characterization only. Pinned on ``main@82126e7c``; trimmed by the R-1 fix.
 
-``_process_batch()`` calls ``tracker.set_degradation_params(level)`` with
-``tracker.update(boxes, scores, classes)`` when level >= FAST_PATH. Below
-FAST_PATH it calls ``tracker.update(boxes, scores, classes, frame_tensor=...,
-stream_id=...)`` and unpacks a 3-tuple. Neither the native binding (``update``
-takes raw pointers and returns ``list[TrackResult]``) nor the Python facade
-(``update`` takes tensors, has no ``frame_tensor``/``stream_id``, and returns
-``list[TrackResult]``) supports either call. The ``MagicMock`` trackers in
-``tests/extended/test_dispatcher.py`` hide this.
+Before the fix, ``_process_batch()`` called ``tracker.set_degradation_params(level)``
+and ``tracker.update(boxes, scores, classes)`` at FAST_PATH and above. Below
+FAST_PATH it called ``tracker.update(..., frame_tensor=..., stream_id=...)`` and
+unpacked a 3-tuple. Neither the native binding nor the Python facade supports
+those calls. The surface checks below still hold, because the fix added
+``OnlineTrackerAdapter`` and left both surfaces unchanged. The dispatcher cases
+that showed the worker dying moved to ``test_dispatcher_tracker_contract_537.py``
+as target-contract tests. Failure evidence from before the fix is in
+failure_degradation_537.md §9 and PR #600.
 
-The worker-death cases are #538 D2 observations: they pin what a dead worker
-task leaves behind. They do not define how errors should propagate.
+The worker-death case is a #538 D2 observation. It pins what a dead worker task
+leaves behind, and D2-AD will change it. It does not define how errors should
+propagate.
 """
 
 # scope: perception, resource
@@ -24,43 +25,17 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 import torch
 
 from saccade.perception import dispatcher as dmod
+from saccade.perception.online_tracker_adapter import OnlineTrackerAdapter
 from saccade.perception.tracking import tracker_gpu as facade
 from saccade.resource.resource_manager import DegradationLevel, ResourceManager
 
 _HW = (8, 8)
-
-
-class _StrictNativeSurfaceTracker:
-    """The part of ``saccade_tracking_ext.GPUByteTracker`` the dispatcher touches.
-
-    ``update`` keeps the binding's parameter names and accepts only ints for the
-    pointer/count arguments, which is how pybind11 rejects tensors. There is no
-    ``set_degradation_params``. No GPU is needed.
-    """
-
-    def update(
-        self,
-        boxes_ptr: int,
-        scores_ptr: int,
-        classes_ptr: int,
-        num_dets: int,
-        stream_ptr: int,
-        embeddings_ptr: int = 0,
-        gmc_ptr: int = 0,
-        light_factor: float = 0.0,
-        mid_thresh_scale: float = 1.0,
-    ) -> list[Any]:
-        for value in (boxes_ptr, scores_ptr, classes_ptr, num_dets, stream_ptr):
-            if not isinstance(value, int):
-                raise TypeError("update(): incompatible function arguments")
-        return []
 
 
 def _detector(n_boxes: int) -> MagicMock:
@@ -81,7 +56,6 @@ def _dispatcher(level: DegradationLevel, n_boxes: int = 1) -> dmod.AsyncDispatch
     rm = MagicMock(spec=ResourceManager)
     rm.decide_degradation_level.return_value = level
     disp = dmod.AsyncDispatcher(_detector(n_boxes), rm, max_batch=1, input_hw=_HW)
-    disp._make_tracker = _StrictNativeSurfaceTracker  # type: ignore[method-assign]
     return disp
 
 
@@ -130,64 +104,26 @@ def test_native_binding_rejects_dispatcher_calls() -> None:
         t.update(b, s, c, frame_tensor=torch.zeros(3, 8, 8, device="cuda"), stream_id=1)
 
 
-# ── Dispatcher with a native-surface tracker ────────────────────────────
-
-_EXPECTED = [
-    (DegradationLevel.NORMAL, TypeError, "frame_tensor"),
-    (DegradationLevel.REDUCED, TypeError, "frame_tensor"),
-    (DegradationLevel.FAST_PATH, AttributeError, "set_degradation_params"),
-    (DegradationLevel.EMERGENCY, AttributeError, "set_degradation_params"),
-]
+# ── #538 D2 observation: what a dead worker leaves behind ────────────────
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("level", "exc", "needle"), _EXPECTED)
-async def test_first_detection_kills_worker(
-    level: DegradationLevel, exc: type[Exception], needle: str
-) -> None:
-    with patch.object(dmod, "VRAMLevelWriter", return_value=MagicMock()):
-        disp = _dispatcher(level)
-        await disp.start()
-        task = disp._worker_task
-        assert task is not None
-        await disp.put_frame("cam0", torch.rand(3, *_HW), 0.0)
-        await _wait_done(task)
-        err = task.exception()
-        assert type(err) is exc and needle in str(err)
-        task.cancel()
-        disp._running = False
-
-
-@pytest.mark.asyncio
-async def test_empty_frames_never_touch_tracker() -> None:
-    """The failure depends on input: frames without detections keep the worker alive."""
-    with patch.object(dmod, "VRAMLevelWriter", return_value=MagicMock()):
-        disp = _dispatcher(DegradationLevel.FAST_PATH, n_boxes=0)
-        await disp.start()
-        for i in range(5):
-            await disp.put_frame("cam0", torch.rand(3, *_HW), float(i))
-        await asyncio.wait_for(disp.queue.join(), timeout=2.0)
-        assert disp._worker_task is not None and not disp._worker_task.done()
-        assert disp.trackers == {}
-        await disp.stop()
-
-
-# ── #538 D2 observations: what a dead worker leaves behind ───────────────
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(("level", "exc", "needle"), [_EXPECTED[0], _EXPECTED[2]])
-async def test_dead_worker_aftermath(
-    level: DegradationLevel, exc: type[Exception], needle: str
-) -> None:
+async def test_dead_worker_aftermath() -> None:
+    fake = create_autospec(facade.GPUByteTracker, instance=True)
+    fake.update.side_effect = RuntimeError("native tracker failed")
     writer = MagicMock()
-    with patch.object(dmod, "VRAMLevelWriter", return_value=writer):
-        disp = _dispatcher(level)
+    with (
+        patch.object(dmod, "native_unavailable_reason", return_value=None),
+        patch.object(dmod, "VRAMLevelWriter", return_value=writer),
+    ):
+        disp = _dispatcher(DegradationLevel.FAST_PATH)
+        disp._make_tracker = lambda: OnlineTrackerAdapter(_tracker=fake)  # type: ignore[method-assign]
         await disp.start()
         task = disp._worker_task
         assert task is not None
         await disp.put_frame("cam0", torch.rand(3, *_HW), 0.0)
         await _wait_done(task)
+        assert isinstance(task.exception(), RuntimeError)
 
         # Nothing outside the task records the failure.
         assert disp._running is True
@@ -196,11 +132,11 @@ async def test_dead_worker_aftermath(
             await disp.put_frame("cam0", torch.rand(3, *_HW), float(i))  # no error
         stats = disp.get_stats()
         assert stats["queue_depth"] == disp.queue.maxsize == 100
-        assert stats["current_level"] == level.name
+        assert stats["current_level"] == "FAST_PATH"
         assert not [k for k in stats if "error" in k or "health" in k or "drop" in k]
 
         # stop() re-raises the worker's exception and skips its cleanup.
-        with pytest.raises(exc, match=needle):
+        with pytest.raises(RuntimeError, match="native tracker failed"):
             await asyncio.wait_for(disp.stop(), timeout=2.0)
         assert disp._running is False
         assert disp._worker_task is task
