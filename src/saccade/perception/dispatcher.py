@@ -323,6 +323,10 @@ class WorkbenchPool:
         self._failure: Optional[Exception] = None
         self._failed_stream: Optional[str] = None
         self._stop_event = threading.Event()
+        # Bumped by start(); a callback carries the generation it was produced
+        # in and is delivered only if that generation is still current and the
+        # pool is RUNNING/FAILED.
+        self._generation = 0
         self._late_callbacks = 0
         self._discarded_on_stop = 0
         self._stop_timeouts = 0
@@ -363,6 +367,8 @@ class WorkbenchPool:
         if self._state is PoolState.FAILED:
             raise self._failed()  # stop() first
         if self._state is PoolState.STOPPING:
+            # STOPPED is set only after every worker ended and the batcher was
+            # released, so refusing STOPPING refuses a restart over live workers.
             raise WorkbenchPoolStopTimeout(
                 "WorkbenchPool is still stopping; call stop() again first"
             )
@@ -387,8 +393,10 @@ class WorkbenchPool:
         self._failure = None
         self._failed_stream = None
         self._loop = asyncio.get_event_loop()
-        self._state = PoolState.RUNNING
-        self._running = True
+        with self._lock:
+            self._generation += 1
+            self._state = PoolState.RUNNING
+            self._running = True
         try:
             self._start_workers()
         except BaseException as e:
@@ -432,7 +440,8 @@ class WorkbenchPool:
             # Callback: forward actual workbench results to asyncio event loop.
             # Results that arrive after stop() began, or after the loop closed,
             # are dropped and counted instead of killing the worker (D2-WB-1).
-            def make_callback(sid: str = sid) -> Any:
+            # _deliver() checks the generation again when the loop runs it.
+            def make_callback(sid: str = sid, gen: int = self._generation) -> Any:
                 def _cb(
                     sid: str,
                     ts: float,
@@ -451,7 +460,7 @@ class WorkbenchPool:
                         return
                     try:
                         loop.call_soon_threadsafe(
-                            self.on_result, sid, ts, ids, boxes, classes, kps
+                            self._deliver, gen, sid, ts, ids, boxes, classes, kps
                         )
                     except RuntimeError:  # the loop closed after the check
                         self._count_late_callback()
@@ -515,13 +524,38 @@ class WorkbenchPool:
         with self._lock:
             self._late_callbacks += 1
 
+    def _deliver(
+        self,
+        gen: int,
+        sid: str,
+        ts: float,
+        ids: torch.Tensor,
+        boxes: torch.Tensor,
+        classes: torch.Tensor,
+        kps: Optional[torch.Tensor],
+    ) -> None:
+        """Runs on the event loop. Drops a result queued before a stop/restart."""
+        if gen != self._generation or self._state not in (
+            PoolState.RUNNING,
+            PoolState.FAILED,
+        ):
+            self._count_late_callback()
+            return
+        if self.on_result:
+            self.on_result(sid, ts, ids, boxes, classes, kps)
+
     def stop(self, timeout: float = 5.0) -> None:
         """Stop all workers within ``timeout`` seconds, then shut down the batcher.
 
-        Never blocks past the deadline. If a worker is still alive at the
+        The worker joins share one deadline. If a worker is still alive at the
         deadline, the batcher is kept, the state is STOPPING, and
         ``WorkbenchPoolStopTimeout`` is raised; call ``stop()`` again to retry.
-        After the workers end, a failed run raises ``WorkbenchPoolFailed``.
+        ``batcher.shutdown()`` runs after the deadline with its own bound
+        (``BatchingTRTDetector`` joins its server for up to 2 s). If it raises
+        or reports that its server is still alive, the batcher reference is
+        kept and the state stays STOPPING. STOPPED is reported only after the
+        workers ended and the batcher was released. Then a failed run raises
+        ``WorkbenchPoolFailed``.
         """
         if self._state in (PoolState.CREATED, PoolState.STOPPED):
             return
@@ -551,12 +585,16 @@ class WorkbenchPool:
                 discarded += 1
         with self._lock:
             self._discarded_on_stop += discarded
-        try:
-            if self._batcher is not None:
-                self._batcher.shutdown()
-        finally:
+        if self._batcher is not None:
+            # A raise propagates with the batcher kept and the state STOPPING.
+            if self._batcher.shutdown() is False:
+                with self._lock:
+                    self._stop_timeouts += 1
+                raise WorkbenchPoolStopTimeout(
+                    "WorkbenchPool batcher server did not end; the batcher was kept"
+                )
             self._batcher = None
-            self._state = PoolState.STOPPED
+        self._state = PoolState.STOPPED
         print("🛑 [WorkbenchPool] Stopped.")
         if self._failure is not None:
             raise self._failed()

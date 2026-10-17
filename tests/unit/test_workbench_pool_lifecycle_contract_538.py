@@ -17,6 +17,8 @@ the test instead of blocking pytest. CUDA is out of scope (D2-GPU).
 
 from __future__ import annotations
 
+import pytest
+
 from tests.unit.test_workbench_pool_lifecycle_observed_538 import _run
 
 
@@ -37,6 +39,10 @@ async def main():
     print(f"@stop1_s={round(time.monotonic() - t0)}")
     print(f"@state={pool.state.value}")
     print(f"@batcher_down={FakeBatcher.last.down}")
+    try:
+        await pool.start()
+    except d.WorkbenchPoolStopTimeout:
+        print("@restart_while_stopping=refused")
     GATE.set()                                       # the worker finishes its frame
     wait_until(lambda: not pool._workers[0].is_alive())
     pool.stop(timeout=1.0)                           # retry: now it really stops
@@ -54,6 +60,7 @@ asyncio.run(main())
         "stop1_s": "1",
         "state": "stopping",
         "batcher_down": "False",
+        "restart_while_stopping": "refused",
         "state2": "stopped",
         "alive_at_shutdown": "0",
         "used_after_shutdown": "0",
@@ -245,4 +252,74 @@ print(f"@state={pool.state.value}")
         "worker_alive": "True",
         "thread_errors": "[]",
         "state": "stopped",
+    }
+
+
+_QUEUED_THEN = """
+async def main():
+    pool = make_pool(1)
+    await pool.start()
+    pool.put_frame("stream_0", frame(), 0.0)
+    # Block the loop (no await) until the worker has queued its callback.
+    wait_until(lambda: FakeWorkbench.processed == 1)
+    time.sleep(0.2)
+    {action}
+    await asyncio.sleep(0.2)                         # now the loop runs the callback
+    print(f"@results={{len(RESULTS)}}")
+    print(f"@late_callbacks={{pool.get_stats()['late_callbacks']}}")
+    print(f"@state={{pool.state.value}}")
+    if pool.state is d.PoolState.RUNNING:
+        pool.stop()
+asyncio.run(main())
+"""
+
+
+def test_callback_queued_before_stop_is_dropped_when_it_runs() -> None:
+    out = _run(_QUEUED_THEN.format(action="pool.stop()"))
+    assert out == {"results": "0", "late_callbacks": "1", "state": "stopped"}
+
+
+def test_callback_queued_before_restart_is_dropped_when_it_runs() -> None:
+    out = _run(_QUEUED_THEN.format(action="pool.stop(); await pool.start()"))
+    assert out == {"results": "0", "late_callbacks": "1", "state": "running"}
+
+
+def test_callback_queued_while_running_is_delivered() -> None:
+    """Positive control for the two cases above."""
+    out = _run(_QUEUED_THEN.format(action="pass"))
+    assert out == {"results": "1", "late_callbacks": "0", "state": "running"}
+
+
+@pytest.mark.parametrize("failure", ["False", '"raise"'])
+def test_batcher_not_released_keeps_stopping(failure: str) -> None:
+    out = _run(
+        f"""
+async def main():
+    MODE["shutdown"] = {failure}
+    pool = make_pool(1)
+    await pool.start()
+    try:
+        pool.stop()
+    except (d.WorkbenchPoolStopTimeout, OSError) as e:
+        print(f"@stop1={{type(e).__name__}}")
+    print(f"@state={{pool.state.value}}")
+    print(f"@batcher_kept={{pool._batcher is FakeBatcher.last}}")
+    try:
+        await pool.start()
+    except d.WorkbenchPoolStopTimeout:
+        print("@restart=refused")
+    MODE["shutdown"] = True
+    pool.stop()                                      # retry once the batcher releases
+    print(f"@state2={{pool.state.value}}")
+    print(f"@batcher_cleared={{pool._batcher is None}}")
+asyncio.run(main())
+"""
+    )
+    assert out == {
+        "stop1": "WorkbenchPoolStopTimeout" if failure == "False" else "OSError",
+        "state": "stopping",
+        "batcher_kept": "True",
+        "restart": "refused",
+        "state2": "stopped",
+        "batcher_cleared": "True",
     }

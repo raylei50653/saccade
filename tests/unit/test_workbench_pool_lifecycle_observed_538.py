@@ -33,7 +33,7 @@ from types import SimpleNamespace
 import torch
 import saccade.perception.dispatcher as d
 
-MODE = {"process": "ok", "construct_fail_at": None}
+MODE = {"process": "ok", "construct_fail_at": None, "shutdown": None}
 GATE = threading.Event()
 THREAD_ERRORS = []
 threading.excepthook = lambda a: THREAD_ERRORS.append(f"{a.thread.name}:{type(a.exc_value).__name__}")
@@ -49,11 +49,17 @@ class FakeBatcher:
     def make_proxy(self):
         return self
     def shutdown(self):
+        # MODE["shutdown"]: None (legacy, no report), False (server still alive),
+        # or "raise".
+        if MODE["shutdown"] == "raise":
+            raise OSError("batcher shutdown failed")
         self.down = True
         self.alive_at_shutdown = sum(w.is_alive() for w in POOL._workers)
+        return MODE["shutdown"]
 
 class FakeWorkbench:
     built = 0
+    processed = 0
     def __init__(self, proxy, cfg, device, max_dets, max_tracks):
         if MODE["construct_fail_at"] == FakeWorkbench.built:
             raise RuntimeError("workbench construction failed")
@@ -67,6 +73,7 @@ class FakeWorkbench:
             GATE.wait()
         if self.batcher.down:
             self.batcher.used_after_shutdown += 1
+        FakeWorkbench.processed += 1
         z = torch.zeros(0)
         return SimpleNamespace(ids=z, boxes=z, classes=z)
 

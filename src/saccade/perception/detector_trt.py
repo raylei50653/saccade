@@ -671,11 +671,13 @@ class BatchingTRTDetector:
         worker_stream.wait_event(infer_event)
         return slice_tensor
 
-    def shutdown(self) -> None:
+    def shutdown(self) -> bool:
+        """Stop the server thread; return whether it ended within 2 s."""
         self._shutdown = True
         with self._cv:
             self._cv.notify_all()
         self._server.join(timeout=2.0)
+        return not self._server.is_alive()
 
     # ── server loop ───────────────────────────────────────────────────────────
 

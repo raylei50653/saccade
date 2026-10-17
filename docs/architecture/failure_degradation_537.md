@@ -364,7 +364,7 @@ function 標籤是 `diagnostic`。要修復時，必須在同一個 PR 把這些
 
 ## 13. #538 D2-WB-1：WorkbenchPool 有界停止、worker failure 與資源釋放
 
-本節記錄 D2-WB-1 修復 PR，§12 的現況表是修復前的基線。依循 owner 目標（2026-10-17：worker 還沒真正結束時，不得宣稱正常停止，也不得提前 shutdown 仍在使用的 batcher）與 §12 的契約。§12 標為「選擇」的兩項（重新啟動換新的一組、晚到的 callback 丟棄並計數）待 owner 確認。
+本節記錄 D2-WB-1 修復 PR，§12 的現況表是修復前的基線。依循 owner 目標（2026-10-17：worker 還沒真正結束時，不得宣稱正常停止，也不得提前 shutdown 仍在使用的 batcher）與 §12 的契約。§12 標為「選擇」的兩項（重新啟動換新的一組、晚到的 callback 丟棄並計數）已在 owner 最終裁決中正式批准，並附帶本節末「驗收補強」的條件。
 
 **修改**（[dispatcher.py](../../src/saccade/perception/dispatcher.py)，只動 `WorkbenchPool` 與 `_WorkbenchWorker`）：
 
@@ -416,3 +416,42 @@ WB-01、09、11、12、13 不變（[observed 測試](../../tests/unit/test_workb
 - 沒有裁決的項目維持現況：`stop()` 之後的 `put_frame()`、coroutine 型的 `on_result`（WB-11）、stream id 的對應方式。
 - worker 的 queue 改成 50 ms 輪詢，閒置時會多一些喚醒，沒有量測延遲影響。
 - 只在 CPU fake 上驗證；真實 TensorRT、CUDA、Workbench，以及 CUDA event 與 buffer lifetime，都歸 D2-GPU。8stream `--workbench` 入口仍然無法使用。
+
+**驗收補強**（owner 最終裁決，2026-10-17）：
+
+裁決正式批准兩項選擇：重新啟動時換新的 queue、worker 與 stop event；晚到的 callback 丟棄並計數。同時要求補上以下兩個邊界。
+
+- **callback 在執行時才檢查**：
+  - 修復前只在 worker 呼叫 `call_soon_threadsafe()` 時檢查狀態，所以已經排入、但在 stop 或重新啟動之後才執行的 callback，仍會把舊結果交出去。
+  - 現在 pool 有 `_generation`，每次 `start()` 都會遞增。worker 的 callback 帶著建立時的 generation，交由 `_deliver()` 在 event loop 上執行；執行時，generation 不是目前的值、或 pool 不在 RUNNING／FAILED，就丟棄並計數。
+- **重新啟動的條件**：只有在 STOPPED 才能重新啟動，而 STOPPED 只在所有 worker 都結束、batcher 已釋放後才會設定。STOPPING（worker 仍存活或 batcher 尚未釋放）時拒絕。
+- **batcher shutdown 的時間保證與結果**：
+  - `stop(timeout)` 的共同 deadline 只涵蓋 worker 的 join。
+  - `batcher.shutdown()` 在 deadline 之後執行，有自己的上限：`BatchingTRTDetector.shutdown()` 最多 join server thread 2 s，現在會回傳 server 是否已結束。
+  - shutdown 拋例外，或回傳 False（server 仍存活）時，保留 batcher 的引用，狀態維持 STOPPING，例外照原樣往外拋或改拋 `WorkbenchPoolStopTimeout`；之後再呼叫 `stop()` 會重試。
+  - 回傳 `None` 的舊式 batcher 視為已釋放。
+  - 修復前，shutdown 失敗時也會無條件設為 STOPPED，並丟掉 batcher 的引用。
+
+| 測試（[contract](../../tests/unit/test_workbench_pool_lifecycle_contract_538.py)） | 涵蓋 |
+|:--|:--|
+| `test_callback_queued_before_stop_is_dropped_when_it_runs` | worker 已排入 callback，event loop 尚未執行時呼叫 `stop()`：callback 執行時被丟棄，結果數 0，`late_callbacks` 為 1 |
+| `test_callback_queued_before_restart_is_dropped_when_it_runs` | 同上，但期間發生 `stop()` 再 `start()`：狀態雖然是 RUNNING，generation 已不同，仍然丟棄 |
+| `test_callback_queued_while_running_is_delivered` | 正控制：期間沒有 stop 或重新啟動時照常交付 |
+| `test_batcher_not_released_keeps_stopping` | shutdown 回傳 False 或拋例外：維持 STOPPING、保留 batcher、拒絕重新啟動；batcher 釋放後重試，狀態變為 STOPPED |
+| `test_stuck_worker_stop_is_bounded_and_keeps_the_batcher` | 新增檢查：STOPPING 時重新啟動被拒絕 |
+
+負控制（41 個測試，只替換 `dispatcher.py`）：
+
+| 變體 | 結果 |
+|:--|:--|
+| #604 head | 4 個失敗 |
+| `_deliver()` 不做任何檢查 | 2 個失敗 |
+| `_deliver()` 只檢查狀態、不檢查 generation | 1 個失敗（重新啟動的情境） |
+| 忽略 shutdown 的回傳值 | 1 個失敗 |
+
+另有兩個 mutation 是等價 mutant，對應的程式碼已移除，讓實作和測試一致：
+
+- `stop()` 也遞增 generation：狀態檢查已經涵蓋。
+- `start()` 另外檢查存活的 worker 或 batcher：由 STOPPED 的不變式涵蓋。
+
+host 層的保證不能取代 D2-GPU 的 buffer lifetime 驗證。
