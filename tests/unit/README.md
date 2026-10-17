@@ -5,9 +5,13 @@
 
 | Test | Scope | Function | Lifecycle | Summary |
 |------|-------|----------|-----------|---------|
+| `test_caller_lifecycle_538.py` | perception,pipeline | contract | active | #538 caller lifecycle: main.py and run_8stream_perception.py stop their workers and resources. |
 | `test_check_association_tools.py` | eval | contract | active | Unit tests for scripts/tools/check_association_tools.py. |
 | `test_compiled_head_reverse_engineering_runner.py` | system | contract | active | The #465 compiled-head reverse-engineering runner implements its frozen declaration. |
 | `test_config_consistency.py` | eval | contract | active | Guard against silent divergence across the three config layers. |
+| `test_dispatcher_failure_contract_538.py` | perception,resource | contract | active | #538 D2-AD: AsyncDispatcher worker failure, health, error propagation, queue accounting, stop clean… |
+| `test_dispatcher_tracker_contract_537.py` | perception,resource | contract | active | #537 R-1: the AsyncDispatcher↔tracker contract after the adapter fix. |
+| `test_dispatcher_tracker_contract_observed_537.py` | perception,resource | diagnostic | active | #537 C0-11: pin the tracker surfaces that AsyncDispatcher used to call. |
 | `test_eval_script_paths.py` | eval | contract | active | Pin the scripts/eval compat wrappers to their relocated implementations. |
 | `test_headline_decision_contract.py` | eval,tracking,cross-module | contract | active | Unit tests for scripts/tools/check_headline_decision_contract.py. |
 | `test_headline_head_export_binding.py` | system | contract | active | The headline head exporter binds to the preset and the committed lineage inventory. |
@@ -60,5 +64,7 @@
 | `test_tracker_block_divergence_465_r2_runner.py` | system | contract | active | The tracker block-divergence r2 runner implements its exploratory declaration. |
 | `test_tracker_block_divergence_465_runner.py` | system | contract | active | The tracker block-divergence runner implements its exploratory declaration. |
 | `test_vram_level_snapshot_contract_537.py` | resource | contract | active | #537 B0-F07: VRAM-level snapshot contract (rename-published record, stateless reader). |
+| `test_workbench_pool_lifecycle_contract_538.py` | perception | contract | active | #538 D2-WB-1: WorkbenchPool bounded stop, worker failure and safe release. |
+| `test_workbench_pool_lifecycle_observed_538.py` | perception | diagnostic | active | #538 D2-WB-0: the WorkbenchPool normal path, plus the harness that the contract tests share. |
 
 <!-- END generated test index -->

@@ -11,7 +11,7 @@ and resource-aware degradation without requiring actual TensorRT models.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 import torch
@@ -21,10 +21,23 @@ from saccade.perception.dispatcher import (
     WorkbenchPool,
     _match_keypoints_to_tracks,
 )
+from saccade.perception.online_tracker_adapter import OnlineTrackerAdapter
 from saccade.resource.resource_manager import ResourceManager, DegradationLevel
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _native_tracker_available():
+    """These host-only tests skip the native preflight in ``start()``.
+
+    The preflight itself is covered by test_dispatcher_tracker_contract_537.py.
+    """
+    with patch(
+        "saccade.perception.dispatcher.native_unavailable_reason", return_value=None
+    ):
+        yield
 
 
 def _make_mock_detector() -> MagicMock:
@@ -92,14 +105,17 @@ def _empty_track_result():
 
 
 def _make_mock_tracker() -> MagicMock:
-    """Create a mock tracker with expected update signature."""
-    tracker = MagicMock()
+    """A mock with the OnlineTrackerAdapter surface (#537 R-1).
+
+    autospec keeps the mock as strict as the adapter: an unknown method or
+    keyword raises instead of being recorded.
+    """
+    tracker = create_autospec(OnlineTrackerAdapter, instance=True)
     tracker.update.return_value = (
         torch.empty((0,), dtype=torch.int32),
         torch.empty((0, 4), dtype=torch.float32),
         torch.empty((0,), dtype=torch.int32),
     )
-    tracker.set_degradation_params = MagicMock()
     return tracker
 
 
@@ -179,16 +195,16 @@ def test_init_defaults() -> None:
     assert dispatcher.queue.maxsize == 100
 
 
-def test_init_with_extractor() -> None:
+def test_init_with_extractor_is_refused() -> None:
+    """Only geometry-only tracking is supported (#537 R-1)."""
     detector = _make_mock_detector()
     rm = _make_mock_resource_manager()
-    extractor = MagicMock()
-    dispatcher = AsyncDispatcher(
-        detector=detector,
-        resource_manager=rm,
-        extractor=extractor,
-    )
-    assert dispatcher.extractor is extractor
+    with pytest.raises(ValueError, match="geometry-only"):
+        AsyncDispatcher(
+            detector=detector,
+            resource_manager=rm,
+            extractor=MagicMock(),
+        )
 
 
 @pytest.mark.asyncio
@@ -207,7 +223,7 @@ async def test_workbench_pool_nv12_requires_kernel() -> None:
 
 
 def test_get_tracker_creates_new() -> None:
-    with patch("saccade.perception.dispatcher.GPUByteTracker") as MockTracker:
+    with patch("saccade.perception.dispatcher.OnlineTrackerAdapter") as MockTracker:
         # Side effect ensures each call returns a new instance with any args
         MockTracker.side_effect = lambda *args, **kwargs: MagicMock()
         detector = _make_mock_detector()
@@ -223,12 +239,12 @@ def test_get_tracker_creates_new() -> None:
         assert "stream_a" in dispatcher.trackers
         assert "stream_b" in dispatcher.trackers
         assert len(dispatcher.trackers) == 2
-        # Verify GPUByteTracker was called twice
+        # Verify the tracker adapter was constructed twice
         assert MockTracker.call_count == 2
 
 
 def test_get_tracker_reuses_existing() -> None:
-    with patch("saccade.perception.dispatcher.GPUByteTracker") as MockTracker:
+    with patch("saccade.perception.dispatcher.OnlineTrackerAdapter") as MockTracker:
         MockTracker.return_value = MagicMock()
         detector = _make_mock_detector()
         rm = _make_mock_resource_manager()
@@ -242,7 +258,7 @@ def test_get_tracker_reuses_existing() -> None:
 
 
 def test_get_tracker_lru_order() -> None:
-    with patch("saccade.perception.dispatcher.GPUByteTracker") as MockTracker:
+    with patch("saccade.perception.dispatcher.OnlineTrackerAdapter") as MockTracker:
         MockTracker.return_value = MagicMock()
         detector = _make_mock_detector()
         rm = _make_mock_resource_manager()
@@ -261,7 +277,7 @@ def test_get_tracker_lru_order() -> None:
 
 
 def test_get_tracker_evicts_lru() -> None:
-    with patch("saccade.perception.dispatcher.GPUByteTracker") as MockTracker:
+    with patch("saccade.perception.dispatcher.OnlineTrackerAdapter") as MockTracker:
         MockTracker.return_value = MagicMock()
         detector = _make_mock_detector()
         rm = _make_mock_resource_manager()
@@ -281,7 +297,7 @@ def test_get_tracker_evicts_lru() -> None:
 
 
 def test_deregister_stream_existing() -> None:
-    with patch("saccade.perception.dispatcher.GPUByteTracker") as MockTracker:
+    with patch("saccade.perception.dispatcher.OnlineTrackerAdapter") as MockTracker:
         MockTracker.return_value = MagicMock()
         detector = _make_mock_detector()
         rm = _make_mock_resource_manager()
@@ -375,8 +391,8 @@ async def test_start_and_stop() -> None:
 
 @pytest.mark.asyncio
 async def test_put_frame_async() -> None:
-    with patch("saccade.perception.dispatcher.GPUByteTracker") as MockTracker:
-        MockTracker.return_value = MagicMock()
+    with patch("saccade.perception.dispatcher.OnlineTrackerAdapter") as MockTracker:
+        MockTracker.return_value = _make_mock_tracker()
         detector = _make_mock_detector()
         rm = _make_mock_resource_manager()
         dispatcher = AsyncDispatcher(
@@ -476,7 +492,7 @@ async def test_process_batch_with_detections() -> None:
 
 @pytest.mark.asyncio
 async def test_process_batch_degradation_mode() -> None:
-    """In FAST_PATH degradation, tracker.set_degradation_params is called."""
+    """FAST_PATH only caps the batch; the tracker gets the same update call (#537 R-1)."""
     # Create detector that returns actual detections (not empty)
     detector = MagicMock()
     boxes, scores, classes, keypoints = _make_detection_result()
@@ -496,9 +512,7 @@ async def test_process_batch_degradation_mode() -> None:
         )
         batch = [_queued_item(dispatcher, "stream_a", 1.0)]
         await dispatcher._process_batch(batch, DegradationLevel.FAST_PATH)
-        tracker.set_degradation_params.assert_called_once_with(
-            DegradationLevel.FAST_PATH
-        )
+        tracker.update.assert_called_once_with(boxes, scores, classes)
 
 
 @pytest.mark.asyncio

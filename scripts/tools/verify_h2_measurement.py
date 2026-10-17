@@ -51,10 +51,12 @@ import argparse
 import hashlib
 import json
 import os
+import functools
 import subprocess
 import sys
+import types
 from pathlib import Path
-from typing import Any, Iterable, Mapping, NamedTuple
+from typing import Any, Callable, Iterable, Mapping, NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _TOOLS = REPO_ROOT / "scripts" / "tools"
@@ -65,7 +67,6 @@ import h2_behavioral_identity as behavior  # noqa: E402
 import h2_import_witness as import_witness  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
 import run_h2_measurement_child as child  # noqa: E402
-import h2_path_partition as path_partition  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import verify_h0_phase_a as h0_verifier  # noqa: E402  (imported, never modified)
 from build_runtime_identity import ALL_COORDINATE_AXES, IDENTITY_SCHEMA  # noqa: E402
@@ -366,8 +367,51 @@ def _hex(value: Any, length: int) -> bool:
     )
 
 
+PATH_PARTITION_SOURCE = "scripts/tools/h2_path_partition.py"
+
+
+@functools.lru_cache(maxsize=None)
+def _archived_classifier(head: str) -> Callable[[str], str]:
+    """The path classifier of the archived commit itself.
+
+    The producer computed the checkout witness at ``head`` with that commit's
+    ``h2_path_partition.py``. Later reclassifying a path that already existed
+    (for example the #538 online entry points) must not change what an old
+    archive attests. So the axes are rebuilt with the classifier the archive
+    was produced under, read from the commit's git tree, never from the
+    verifier's checkout.
+    """
+    source = _git("show", f"{head}:{PATH_PARTITION_SOURCE}")
+    name = f"_h2_path_partition_at_{head[:12]}"
+    module = types.ModuleType(name)
+    # Module-level code may derive the repository root from __file__; classify()
+    # itself only reads the rule tables.
+    module.__file__ = str(Path(__file__).resolve().with_name("h2_path_partition.py"))
+    # dataclasses resolves string annotations through sys.modules at class
+    # creation, so the module is registered only while it executes.
+    sys.modules[name] = module
+    try:
+        exec(
+            compile(source, f"{head}:{PATH_PARTITION_SOURCE}", "exec"), module.__dict__
+        )
+    except Exception as exc:
+        raise VerificationError(
+            f"archived path partition at {head} does not load: {exc}"
+        ) from exc
+    finally:
+        sys.modules.pop(name, None)
+    classify = module.__dict__.get("classify")
+    if not callable(classify):
+        raise VerificationError(f"archived path partition at {head} has no classify()")
+    return classify
+
+
 def _commit_content_axes(head: str) -> dict[str, dict[str, Any]]:
-    """Rebuild all content axes from the archived commit, not controller code."""
+    """Rebuild all content axes from the archived commit, not controller code.
+
+    Both the tree and the path classifier come from ``head``.
+    """
+    classify = _archived_classifier(head)
     raw = _git("ls-tree", "-r", "-z", "--full-tree", head)
     classified: dict[str, list[dict[str, str]]] = {
         "decision_relevant": [],
@@ -384,7 +428,7 @@ def _commit_content_axes(head: str) -> dict[str, dict[str, Any]]:
             raise VerificationError("git tree listing is malformed") from exc
         if object_type != "blob" or path.endswith((".md", ".rst", ".txt")):
             continue
-        path_class = path_partition.classify(path)
+        path_class = classify(path)
         if path_class in classified:
             classified[path_class].append({"blob": blob, "path": path})
     return {

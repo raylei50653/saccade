@@ -3,8 +3,10 @@
 # status: stable
 import argparse
 import asyncio
+import functools
+import inspect
 import time
-from typing import Optional
+from typing import Any, Callable, Optional, Sequence
 
 import torch
 
@@ -19,7 +21,14 @@ from saccade.media.rtsp import (
     build_stream_path,
 )
 from saccade.perception.detector_trt import TRTYoloDetector
-from saccade.perception.dispatcher import AsyncDispatcher
+from saccade.perception.dispatcher import (
+    AsyncDispatcher,
+    DispatcherFailed,
+    DispatcherState,
+    PoolState,
+    WorkbenchPool,
+    WorkbenchPoolFailed,
+)
 from saccade.perception.online_telemetry import OnlineTelemetry
 from saccade.resource.resource_manager import ResourceManager
 
@@ -57,14 +66,15 @@ async def run_stream_producer(
 
             await asyncio.sleep(0.001)
     except Exception as e:
-        print(f"❌ Stream [{stream_id}] error: {e}")
+        print(f"❌ Stream [{stream_id}] error: {e!r}")
+        raise
     finally:
         media.release()
 
 
 async def run_stream_producer_workbench(
     stream_id: str,
-    pool: "WorkbenchPool",  # noqa: F821
+    pool: WorkbenchPool,
     rtsp_url: str,
 ) -> None:
     """Async RTSP producer that pushes to a WorkbenchPool per-stream queue."""
@@ -91,7 +101,8 @@ async def run_stream_producer_workbench(
 
             await asyncio.sleep(0.001)
     except Exception as e:
-        print(f"❌ Stream [{stream_id}] error: {e}")
+        print(f"❌ Stream [{stream_id}] error: {e!r}")
+        raise
     finally:
         media.release()
 
@@ -119,7 +130,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--workbench",
         action="store_true",
         default=False,
-        help="Use per-thread WorkbenchPool (GIL-free, cross-thread parallel)",
+        help=(
+            "Use per-thread WorkbenchPool (GIL-free, cross-thread parallel). "
+            "Unsupported: not verified end to end (#538)."
+        ),
     )
     parser.add_argument(
         "--rtsp-prefix",
@@ -146,7 +160,7 @@ def build_stream_url(args: argparse.Namespace, stream_index: int) -> str:
     )
 
 
-async def _on_result_workbench(
+def _on_result_workbench(
     sid: str,
     ts: float,
     ids: torch.Tensor,
@@ -183,131 +197,285 @@ async def _on_result_legacy(
     print(f"  [{sid}@{ts:.1f}] {n} tracks | IDs={ids[:top].tolist()}")
 
 
+def _same_failure(a: BaseException, b: BaseException) -> bool:
+    """Both report the same underlying worker failure (same ``__cause__``)."""
+    return a is b or (a.__cause__ is not None and a.__cause__ is b.__cause__)
+
+
+async def _supervise(
+    tasks: Sequence["asyncio.Task[Any]"], watchers: Sequence["asyncio.Task[Any]"]
+) -> None:
+    """Wait until every task in ``tasks`` ends; the first failure in ``tasks`` or
+    ``watchers`` cancels the rest and is re-raised (later ones become notes)."""
+    everything = [*tasks, *watchers]
+    first: Optional[BaseException] = None
+    try:
+        pending = set(everything)
+        while first is None and any(t in pending for t in tasks):
+            done, pending = await asyncio.wait(
+                pending, return_when=asyncio.FIRST_COMPLETED
+            )
+            for t in done:
+                if first is None and not t.cancelled() and t.exception() is not None:
+                    first = t.exception()
+    finally:
+        for t in everything:
+            t.cancel()
+        await asyncio.gather(*everything, return_exceptions=True)
+    if first is not None:
+        for t in everything:
+            other = None if t.cancelled() else t.exception()
+            if other is not None and not _same_failure(other, first):
+                first.add_note(f"also failed: {other!r}")
+        raise first
+
+
+async def _cancel_and_wait(tasks: Sequence["asyncio.Task[Any]"]) -> None:
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _spawn(created: list["asyncio.Task[Any]"], make: Callable[[], Any]) -> None:
+    coro = make()
+    try:
+        task = asyncio.create_task(coro)
+    except BaseException:
+        coro.close()  # never scheduled; do not leave it un-awaited
+        raise
+    created.append(task)
+
+
+async def _spawn_and_supervise(
+    producers: Sequence[Callable[[], Any]], watchers: Sequence[Callable[[], Any]]
+) -> None:
+    """Create every task, then supervise them. If creating one fails (for
+    example a bad stream URL), the tasks already created are cancelled and
+    awaited before the error is raised."""
+    tasks: list["asyncio.Task[Any]"] = []
+    watching: list["asyncio.Task[Any]"] = []
+    try:
+        for make in producers:
+            _spawn(tasks, make)
+        for make in watchers:
+            _spawn(watching, make)
+    except BaseException:
+        await _cancel_and_wait([*tasks, *watching])
+        raise
+    await _supervise(tasks, watching)
+
+
+async def _raise_when_failed(
+    target: AsyncDispatcher | WorkbenchPool, poll_s: float = 0.1
+) -> None:
+    """Surface a worker failure even when no producer is sending frames."""
+    if isinstance(target, WorkbenchPool):
+        while target.state is not PoolState.FAILED:
+            await asyncio.sleep(poll_s)
+        raise WorkbenchPoolFailed(
+            f"WorkbenchPool worker failed: {target.failure!r}"
+        ) from target.failure
+    while target.state is not DispatcherState.FAILED:
+        await asyncio.sleep(poll_s)
+    raise DispatcherFailed(
+        f"AsyncDispatcher worker failed: {target.failure!r}"
+    ) from target.failure
+
+
+async def _cleanup(
+    primary: Optional[BaseException], steps: Sequence[tuple[str, Callable[[], Any]]]
+) -> None:
+    """Run every cleanup step even if an earlier one raises.
+
+    With a primary error, cleanup errors become its notes; otherwise the first
+    cleanup error is raised after all steps ran.
+    """
+    errors: list[Exception] = []
+    for name, step in steps:
+        try:
+            result = step()
+            if inspect.isawaitable(result):
+                await result
+        except Exception as e:
+            errors.append(e)
+            if primary is None:
+                continue
+            if not _same_failure(e, primary):
+                primary.add_note(f"cleanup {name} also failed: {e!r}")
+            else:  # the same failure re-raised; keep what its cleanup reported
+                for note in getattr(e, "__notes__", []):
+                    primary.add_note(f"cleanup {name}: {note}")
+    if primary is None and errors:
+        raise errors[0]
+
+
+async def _stats_loop(interval_s: float, report: Callable[[], None]) -> None:
+    while True:
+        await asyncio.sleep(interval_s)
+        report()
+
+
 async def run_multistream_perception(args: argparse.Namespace) -> None:
+    """Run until a producer or worker fails, or the task is cancelled.
+
+    Every resource created is released on exit, in order, even if an earlier
+    release raises. The first error is re-raised; release errors become its
+    notes and never replace it (#538 caller lifecycle).
+    """
     n = args.streams
     print("🚀 Initializing multi-stream Perception Pipeline...")
     telemetry = (
         OnlineTelemetry(sample_interval_sec=1.0) if args.online_telemetry else None
     )
-    if telemetry is not None:
-        telemetry.start()
+    cleanup: list[tuple[str, Callable[[], Any]]] = []
+    primary: Optional[BaseException] = None
+    try:
+        if telemetry is not None:
+            telemetry.start()
+            cleanup.append(("telemetry.stop()", telemetry.stop))
+        if args.workbench:
+            await _run_workbench(args, n, telemetry, cleanup)
+        else:
+            await _run_dispatcher(args, n, telemetry, cleanup)
+    except BaseException as e:
+        primary = e
+        if isinstance(e, asyncio.CancelledError):
+            print("🛑 Shutting down...")
+        raise
+    finally:
+        # Most recently created first: workers before what they depend on.
+        await _cleanup(primary, cleanup[::-1])
 
-    if args.workbench:
-        # WorkbenchPool: per-thread Workbenches sharing one BatchingTRTDetector
-        print(f"  Using WorkbenchPool ({n} threads, GIL-free hot path)")
-        pool = WorkbenchPool(  # noqa: F821
-            engine_path=args.engine,
-            n_streams=n,
-            on_result=_on_result_workbench,
-            input_hw=(args.input_size, args.input_size),
-            frame_size=(args.frame_width, args.frame_height),
-            telemetry=telemetry,
+
+async def _run_workbench(
+    args: argparse.Namespace,
+    n: int,
+    telemetry: Optional[OnlineTelemetry],
+    cleanup: list[tuple[str, Callable[[], Any]]],
+) -> None:
+    # WorkbenchPool: per-thread Workbenches sharing one BatchingTRTDetector
+    print(f"  Using WorkbenchPool ({n} threads, GIL-free hot path; unsupported)")
+    pool = WorkbenchPool(
+        engine_path=args.engine,
+        n_streams=n,
+        on_result=_on_result_workbench,
+        input_hw=(args.input_size, args.input_size),
+        frame_size=(args.frame_width, args.frame_height),
+        telemetry=telemetry,
+    )
+    # pool.stop() keeps a batcher that a live worker may still use.
+    cleanup.append(("pool.stop()", pool.stop))
+
+    def report() -> None:
+        stats = pool.get_stats()
+        print(
+            "📈 WorkbenchPool Stats: "
+            f"state={stats['state']} "
+            f"level={stats['current_level']} "
+            f"active={stats['active_streams']} "
+            f"queue={stats['queue_depth']} "
+            f"drops={stats['drops']} "
+            f"e2e_p95={stats['e2e_ms_p95']:.1f}ms "
+            f"e2e_p99={stats['e2e_ms_p99']:.1f}ms "
+            f"queue_wait_p95={stats['queue_wait_ms_p95']:.1f}ms"
         )
-        await pool.start()
-
-        tasks = []
-        for i in range(n):
-            sid = f"stream_{i}"
-            url = build_stream_url(args, i)
-            tasks.append(
-                asyncio.create_task(run_stream_producer_workbench(sid, pool, url))
+        if telemetry is not None:
+            print(
+                "🔬 Online Telemetry: "
+                f"cpu_mean={stats.get('cpu_util_mean', 0.0):.1f}% "
+                f"gpu_mean={stats.get('gpu_util_mean', 0.0):.1f}% "
+                f"gpu_p95={stats.get('gpu_util_p95', 0.0):.1f}% "
+                f"gpu_mem={stats.get('gpu_mem_used_mb_mean', 0.0):.0f}MB "
+                f"pre_p95={stats.get('workbench_preprocess_ms_p95', 0.0):.1f}ms "
+                f"wb_p95={stats.get('workbench_process_ms_p95', 0.0):.1f}ms "
+                f"worker_p95={stats.get('workbench_worker_ms_p95', 0.0):.1f}ms"
             )
 
-        try:
-            while True:
-                await asyncio.sleep(args.stats_interval_sec)
-                stats = pool.get_stats()
-                print(
-                    "📈 WorkbenchPool Stats: "
-                    f"level={stats['current_level']} "
-                    f"active={stats['active_streams']} "
-                    f"queue={stats['queue_depth']} "
-                    f"drops={stats['drops']} "
-                    f"e2e_p95={stats['e2e_ms_p95']:.1f}ms "
-                    f"e2e_p99={stats['e2e_ms_p99']:.1f}ms "
-                    f"queue_wait_p95={stats['queue_wait_ms_p95']:.1f}ms"
-                )
-                if telemetry is not None:
-                    print(
-                        "🔬 Online Telemetry: "
-                        f"cpu_mean={stats.get('cpu_util_mean', 0.0):.1f}% "
-                        f"gpu_mean={stats.get('gpu_util_mean', 0.0):.1f}% "
-                        f"gpu_p95={stats.get('gpu_util_p95', 0.0):.1f}% "
-                        f"gpu_mem={stats.get('gpu_mem_used_mb_mean', 0.0):.0f}MB "
-                        f"pre_p95={stats.get('workbench_preprocess_ms_p95', 0.0):.1f}ms "
-                        f"wb_p95={stats.get('workbench_process_ms_p95', 0.0):.1f}ms "
-                        f"worker_p95={stats.get('workbench_worker_ms_p95', 0.0):.1f}ms"
-                    )
-        except asyncio.CancelledError:
-            print("🛑 Shutting down WorkbenchPool...")
-        finally:
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            pool.stop()
-            if telemetry is not None:
-                telemetry.stop()
-    else:
-        # AsyncDispatcher: legacy single-async-loop batching
-        print(f"  Using AsyncDispatcher ({n} streams, async batching)")
-        detector = TRTYoloDetector(engine_path=args.engine)
-        resource_manager = ResourceManager()
-        dispatcher = AsyncDispatcher(
-            detector,
-            resource_manager,
-            max_batch=args.max_batch,
-            input_hw=(args.input_size, args.input_size),
-            batch_timeout_ms=args.batch_timeout_ms,
-            max_streams=max(n, args.max_batch),
-            on_track_result=_on_result_legacy,
-            telemetry=telemetry,
+    await pool.start()
+    await _spawn_and_supervise(
+        [
+            functools.partial(
+                lambda i: run_stream_producer_workbench(
+                    f"stream_{i}", pool, build_stream_url(args, i)
+                ),
+                i,
+            )
+            for i in range(n)
+        ],
+        [
+            functools.partial(_stats_loop, args.stats_interval_sec, report),
+            functools.partial(_raise_when_failed, pool),
+        ],
+    )
+
+
+async def _run_dispatcher(
+    args: argparse.Namespace,
+    n: int,
+    telemetry: Optional[OnlineTelemetry],
+    cleanup: list[tuple[str, Callable[[], Any]]],
+) -> None:
+    # AsyncDispatcher: legacy single-async-loop batching
+    print(f"  Using AsyncDispatcher ({n} streams, async batching)")
+    detector = TRTYoloDetector(engine_path=args.engine)
+    resource_manager = ResourceManager()
+    cleanup.append(("resource_manager.close()", resource_manager.close))
+    dispatcher = AsyncDispatcher(
+        detector,
+        resource_manager,
+        max_batch=args.max_batch,
+        input_hw=(args.input_size, args.input_size),
+        batch_timeout_ms=args.batch_timeout_ms,
+        max_streams=max(n, args.max_batch),
+        on_track_result=_on_result_legacy,
+        telemetry=telemetry,
+    )
+    cleanup.append(("dispatcher.stop()", dispatcher.stop))
+
+    def report() -> None:
+        stats = dispatcher.get_stats()
+        print(
+            "📈 Dispatcher Stats: "
+            f"state={stats['state']} "
+            f"level={stats['current_level']} "
+            f"active={stats['active_streams']} "
+            f"queue={stats['queue_depth']} "
+            f"batch_mean={stats['mean_batch_size']:.2f} "
+            f"batch_p95={stats['batch_size_p95']:.2f} "
+            f"batch_build_p95={stats['batch_build_ms_p95']:.2f}ms "
+            f"queue_wait_p95={stats['queue_wait_ms_p95']:.2f}ms "
+            f"infer_p95={stats['infer_ms_p95']:.2f}ms "
+            f"e2e_p95={stats['end_to_end_ms_p95']:.2f}ms "
+            f"e2e_p99={stats['end_to_end_ms_p99']:.2f}ms"
         )
-        await dispatcher.start()
+        if telemetry is not None:
+            print(
+                "🔬 Online Telemetry: "
+                f"cpu_mean={stats.get('cpu_util_mean', 0.0):.1f}% "
+                f"gpu_mean={stats.get('gpu_util_mean', 0.0):.1f}% "
+                f"gpu_p95={stats.get('gpu_util_p95', 0.0):.1f}% "
+                f"gpu_mem={stats.get('gpu_mem_used_mb_mean', 0.0):.0f}MB "
+                f"build_p95={stats.get('dispatcher_batch_build_ms_p95', 0.0):.1f}ms "
+                f"infer_p95={stats.get('dispatcher_infer_ms_p95', 0.0):.1f}ms "
+                f"track_p95={stats.get('dispatcher_track_ms_p95', 0.0):.1f}ms"
+            )
 
-        tasks = []
-        for i in range(n):
-            sid = f"stream_{i}"
-            url = build_stream_url(args, i)
-            tasks.append(asyncio.create_task(run_stream_producer(sid, dispatcher, url)))
-
-        try:
-            while True:
-                await asyncio.sleep(args.stats_interval_sec)
-                stats = dispatcher.get_stats()
-                print(
-                    "📈 Dispatcher Stats: "
-                    f"level={stats['current_level']} "
-                    f"active={stats['active_streams']} "
-                    f"queue={stats['queue_depth']} "
-                    f"batch_mean={stats['mean_batch_size']:.2f} "
-                    f"batch_p95={stats['batch_size_p95']:.2f} "
-                    f"batch_build_p95={stats['batch_build_ms_p95']:.2f}ms "
-                    f"queue_wait_p95={stats['queue_wait_ms_p95']:.2f}ms "
-                    f"infer_p95={stats['infer_ms_p95']:.2f}ms "
-                    f"e2e_p95={stats['end_to_end_ms_p95']:.2f}ms "
-                    f"e2e_p99={stats['end_to_end_ms_p99']:.2f}ms"
-                )
-                if telemetry is not None:
-                    print(
-                        "🔬 Online Telemetry: "
-                        f"cpu_mean={stats.get('cpu_util_mean', 0.0):.1f}% "
-                        f"gpu_mean={stats.get('gpu_util_mean', 0.0):.1f}% "
-                        f"gpu_p95={stats.get('gpu_util_p95', 0.0):.1f}% "
-                        f"gpu_mem={stats.get('gpu_mem_used_mb_mean', 0.0):.0f}MB "
-                        f"build_p95={stats.get('dispatcher_batch_build_ms_p95', 0.0):.1f}ms "
-                        f"infer_p95={stats.get('dispatcher_infer_ms_p95', 0.0):.1f}ms "
-                        f"track_p95={stats.get('dispatcher_track_ms_p95', 0.0):.1f}ms"
-                    )
-        except asyncio.CancelledError:
-            print("🛑 Shutting down AsyncDispatcher...")
-        finally:
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            await dispatcher.stop()
-            resource_manager.close()
-            if telemetry is not None:
-                telemetry.stop()
+    await dispatcher.start()
+    await _spawn_and_supervise(
+        [
+            functools.partial(
+                lambda i: run_stream_producer(
+                    f"stream_{i}", dispatcher, build_stream_url(args, i)
+                ),
+                i,
+            )
+            for i in range(n)
+        ],
+        [
+            functools.partial(_stats_loop, args.stats_interval_sec, report),
+            functools.partial(_raise_when_failed, dispatcher),
+        ],
+    )
 
 
 if __name__ == "__main__":

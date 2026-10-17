@@ -133,6 +133,9 @@ def test_prose_is_non_execution_wherever_it_lives() -> None:
         ("shipping/src/native_build.cpp", "decision_relevant"),
         ("shipping/CMakeLists.txt", "decision_relevant"),
         ("configs/shipping/mamba_whole_graph.resolved.json", "decision_relevant"),
+        ("main.py", "decision_relevant"),
+        ("scripts/ops/run_8stream_perception.py", "decision_relevant"),
+        ("scripts/ops/other_ops_script.py", "unclassified"),
         ("vendor/unknown.bin", "unclassified"),
     ],
 )

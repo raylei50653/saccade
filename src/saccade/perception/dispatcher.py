@@ -1,9 +1,12 @@
 import asyncio
+import inspect
 import queue
+import re
 import threading
 import time
 from collections import OrderedDict, deque
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable, Optional
 
 import numpy as np
@@ -11,11 +14,11 @@ import torch
 
 from saccade.perception.detector_trt import TRTYoloDetector, BatchingTRTDetector
 from saccade.perception.online_telemetry import OnlineTelemetry
-
-try:
-    from saccade_tracking_ext import GPUByteTracker
-except ImportError:
-    GPUByteTracker = Any
+from saccade.perception.online_tracker_adapter import (
+    OnlineTrackerAdapter,
+    OnlineTrackerUnavailable,
+    native_unavailable_reason,
+)
 
 try:
     from saccade_tracking_ext import nv12_to_chw_letterbox as _nv12_letterbox_kernel
@@ -107,8 +110,12 @@ class _WorkbenchWorker(threading.Thread):
         queue_wait_window: deque[float],
         telemetry: OnlineTelemetry | None = None,
         use_nv12: bool = False,
+        stop_event: Optional[threading.Event] = None,
+        on_failure: Optional[Callable[[str, Exception], None]] = None,
     ):
         super().__init__(daemon=True, name=f"wb-{stream_id}")
+        self.stop_event = stop_event if stop_event is not None else threading.Event()
+        self.on_failure = on_failure
         self.stream_id = stream_id
         self.workbench = workbench
         self.stream_queue = stream_queue
@@ -122,118 +129,156 @@ class _WorkbenchWorker(threading.Thread):
         self.use_nv12 = use_nv12
 
     def run(self) -> None:
-        while True:
-            item = self.stream_queue.get()
-            if item is None:
-                break  # stop signal
+        # #538 D2-WB-1: exit on stop_event (no blocking sentinel put), and hand
+        # any exception to the pool instead of dying silently.
+        try:
+            while not self.stop_event.is_set():
+                try:
+                    item = self.stream_queue.get(timeout=0.05)
+                except queue.Empty:
+                    continue
+                if item is None:
+                    break  # legacy stop signal
+                self._process(item)
+        except Exception as e:
+            if self.on_failure is None:
+                raise
+            self.on_failure(self.stream_id, e)
 
-            enqueued_at = item.enqueued_at
-            queue_wait_ms = (time.perf_counter() - enqueued_at) * 1000.0
-            self.queue_wait_window.append(queue_wait_ms)
+    def _process(self, item: _StreamFrame) -> None:
+        enqueued_at = item.enqueued_at
+        queue_wait_ms = (time.perf_counter() - enqueued_at) * 1000.0
+        self.queue_wait_window.append(queue_wait_ms)
 
-            t_start = time.perf_counter()
-            preproc_start = t_start
+        t_start = time.perf_counter()
+        preproc_start = t_start
 
-            if self.use_nv12:
-                if _nv12_letterbox_kernel is None:
-                    raise RuntimeError(
-                        "WorkbenchPool NV12 mode requires nv12_to_chw_letterbox "
-                        "from saccade_tracking_ext to be available."
-                    )
-                if not isinstance(item.frame, Nv12Frame):
-                    raise TypeError("WorkbenchPool NV12 mode expects Nv12Frame inputs.")
-                nv12_frame: Nv12Frame = item.frame
-                src_w = nv12_frame.width
-                src_h = nv12_frame.height
-                y_pitch = nv12_frame.y_pitch
-                uv_pitch = nv12_frame.uv_pitch
-                nv12_buf = nv12_frame.buf
-
-                dst_w, dst_h = self.input_size
-                scale = min(dst_w / src_w, dst_h / src_h)
-                new_w = int(round(src_w * scale))
-                new_h = int(round(src_h * scale))
-                x_off = (dst_w - new_w) // 2
-                y_off = (dst_h - new_h) // 2
-
-                padded = torch.zeros(
-                    3,
-                    dst_h,
-                    dst_w,
-                    dtype=torch.float32,
-                    device=nv12_buf.device,
+        if self.use_nv12:
+            if _nv12_letterbox_kernel is None:
+                raise RuntimeError(
+                    "WorkbenchPool NV12 mode requires nv12_to_chw_letterbox "
+                    "from saccade_tracking_ext to be available."
                 )
-                stream = torch.cuda.current_stream().cuda_stream
-                _nv12_letterbox_kernel(
-                    nv12_buf.data_ptr(),
-                    y_pitch,
-                    nv12_buf.data_ptr() + nv12_buf.element_size() * src_h * y_pitch,
-                    uv_pitch,
-                    src_w,
-                    src_h,
-                    padded.data_ptr(),
-                    dst_w,
-                    x_off,
-                    y_off,
-                    new_w,
-                    new_h,
-                    114.0 / 255.0,
-                    stream,
-                )
-            else:
-                # Preprocess: normalize to [0,1] and letterbox to input_size
-                frame_hwc = item.frame
-                frame_chw = frame_hwc.permute(2, 0, 1).float() / 255.0
-                # Letterbox to input_size
-                w, h = frame_chw.shape[2], frame_chw.shape[1]
-                scale = min(self.input_size[0] / w, self.input_size[1] / h)
-                new_w, new_h = int(round(w * scale)), int(round(h * scale))
-                letterbox = torch.nn.functional.interpolate(
-                    frame_chw.unsqueeze(0),
-                    size=(new_h, new_w),
-                    mode="bilinear",
-                    align_corners=False,
-                ).squeeze(0)
-                padded = torch.zeros(
-                    3,
-                    self.input_size[1],
-                    self.input_size[0],
-                    dtype=torch.float32,
-                    device=letterbox.device,
-                )
-                padded[:, :new_h, :new_w] = letterbox
+            if not isinstance(item.frame, Nv12Frame):
+                raise TypeError("WorkbenchPool NV12 mode expects Nv12Frame inputs.")
+            nv12_frame: Nv12Frame = item.frame
+            src_w = nv12_frame.width
+            src_h = nv12_frame.height
+            y_pitch = nv12_frame.y_pitch
+            uv_pitch = nv12_frame.uv_pitch
+            nv12_buf = nv12_frame.buf
 
-            preproc_ms = (time.perf_counter() - preproc_start) * 1000.0
-            if self.telemetry is not None:
-                self.telemetry.observe("workbench_preprocess", preproc_ms)
+            dst_w, dst_h = self.input_size
+            scale = min(dst_w / src_w, dst_h / src_h)
+            new_w = int(round(src_w * scale))
+            new_h = int(round(src_h * scale))
+            x_off = (dst_w - new_w) // 2
+            y_off = (dst_h - new_h) // 2
 
-            # Process frame through Workbench
-            process_start = time.perf_counter()
-            result = self.workbench.process_frame(
-                padded,
-                frame_w=self.frame_w,
-                frame_h=self.frame_h,
+            padded = torch.zeros(
+                3,
+                dst_h,
+                dst_w,
+                dtype=torch.float32,
+                device=nv12_buf.device,
             )
-            if self.telemetry is not None:
-                self.telemetry.observe(
-                    "workbench_process",
-                    (time.perf_counter() - process_start) * 1000.0,
-                )
-
-            elapsed_ms = (time.perf_counter() - t_start) * 1000.0
-            self.stats_window.append(elapsed_ms)
-            if self.telemetry is not None:
-                self.telemetry.observe("workbench_worker", elapsed_ms)
-
-            # Emit result via callback (runs in caller's thread)
-            self.on_result(
-                self.stream_id,
-                item.timestamp,
-                result.ids,
-                result.boxes,
-                result.classes,
-                None,  # keypoints not available in workbench path
+            stream = torch.cuda.current_stream().cuda_stream
+            _nv12_letterbox_kernel(
+                nv12_buf.data_ptr(),
+                y_pitch,
+                nv12_buf.data_ptr() + nv12_buf.element_size() * src_h * y_pitch,
+                uv_pitch,
+                src_w,
+                src_h,
+                padded.data_ptr(),
+                dst_w,
+                x_off,
+                y_off,
+                new_w,
+                new_h,
+                114.0 / 255.0,
+                stream,
             )
+        else:
+            # Preprocess: normalize to [0,1] and letterbox to input_size
+            frame_hwc = item.frame
+            frame_chw = frame_hwc.permute(2, 0, 1).float() / 255.0
+            # Letterbox to input_size
+            w, h = frame_chw.shape[2], frame_chw.shape[1]
+            scale = min(self.input_size[0] / w, self.input_size[1] / h)
+            new_w, new_h = int(round(w * scale)), int(round(h * scale))
+            letterbox = torch.nn.functional.interpolate(
+                frame_chw.unsqueeze(0),
+                size=(new_h, new_w),
+                mode="bilinear",
+                align_corners=False,
+            ).squeeze(0)
+            padded = torch.zeros(
+                3,
+                self.input_size[1],
+                self.input_size[0],
+                dtype=torch.float32,
+                device=letterbox.device,
+            )
+            padded[:, :new_h, :new_w] = letterbox
+
+        preproc_ms = (time.perf_counter() - preproc_start) * 1000.0
+        if self.telemetry is not None:
+            self.telemetry.observe("workbench_preprocess", preproc_ms)
+
+        # Process frame through Workbench
+        process_start = time.perf_counter()
+        result = self.workbench.process_frame(
+            padded,
+            frame_w=self.frame_w,
+            frame_h=self.frame_h,
+        )
+        if self.telemetry is not None:
+            self.telemetry.observe(
+                "workbench_process",
+                (time.perf_counter() - process_start) * 1000.0,
+            )
+
+        elapsed_ms = (time.perf_counter() - t_start) * 1000.0
+        self.stats_window.append(elapsed_ms)
+        if self.telemetry is not None:
+            self.telemetry.observe("workbench_worker", elapsed_ms)
+
+        # Emit result via callback (runs in caller's thread)
+        self.on_result(
+            self.stream_id,
+            item.timestamp,
+            result.ids,
+            result.boxes,
+            result.classes,
+            None,  # keypoints not available in workbench path
+        )
+
+
+class PoolState(Enum):
+    CREATED = "created"
+    RUNNING = "running"
+    FAILED = "failed"
+    STOPPING = "stopping"  # stop() hit its deadline; call stop() again
+    STOPPED = "stopped"
+
+
+class WorkbenchPoolFailed(RuntimeError):
+    """A worker failed; ``__cause__`` is the original error (#538 D2-WB-1)."""
+
+
+class WorkbenchPoolStopTimeout(RuntimeError):
+    """stop() reached its deadline with workers alive; the batcher was kept."""
+
+
+class WorkbenchPoolNotRunning(RuntimeError):
+    """put_frame() outside RUNNING: there is no consumer for new work (#538)."""
+
+
+def _is_async_callable(fn: Any) -> bool:
+    return inspect.iscoroutinefunction(fn) or inspect.iscoroutinefunction(
+        getattr(fn, "__call__", None)
+    )
 
 
 class WorkbenchPool:
@@ -285,26 +330,102 @@ class WorkbenchPool:
         self._drop_count = 0
         self._lock = threading.Lock()
 
-    async def start(self) -> None:
-        """Start the pool: create batcher, workbenches, and worker threads."""
-        self._running = True
-        self._loop = asyncio.get_event_loop()
+        # #538 D2-WB-1: lifecycle state, the first worker failure, and counters.
+        self._state = PoolState.CREATED
+        self._failure: Optional[Exception] = None
+        self._failed_stream: Optional[str] = None
+        self._stop_event = threading.Event()
+        # Bumped by start(); a callback carries the generation it was produced
+        # in and is delivered only if that generation is still current and the
+        # pool is RUNNING/FAILED.
+        self._generation = 0
+        self._late_callbacks = 0
+        self._discarded_on_stop = 0
+        self._stop_timeouts = 0
 
+    @property
+    def state(self) -> PoolState:
+        return self._state
+
+    @property
+    def failure(self) -> Optional[Exception]:
+        """The first worker's original error, kept until the next ``start()``."""
+        return self._failure
+
+    def _failed(self) -> WorkbenchPoolFailed:
+        err = WorkbenchPoolFailed(
+            f"WorkbenchPool worker {self._failed_stream} failed: {self._failure!r}"
+        )
+        err.__cause__ = self._failure
+        return err
+
+    def _on_worker_failure(self, stream_id: str, error: Exception) -> None:
+        with self._lock:
+            if self._failure is None:
+                self._failure = error
+                self._failed_stream = stream_id
+            if self._state is PoolState.RUNNING:
+                self._state = PoolState.FAILED
+                self._running = False
+        print(f"❌ [WorkbenchPool] Worker {stream_id} failed: {error!r}")
+
+    async def start(self) -> None:
+        """Start the pool: create batcher, workbenches, and worker threads.
+
+        A failure part-way through stops what was started before re-raising.
+        """
+        if self._state is PoolState.RUNNING:
+            raise RuntimeError("WorkbenchPool is already running")
+        if self._state is PoolState.FAILED:
+            raise self._failed()  # stop() first
+        if self._state is PoolState.STOPPING:
+            # STOPPED is set only after every worker ended and the batcher was
+            # released, so refusing STOPPING refuses a restart over live workers.
+            raise WorkbenchPoolStopTimeout(
+                "WorkbenchPool is still stopping; call stop() again first"
+            )
+
+        # Checks that need no resources come before the batcher is created.
+        if self.on_result is not None and _is_async_callable(self.on_result):
+            # Results are handed over with call_soon_threadsafe; a coroutine
+            # would be created and never awaited. Async callbacks need their
+            # own task ownership/failure/cancellation contract (#538).
+            raise TypeError("WorkbenchPool does not support a coroutine on_result")
         if self.use_nv12 and _nv12_letterbox_kernel is None:
             raise RuntimeError(
                 "WorkbenchPool NV12 mode requires nv12_to_chw_letterbox from "
                 "saccade_tracking_ext to be available."
             )
-
-        # Create shared batching detector
-        self._batcher = BatchingTRTDetector(self.engine_path, batch_size=self.n_streams)
-
         if PerceptionPipelineConfig is None:
             raise RuntimeError(
                 "saccade_tracking_ext C++ extension is not available. "
                 "Please build the extension: `pip install -e .` or check "
                 "CONCURRENT_EVAL.md for build instructions."
             )
+
+        # A restart gets fresh queues, workers and stop event.
+        self._queues = []
+        self._workers = []
+        self._stop_event = threading.Event()
+        self._failure = None
+        self._failed_stream = None
+        self._loop = asyncio.get_event_loop()
+        with self._lock:
+            self._generation += 1
+            self._state = PoolState.RUNNING
+            self._running = True
+        try:
+            self._start_workers()
+        except BaseException as e:
+            try:
+                self.stop()
+            except Exception as cleanup_error:
+                e.add_note(f"rollback after failed start: {cleanup_error!r}")
+            raise
+
+    def _start_workers(self) -> None:
+        # Create shared batching detector
+        self._batcher = BatchingTRTDetector(self.engine_path, batch_size=self.n_streams)
         pipeline_cfg = PerceptionPipelineConfig()
 
         # Create per-workbench worker threads
@@ -333,8 +454,11 @@ class WorkbenchPool:
             loop = self._loop
             assert loop is not None
 
-            # Callback: forward actual workbench results to asyncio event loop
-            def make_callback(sid: str = sid) -> Any:
+            # Callback: forward actual workbench results to asyncio event loop.
+            # Results that arrive after stop() began, or after the loop closed,
+            # are dropped and counted instead of killing the worker (D2-WB-1).
+            # _deliver() checks the generation again when the loop runs it.
+            def make_callback(sid: str = sid, gen: int = self._generation) -> Any:
                 def _cb(
                     sid: str,
                     ts: float,
@@ -343,10 +467,20 @@ class WorkbenchPool:
                     classes: torch.Tensor,
                     kps: Optional[torch.Tensor],
                 ) -> None:
-                    if self.on_result:
+                    if not self.on_result:
+                        return
+                    if (
+                        self._state not in (PoolState.RUNNING, PoolState.FAILED)
+                        or loop.is_closed()
+                    ):
+                        self._count_late_callback()
+                        return
+                    try:
                         loop.call_soon_threadsafe(
-                            self.on_result, sid, ts, ids, boxes, classes, kps
+                            self._deliver, gen, sid, ts, ids, boxes, classes, kps
                         )
+                    except RuntimeError:  # the loop closed after the check
+                        self._count_late_callback()
 
                 return _cb
 
@@ -362,6 +496,8 @@ class WorkbenchPool:
                 queue_wait_window=self._queue_wait_window,
                 telemetry=self.telemetry,
                 use_nv12=self.use_nv12,
+                stop_event=self._stop_event,
+                on_failure=self._on_worker_failure,
             )
             worker.start()
             self._workers.append(worker)
@@ -374,11 +510,19 @@ class WorkbenchPool:
     def put_frame(
         self, stream_id: str, frame: torch.Tensor | Any, timestamp: float
     ) -> None:
-        """Enqueue a frame for the given stream. Latest-wins on overflow."""
-        idx = int(stream_id.split("_")[-1]) if "_" in stream_id else 0
-        if idx >= len(self._queues):
-            return
-        q = self._queues[idx]
+        """Enqueue a frame for ``stream_0``..``stream_{n_streams-1}``.
+
+        Latest-wins on overflow. Refused outside RUNNING (#538): FAILED raises
+        ``WorkbenchPoolFailed``, any other state ``WorkbenchPoolNotRunning``.
+        Any other stream id raises ``ValueError``.
+        """
+        if self._state is PoolState.FAILED:
+            raise self._failed()
+        if self._state is not PoolState.RUNNING:
+            raise WorkbenchPoolNotRunning(
+                f"WorkbenchPool is {self._state.value}; put_frame() needs running"
+            )
+        q = self._queues[self._stream_index(stream_id)]
         item = _StreamFrame(
             frame=frame,
             timestamp=timestamp,
@@ -399,17 +543,93 @@ class WorkbenchPool:
                 pass
             q.put_nowait(item)
 
-    def stop(self) -> None:
-        """Stop all workers and shut down the batcher."""
-        self._running = False
-        for q in self._queues:
-            q.put(None)  # stop signal
+    def _stream_index(self, stream_id: str) -> int:
+        m = re.fullmatch(r"stream_(0|[1-9][0-9]*)", stream_id)
+        if m is None or int(m.group(1)) >= self.n_streams:
+            raise ValueError(
+                f"WorkbenchPool stream id must be stream_0..stream_{self.n_streams - 1}, "
+                f"got {stream_id!r}"
+            )
+        return int(m.group(1))
+
+    def _count_late_callback(self) -> None:
+        with self._lock:
+            self._late_callbacks += 1
+
+    def _deliver(
+        self,
+        gen: int,
+        sid: str,
+        ts: float,
+        ids: torch.Tensor,
+        boxes: torch.Tensor,
+        classes: torch.Tensor,
+        kps: Optional[torch.Tensor],
+    ) -> None:
+        """Runs on the event loop. Drops a result queued before a stop/restart."""
+        if gen != self._generation or self._state not in (
+            PoolState.RUNNING,
+            PoolState.FAILED,
+        ):
+            self._count_late_callback()
+            return
+        if self.on_result:
+            self.on_result(sid, ts, ids, boxes, classes, kps)
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Stop all workers within ``timeout`` seconds, then shut down the batcher.
+
+        The worker joins share one deadline. If a worker is still alive at the
+        deadline, the batcher is kept, the state is STOPPING, and
+        ``WorkbenchPoolStopTimeout`` is raised; call ``stop()`` again to retry.
+        ``batcher.shutdown()`` runs after the deadline with its own bound
+        (``BatchingTRTDetector`` joins its server for up to 2 s). If it raises
+        or reports that its server is still alive, the batcher reference is
+        kept and the state stays STOPPING. STOPPED is reported only after the
+        workers ended and the batcher was released. Then a failed run raises
+        ``WorkbenchPoolFailed``.
+        """
+        if self._state in (PoolState.CREATED, PoolState.STOPPED):
+            return
+        with self._lock:
+            self._state = PoolState.STOPPING
+            self._running = False
+        self._stop_event.set()
+        deadline = time.monotonic() + max(timeout, 0.0)
         for w in self._workers:
-            w.join(timeout=5.0)
+            w.join(timeout=max(deadline - time.monotonic(), 0.0))
+        alive = [w.name for w in self._workers if w.is_alive()]
+        if alive:
+            with self._lock:
+                self._stop_timeouts += 1
+            raise WorkbenchPoolStopTimeout(
+                f"WorkbenchPool workers still running after {timeout}s: {alive}; "
+                "the batcher was not shut down"
+            )
+
+        discarded = 0
+        for q in self._queues:
+            while True:
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    break
+                discarded += 1
+        with self._lock:
+            self._discarded_on_stop += discarded
         if self._batcher is not None:
-            self._batcher.shutdown()
+            # A raise propagates with the batcher kept and the state STOPPING.
+            if self._batcher.shutdown() is False:
+                with self._lock:
+                    self._stop_timeouts += 1
+                raise WorkbenchPoolStopTimeout(
+                    "WorkbenchPool batcher server did not end; the batcher was kept"
+                )
             self._batcher = None
+        self._state = PoolState.STOPPED
         print("🛑 [WorkbenchPool] Stopped.")
+        if self._failure is not None:
+            raise self._failed()
 
     def get_stats(self) -> dict[str, Any]:
         """Return current stats. Does not reset counters."""
@@ -421,6 +641,12 @@ class WorkbenchPool:
         telemetry = self.telemetry.summary() if self.telemetry is not None else {}
 
         return {
+            "state": self._state.value,
+            "failure": repr(self._failure) if self._failure is not None else "",
+            "failed_stream": self._failed_stream or "",
+            "late_callbacks": self._late_callbacks,
+            "discarded_on_stop": self._discarded_on_stop,
+            "stop_timeouts": self._stop_timeouts,
             "current_level": "NORMAL",
             "active_streams": self.n_streams,
             "queue_depth": sum(q.qsize() for q in self._queues),
@@ -440,6 +666,21 @@ class WorkbenchPool:
             self._drop_count = 0
 
 
+class DispatcherState(Enum):
+    CREATED = "created"
+    RUNNING = "running"
+    FAILED = "failed"
+    STOPPED = "stopped"
+
+
+class DispatcherFailed(RuntimeError):
+    """The worker task failed; ``__cause__`` is the original error (#538 D2-AD)."""
+
+
+class DispatcherNotRunning(RuntimeError):
+    """put_frame() outside RUNNING: there is no consumer for new work (#538)."""
+
+
 class AsyncDispatcher:
     def __init__(
         self,
@@ -456,6 +697,13 @@ class AsyncDispatcher:
         stats_window: int = 512,
         telemetry: OnlineTelemetry | None = None,
     ):
+        if extractor is not None:
+            # #537 R-1: only geometry-only tracking is supported. The tracker
+            # never received embeddings here, so ReID is refused, not implied.
+            raise ValueError(
+                "AsyncDispatcher supports geometry-only tracking; "
+                "extractor/ReID is not supported (#537 R-1)"
+            )
         self.detector = detector
         self.resource_manager = resource_manager
         self.max_batch = max_batch
@@ -475,6 +723,15 @@ class AsyncDispatcher:
         self._vram_writer: Optional[VRAMLevelWriter] = None
         self._worker_task: Optional[asyncio.Task[None]] = None
         self._current_level = DegradationLevel.NORMAL
+        # #538 D2-AD: lifecycle state, the worker's original error, the batch
+        # taken off the queue but not yet task_done(), and frame accounting.
+        self._state = DispatcherState.CREATED
+        self._failure: Optional[Exception] = None
+        self._inflight: list[_QueuedFrame | tuple[str, torch.Tensor, float]] = []
+        self._dropped_queue_full = 0
+        self._failed_batch_frames = 0
+        self._discarded_on_failure = 0
+        self._discarded_on_stop = 0
 
         self._batch_sizes: deque[int] = deque(maxlen=stats_window)
         self._queue_wait_ms: deque[float] = deque(maxlen=stats_window)
@@ -484,9 +741,7 @@ class AsyncDispatcher:
         self._batch_build_ms: deque[float] = deque(maxlen=stats_window)
 
     def _make_tracker(self) -> Any:
-        return GPUByteTracker(
-            max_objects=100, embedding_dim=768 if self.extractor else 0
-        )
+        return OnlineTrackerAdapter(max_objects=100)
 
     def get_tracker(self, stream_id: str) -> Any:
         if stream_id in self.trackers:
@@ -509,7 +764,31 @@ class AsyncDispatcher:
         if tracker is not None:
             del tracker
 
+    @property
+    def state(self) -> DispatcherState:
+        return self._state
+
+    @property
+    def failure(self) -> Optional[Exception]:
+        """The worker's original error, kept until the next ``start()``."""
+        return self._failure
+
+    def _failed(self) -> DispatcherFailed:
+        err = DispatcherFailed(f"AsyncDispatcher worker failed: {self._failure!r}")
+        err.__cause__ = self._failure
+        return err
+
     async def start(self) -> None:
+        if self._state is DispatcherState.RUNNING:
+            raise RuntimeError("AsyncDispatcher is already running")
+        if self._state is DispatcherState.FAILED:
+            # A failed run must be stopped (and cleaned up) before a restart.
+            raise self._failed()
+        reason = native_unavailable_reason()
+        if reason is not None:
+            raise OnlineTrackerUnavailable(reason)
+        self._failure = None
+        self._state = DispatcherState.RUNNING
         self._running = True
         try:
             self._vram_writer = VRAMLevelWriter()
@@ -518,24 +797,85 @@ class AsyncDispatcher:
         self._worker_task = asyncio.create_task(self._worker_loop())
 
     async def stop(self) -> None:
+        """Stop the worker and always clean up; raise ``DispatcherFailed`` afterwards
+        when this run's worker had failed."""
         self._running = False
-        if self._worker_task is not None:
-            self._worker_task.cancel()
-            try:
-                await self._worker_task
-            except asyncio.CancelledError:
-                pass
-            self._worker_task = None
+        task, self._worker_task = self._worker_task, None
+        try:
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        finally:
+            # Every step runs even if an earlier one raises; the first cleanup
+            # error is raised only after all of them (#538 D2-AD).
+            cleanup_errors: list[Exception] = []
+            for step in (self._stop_settle, self._stop_trackers, self._stop_writer):
+                try:
+                    step()
+                except Exception as e:
+                    cleanup_errors.append(e)
+            failed = self._state is DispatcherState.FAILED
+            if self._state is not DispatcherState.CREATED:
+                self._state = DispatcherState.STOPPED
+        if failed:
+            err = self._failed()
+            for cleanup_error in cleanup_errors:
+                err.add_note(f"cleanup also failed: {cleanup_error!r}")
+            raise err
+        if cleanup_errors:
+            raise cleanup_errors[0]
+
+    def _stop_settle(self) -> None:
+        self._discarded_on_stop += self._settle_queue()
+
+    def _stop_trackers(self) -> None:
         while self.trackers:
             _, tracker = self.trackers.popitem()
             del tracker
-        if self._vram_writer is not None:
-            self._vram_writer.close()
-            self._vram_writer = None
+
+    def _stop_writer(self) -> None:
+        writer, self._vram_writer = self._vram_writer, None
+        if writer is not None:
+            writer.close()
+
+    def _settle_queue(self) -> int:
+        """task_done() the in-flight batch and every queued frame; return how many."""
+        settled = len(self._inflight)
+        for _ in self._inflight:
+            self.queue.task_done()
+        self._inflight = []
+        while True:
+            try:
+                self.queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            self.queue.task_done()
+            settled += 1
+        return settled
+
+    def _fail(self, error: Exception) -> None:
+        self._failure = error
+        self._state = DispatcherState.FAILED
+        self._running = False
+        in_batch = len(self._inflight)
+        self._failed_batch_frames += in_batch
+        self._discarded_on_failure += self._settle_queue() - in_batch
+        print(f"❌ [Dispatcher] Worker failed: {error!r}")
 
     async def put_frame(
         self, stream_id: str, frame: torch.Tensor, timestamp: float
     ) -> None:
+        if self._state is DispatcherState.FAILED:
+            raise self._failed()
+        if self._state is not DispatcherState.RUNNING or not self._running:
+            # Also covers stop() in progress (_running is already False).
+            raise DispatcherNotRunning(
+                f"AsyncDispatcher is {self._state.value}"
+                f"{'' if self._running else ' (stopping)'}; put_frame() needs running"
+            )
         try:
             self.queue.put_nowait(
                 _QueuedFrame(
@@ -546,7 +886,7 @@ class AsyncDispatcher:
                 )
             )
         except asyncio.QueueFull:
-            pass
+            self._dropped_queue_full += 1
 
     def get_stats(self) -> dict[str, float | int | str]:
         batch_sizes = list(self._batch_sizes)
@@ -560,7 +900,16 @@ class AsyncDispatcher:
         return {
             "queue_depth": self.queue.qsize(),
             "active_streams": len(self.trackers),
+            "state": self._state.value,
+            "failure": repr(self._failure) if self._failure is not None else "",
+            "dropped_queue_full": self._dropped_queue_full,
+            "failed_batch_frames": self._failed_batch_frames,
+            "discarded_on_failure": self._discarded_on_failure,
+            "discarded_on_stop": self._discarded_on_stop,
             "current_level": self._current_level.name,
+            # The level only caps the batch size; the tracker itself is never
+            # degraded (#537 R-1).
+            "tracker_degradation": "none",
             "max_batch": self.max_batch,
             "batch_timeout_ms": self.batch_timeout_ms,
             "mean_batch_size": round(float(np.mean(batch_sizes)), 3)
@@ -622,29 +971,41 @@ class AsyncDispatcher:
             batch_items: list[_QueuedFrame | tuple[str, torch.Tensor, float]] = [
                 first_item
             ]
-            decided_at_ns = vram_level_clock_ns()
-            level = self.resource_manager.decide_degradation_level()
-            self._current_level = level
-            if self._vram_writer is not None:
-                self._vram_writer.write(level, decided_at_ns)
-            current_max = self.max_batch if level < DegradationLevel.FAST_PATH else 2
-            deadline = time.perf_counter() + max(self.batch_timeout_ms, 0.0) / 1000.0
+            self._inflight = batch_items
+            try:
+                decided_at_ns = vram_level_clock_ns()
+                level = self.resource_manager.decide_degradation_level()
+                self._current_level = level
+                if self._vram_writer is not None:
+                    self._vram_writer.write(level, decided_at_ns)
+                current_max = (
+                    self.max_batch
+                    if level < DegradationLevel.FAST_PATH
+                    else min(self.max_batch, 2)
+                )
+                deadline = (
+                    time.perf_counter() + max(self.batch_timeout_ms, 0.0) / 1000.0
+                )
 
-            while len(batch_items) < current_max:
-                remaining = deadline - time.perf_counter()
-                if remaining <= 0:
-                    break
-                try:
-                    batch_items.append(
-                        await asyncio.wait_for(self.queue.get(), timeout=remaining)
-                    )
-                except asyncio.TimeoutError:
-                    break
+                while len(batch_items) < current_max:
+                    remaining = deadline - time.perf_counter()
+                    if remaining <= 0:
+                        break
+                    try:
+                        batch_items.append(
+                            await asyncio.wait_for(self.queue.get(), timeout=remaining)
+                        )
+                    except asyncio.TimeoutError:
+                        break
 
-            await self._process_batch(batch_items, level)
+                await self._process_batch(batch_items, level)
+            except Exception as e:
+                self._fail(e)
+                return
 
             for _ in batch_items:
                 self.queue.task_done()
+            self._inflight = []
 
     async def _process_batch(
         self,
@@ -701,19 +1062,9 @@ class AsyncDispatcher:
                 continue
 
             tracker = self.get_tracker(item.stream_id)
-            if level >= DegradationLevel.FAST_PATH:
-                tracker.set_degradation_params(level)
-                tracked_ids, tracked_boxes, tracked_classes = tracker.update(
-                    boxes, scores, classes
-                )
-            else:
-                tracked_ids, tracked_boxes, tracked_classes = tracker.update(
-                    boxes,
-                    scores,
-                    classes,
-                    frame_tensor=item.frame,
-                    stream_id=hash(item.stream_id) & 0x7FFFFFFF,
-                )
+            tracked_ids, tracked_boxes, tracked_classes = tracker.update(
+                boxes, scores, classes
+            )
 
             tracked_kpts = (
                 _match_keypoints_to_tracks(tracked_boxes, boxes, keypoints)

@@ -27,13 +27,13 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import asyncio
+import functools
 import time
 
 import argparse
 import sys
 from pathlib import Path
 import torch
-import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "build"))
 
@@ -49,18 +49,16 @@ try:
 except ImportError:
     print("⚠️  [System] uvloop not available, falling back to default event loop.")
 
-from typing import Optional, List, Dict, Any, cast  # noqa: E402
+from typing import Any, Awaitable, Callable, Coroutine, Optional, Sequence, cast  # noqa: E402
 from saccade.perception.detector_trt import TRTYoloDetector  # noqa: E402
-from saccade.perception.feature_extractor import TRTFeatureExtractor  # noqa: E402
 from saccade.media.mediamtx_client import MediaMTXClient  # noqa: E402
 from saccade.media.dali_pipeline import DALIMediaClient  # noqa: E402
-from saccade.perception.dispatcher import AsyncDispatcher  # noqa: E402
-from saccade.perception.embedding_dispatcher import (  # noqa: E402
-    AsyncEmbeddingDispatcher as EmbeddingDispatcher,
+from saccade.perception.dispatcher import (  # noqa: E402
+    AsyncDispatcher,
+    DispatcherFailed,
+    DispatcherState,
 )
-from saccade.perception.drift_handler import SemanticDriftHandler  # noqa: E402
 from saccade.resource.resource_manager import ResourceManager  # noqa: E402
-from saccade.storage.redis_cache import RedisCache  # noqa: E402
 from saccade.cognition.orchestrator import PipelineOrchestrator  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
 
@@ -68,8 +66,10 @@ load_dotenv()
 
 # 全域資源
 resource_manager = ResourceManager()
-redis_cache = RedisCache()
-drift_handler = SemanticDriftHandler()
+
+# #537 R-1: the online path tracks geometry only. The SigLIP extractor and the
+# embedding→Redis bridge were never fed by this path, so they are not started.
+REID_UNSUPPORTED = "ReID is unsupported in the online tracking path (#537 R-1)"
 
 
 async def on_detection_finished(
@@ -80,46 +80,12 @@ async def on_detection_finished(
     classes: torch.Tensor,
     kps: Optional[torch.Tensor],
 ) -> None:
-    """橋接回調：L1 (YOLO) -> downstream. Embedding 路徑由 EmbeddingDispatcher 獨立處理。"""
+    """橋接回調：L1 (YOLO) -> downstream。
+
+    Still a no-op: tracking results go nowhere, so ``--mode full`` does not
+    connect detection→embedding→Redis→cognition (#537 R-1).
+    """
     pass
-
-
-async def on_embeddings_ready(
-    stream_id: str, embeddings: np.ndarray, metadata: List[Dict[str, Any]]
-) -> None:
-    """
-    橋接回調：L2 (SigLIP2) -> L3 (Redis Stream) (Batch Optimized)
-    """
-    level = resource_manager.current_level
-    events = []
-
-    for i, emb_np in enumerate(embeddings):
-        emb_tensor = torch.from_numpy(emb_np).to("cuda")
-        track_id = metadata[i]["track_id"]
-
-        # 再次確認語義漂移 (精確判定)
-        sim, should_persist = drift_handler.calculate_drift(track_id, emb_tensor, level)
-        drift_handler.update_history([track_id], emb_tensor.unsqueeze(0), level)
-
-        if should_persist:
-            event = {
-                "stream_id": stream_id,
-                "metadata": {
-                    "frame_id": metadata[i]["frame_id"],
-                    "track_id": track_id,
-                    "objects": [metadata[i]["cls"]],
-                    "entropy_value": 0.9,  # 佔位
-                    "similarity": float(sim),
-                },
-            }
-            events.append(event)
-
-    # 🚀 批次寫入 Redis Stream (D 優化)
-    if events:
-        await redis_cache.add_to_stream_batch(events)
-
-
-_embedding_dispatcher: Optional[EmbeddingDispatcher] = None
 
 
 async def run_stream_producer(
@@ -169,64 +135,159 @@ async def run_stream_producer(
         media.release()
 
 
-async def run_perception() -> None:
-    """感知層：多路並行處理 (Async-Batching Dispatcher + ReID)"""
-    global _embedding_dispatcher
-    print("🚀 Initializing Multi-stream Perception Pipeline...")
+def same_failure(a: BaseException, b: BaseException) -> bool:
+    """Both report the same underlying worker failure (same ``__cause__``)."""
+    return a is b or (a.__cause__ is not None and a.__cause__ is b.__cause__)
 
-    detector = TRTYoloDetector()
 
-    # L2 ReID 組件（選配，缺少 engine 時退化為純 IoU）
-    extractor: Optional[TRTFeatureExtractor] = None
+async def supervise(
+    tasks: Sequence["asyncio.Task[Any]"],
+    watchers: Sequence["asyncio.Task[Any]"] = (),
+) -> None:
+    """Wait until every task in ``tasks`` ends (#538 caller lifecycle).
+
+    The first failure in ``tasks`` or ``watchers`` cancels everything else and
+    is re-raised once all of it has finished; later failures become notes.
+    Cancelling the caller cancels everything too.
+    """
+    everything = [*tasks, *watchers]
+    first: Optional[BaseException] = None
     try:
-        extractor = TRTFeatureExtractor(max_batch=64)
-        print("✅ [ReID] SigLIP 2 extractor ready.")
-        _embedding_dispatcher = EmbeddingDispatcher(
-            extractor, on_embeddings_ready=on_embeddings_ready
-        )
-        _embedding_dispatcher.start()
-    except Exception as e:
-        print(
-            f"⚠️  [ReID] Extractor unavailable ({e}), falling back to IoU-only tracking."
-        )
+        pending = set(everything)
+        while first is None and any(t in pending for t in tasks):
+            done, pending = await asyncio.wait(
+                pending, return_when=asyncio.FIRST_COMPLETED
+            )
+            for t in done:
+                if first is None and not t.cancelled() and t.exception() is not None:
+                    first = t.exception()
+    finally:
+        for t in everything:
+            t.cancel()
+        await asyncio.gather(*everything, return_exceptions=True)
+    if first is not None:
+        for t in everything:
+            other = None if t.cancelled() else t.exception()
+            if other is not None and not same_failure(other, first):
+                first.add_note(f"also failed: {other!r}")
+        raise first
 
+
+async def cancel_and_wait(tasks: Sequence["asyncio.Task[Any]"]) -> None:
+    """Cancel ``tasks`` and wait until every one of them has finished."""
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def spawn(
+    created: list["asyncio.Task[Any]"], make: Callable[[], Coroutine[Any, Any, Any]]
+) -> None:
+    """Create one task and record it in ``created`` so a later failure can
+    cancel it. A coroutine whose task could not be created is closed."""
+    coro = make()
+    try:
+        task = asyncio.create_task(coro)
+    except BaseException:
+        coro.close()
+        raise
+    created.append(task)
+
+
+async def raise_when_failed(dispatcher: AsyncDispatcher, poll_s: float = 0.1) -> None:
+    """Surface a dispatcher worker failure even when no producer is sending."""
+    while dispatcher.state is not DispatcherState.FAILED:
+        await asyncio.sleep(poll_s)
+    raise DispatcherFailed(
+        f"AsyncDispatcher worker failed: {dispatcher.failure!r}"
+    ) from dispatcher.failure
+
+
+async def stop_after(
+    primary: Optional[BaseException], step: Callable[[], Awaitable[None]], name: str
+) -> None:
+    """Run a cleanup step. With a primary error, a cleanup error becomes its note."""
+    if primary is None:
+        await step()
+        return
+    try:
+        await step()
+    except Exception as cleanup_error:
+        if not same_failure(cleanup_error, primary):
+            primary.add_note(f"cleanup {name} also failed: {cleanup_error!r}")
+        else:  # the same failure re-raised; keep what its cleanup reported
+            for note in getattr(cleanup_error, "__notes__", []):
+                primary.add_note(f"cleanup {name}: {note}")
+
+
+async def run_perception(
+    *,
+    detector_factory: Callable[[], Any] = TRTYoloDetector,
+    producer: Optional[Callable[..., Coroutine[Any, Any, None]]] = None,
+    streams: Sequence[str] = ("stream_1", "stream_2", "stream_3", "stream_4"),
+    source: Optional[str] = None,
+) -> None:
+    """感知層：多路並行處理 (Async-Batching Dispatcher, geometry-only tracking)
+
+    The dispatcher is stopped on every exit (normal end, worker failure,
+    producer error, cancellation). The first error is re-raised; a cleanup
+    error never replaces it.
+    """
+    producer = producer or run_stream_producer
+    print("🚀 Initializing Multi-stream Perception Pipeline...")
+    print(f"ℹ️  [Perception] online tracking = geometry-only; {REID_UNSUPPORTED}.")
+
+    detector = detector_factory()
     dispatcher = AsyncDispatcher(
         detector,
         resource_manager,
-        extractor=extractor,
         heartbeat_interval=10,
         max_batch=8,
         on_track_result=on_detection_finished,
     )
-    # Note: in perception/dispatcher.py, start() is async and doesn't take callback.
-    # It calls on_track_result which we can set in __init__.
+    if source is None:
+        source = os.getenv("DUMMY_VIDEO_PATH", "assets/videos/demo.mp4")
 
-    await dispatcher.start()
-
-    # 模擬 4 路串流
-    streams = ["stream_1", "stream_2", "stream_3", "stream_4"]
-    tasks = []
-
-    dummy_video = os.getenv("DUMMY_VIDEO_PATH", "assets/videos/demo.mp4")
-
-    for sid in streams:
-        tasks.append(
-            asyncio.create_task(run_stream_producer(sid, dispatcher, dummy_video))
-        )
-
+    tasks: list["asyncio.Task[Any]"] = []
+    watchers: list["asyncio.Task[Any]"] = []
     try:
-        await asyncio.gather(*tasks)
-    except asyncio.CancelledError:
-        await dispatcher.stop()
+        # start() and task creation sit inside the try: a partial start or a
+        # failed spawn must not leave a running worker or task behind.
+        await dispatcher.start()
+        for sid in streams:
+            spawn(tasks, functools.partial(producer, sid, dispatcher, source))
+        spawn(watchers, functools.partial(raise_when_failed, dispatcher))
+        await supervise(tasks, watchers)
+    except BaseException as primary:
+        # supervise() already cancelled its tasks; this covers the ones created
+        # before it took over.
+        await cancel_and_wait([*tasks, *watchers])
+        await stop_after(primary, dispatcher.stop, "dispatcher.stop()")
         print("🛑 Perception Pipeline shutting down...")
+        raise
+    await dispatcher.stop()
 
 
-async def run_full() -> None:
+async def run_full(
+    perception: Optional[Callable[[], Coroutine[Any, Any, None]]] = None,
+    orchestrator_factory: Callable[[], Any] = PipelineOrchestrator,
+) -> None:
+    """Perception + orchestrator; if either fails, the other is cancelled.
+
+    The orchestrator is built before any task exists, so a failing constructor
+    leaves nothing running. It is still built before perception starts the
+    VRAM writer (C0-08 order).
+    """
     print("💡 Running in full mode - starting perception + orchestrator.")
-    await asyncio.gather(
-        run_perception(),
-        PipelineOrchestrator().run(),
-    )
+    orchestrator = orchestrator_factory()
+    tasks: list["asyncio.Task[Any]"] = []
+    try:
+        spawn(tasks, perception or run_perception)
+        spawn(tasks, orchestrator.run)
+    except BaseException:
+        await cancel_and_wait(tasks)
+        raise
+    await supervise(tasks)
 
 
 def main() -> None:
@@ -236,7 +297,14 @@ def main() -> None:
     parser.add_argument(
         "--mode", choices=["perception", "orchestrator", "full"], default="full"
     )
+    parser.add_argument(
+        "--reid",
+        action="store_true",
+        help="Not supported: the online tracking path is geometry-only (#537 R-1).",
+    )
     args = parser.parse_args()
+    if args.reid and args.mode != "orchestrator":
+        parser.error(REID_UNSUPPORTED)
 
     if args.mode == "perception":
         asyncio.run(run_perception())

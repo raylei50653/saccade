@@ -13,6 +13,7 @@ tests/research/README.md).
 from __future__ import annotations
 
 import hashlib
+import json
 import pathlib
 import re
 import subprocess
@@ -834,6 +835,32 @@ def test_h2_committed_archives_are_admitted_by_the_controlled_host_domain() -> N
             )
             == ()
         ), root.name
+
+
+def test_h2_archive_axes_use_the_partition_of_the_archived_commit() -> None:
+    """Reclassifying a path that already existed must not break an old archive.
+
+    The #538 ruling made `main.py` and `scripts/ops/run_8stream_perception.py`
+    decision_relevant. Both exist in the committed H2 archive's source head,
+    where the producer classified them as unclassified. The verifier therefore
+    rebuilds the witness axes with the classifier read from that commit. The
+    contrast below is the negative control: with the current classifier, the
+    archive's implementation axis would gain those files and stop matching.
+    """
+    import h2_path_partition as current_partition
+
+    entry_points = ("main.py", "scripts/ops/run_8stream_perception.py")
+    for root in h2_measurement_execution_dirs():
+        witness = json.loads((root / h2_evidence.CHECKOUT_WITNESS_NAME).read_text())
+        head = witness["source_head"]
+        archived = measurement_verifier._archived_classifier(head)
+        for path in entry_points:
+            assert current_partition.classify(path) == "decision_relevant"
+            assert archived(path) == "unclassified", (root.name, path)
+        implementation = measurement_verifier._commit_content_axes(head)[
+            "decision_relevant"
+        ]
+        assert not {f["path"] for f in implementation["files"]} & set(entry_points)
 
 
 def test_h2_rehearsal_shaped_archive_is_archive_valid_and_corpus_refused() -> None:

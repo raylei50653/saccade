@@ -63,6 +63,13 @@ _POLICY_SURFACE = (
     "scripts/eval/mot17.py",
     "scripts/eval/mot17_args.py",
 )
+# Online entry points (#538 caller lifecycle): they decide which dispatcher,
+# tracker path and stop/cleanup order run. They were unclassified until the
+# owner's 2026-10-17 ruling; outside src/ they need exact rules.
+_ONLINE_ENTRYPOINTS = (
+    "main.py",
+    "scripts/ops/run_8stream_perception.py",
+)
 
 # The successor artifact schemas and RunSpec resolver define what one H2
 # execution means. They are exact ruler paths: docs/ and scripts/tools/h2_* are
@@ -90,7 +97,7 @@ RUN_SPEC_AUTHORING_PATHS: tuple[str, ...] = (
 RUN_SPEC_RESOLVER_PATH = "scripts/tools/h2_run_spec.py"
 
 DECISION_RELEVANT_PATHS: frozenset[str] = frozenset(
-    _ADMITTED_RUNTIME_PATHS + _OBSERVATION_SITES + _POLICY_SURFACE
+    _ADMITTED_RUNTIME_PATHS + _OBSERVATION_SITES + _POLICY_SURFACE + _ONLINE_ENTRYPOINTS
 )
 DECISION_RELEVANT_PREFIXES: tuple[str, ...] = (
     # The resolved shipping config is the shipping builders' only decision
