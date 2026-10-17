@@ -27,6 +27,7 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import asyncio
+import functools
 import time
 
 import argparse
@@ -172,6 +173,27 @@ async def supervise(
         raise first
 
 
+async def cancel_and_wait(tasks: Sequence["asyncio.Task[Any]"]) -> None:
+    """Cancel ``tasks`` and wait until every one of them has finished."""
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def spawn(
+    created: list["asyncio.Task[Any]"], make: Callable[[], Coroutine[Any, Any, Any]]
+) -> None:
+    """Create one task and record it in ``created`` so a later failure can
+    cancel it. A coroutine whose task could not be created is closed."""
+    coro = make()
+    try:
+        task = asyncio.create_task(coro)
+    except BaseException:
+        coro.close()
+        raise
+    created.append(task)
+
+
 async def raise_when_failed(dispatcher: AsyncDispatcher, poll_s: float = 0.1) -> None:
     """Surface a dispatcher worker failure even when no producer is sending."""
     while dispatcher.state is not DispatcherState.FAILED:
@@ -223,16 +245,23 @@ async def run_perception(
         max_batch=8,
         on_track_result=on_detection_finished,
     )
-    await dispatcher.start()
-
     if source is None:
         source = os.getenv("DUMMY_VIDEO_PATH", "assets/videos/demo.mp4")
-    tasks = [asyncio.create_task(producer(sid, dispatcher, source)) for sid in streams]
-    watcher = asyncio.create_task(raise_when_failed(dispatcher))
 
+    tasks: list["asyncio.Task[Any]"] = []
+    watchers: list["asyncio.Task[Any]"] = []
     try:
-        await supervise(tasks, [watcher])
+        # start() and task creation sit inside the try: a partial start or a
+        # failed spawn must not leave a running worker or task behind.
+        await dispatcher.start()
+        for sid in streams:
+            spawn(tasks, functools.partial(producer, sid, dispatcher, source))
+        spawn(watchers, functools.partial(raise_when_failed, dispatcher))
+        await supervise(tasks, watchers)
     except BaseException as primary:
+        # supervise() already cancelled its tasks; this covers the ones created
+        # before it took over.
+        await cancel_and_wait([*tasks, *watchers])
         await stop_after(primary, dispatcher.stop, "dispatcher.stop()")
         print("🛑 Perception Pipeline shutting down...")
         raise
@@ -243,14 +272,22 @@ async def run_full(
     perception: Optional[Callable[[], Coroutine[Any, Any, None]]] = None,
     orchestrator_factory: Callable[[], Any] = PipelineOrchestrator,
 ) -> None:
-    """Perception + orchestrator; if either fails, the other is cancelled."""
+    """Perception + orchestrator; if either fails, the other is cancelled.
+
+    The orchestrator is built before any task exists, so a failing constructor
+    leaves nothing running. It is still built before perception starts the
+    VRAM writer (C0-08 order).
+    """
     print("💡 Running in full mode - starting perception + orchestrator.")
-    await supervise(
-        [
-            asyncio.create_task((perception or run_perception)()),
-            asyncio.create_task(orchestrator_factory().run()),
-        ]
-    )
+    orchestrator = orchestrator_factory()
+    tasks: list["asyncio.Task[Any]"] = []
+    try:
+        spawn(tasks, perception or run_perception)
+        spawn(tasks, orchestrator.run)
+    except BaseException:
+        await cancel_and_wait(tasks)
+        raise
+    await supervise(tasks)
 
 
 def main() -> None:

@@ -76,6 +76,20 @@ def fake_rm():
     rm.decide_degradation_level.return_value = d.DegradationLevel.NORMAL
     return rm
 
+class LateStartFailure(RecordingDispatcher):
+    # start() gets the writer and worker running, then fails.
+    async def start(self):
+        await super().start()
+        raise RuntimeError("start failed late")
+
+async def checked(coro):
+    # Await coro; afterwards report tasks other than this one still alive.
+    try:
+        await coro
+    finally:
+        left = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        print(f"@leftover_tasks={len(left)}")
+
 def report(run):
     try:
         run()
@@ -303,6 +317,85 @@ after()
         "state": "stopped",
         "writer_closed": "1",
         "released": "['s1', 's2']",
+    }
+
+
+# ── Start-up exceptions (owner's merge-gate ruling) ───────────────────────
+
+_START_KEYS = (*_MAIN_KEYS, "leftover_tasks")
+
+
+def test_run_full_orchestrator_constructor_failure_leaves_nothing_running() -> None:
+    out = _run(
+        """
+class BrokenOrchestrator:
+    def __init__(self):
+        raise ConnectionError("redis down")
+report(lambda: asyncio.run(checked(main.run_full(perception=perception, orchestrator_factory=BrokenOrchestrator))))
+print(f"@dispatchers={len(INSTANCES)}")
+"""
+    )
+    assert _pick(out, "outcome", "cause", "leftover_tasks", "dispatchers") == {
+        "outcome": "ConnectionError",
+        "cause": "None",
+        "leftover_tasks": "0",
+        "dispatchers": "0",
+    }
+
+
+def test_main_partial_dispatcher_start_is_cleaned_up() -> None:
+    out = _run(
+        "main.AsyncDispatcher = LateStartFailure\n"
+        "report(lambda: asyncio.run(checked(perception())))\nafter()"
+    )
+    assert _pick(out, *_START_KEYS) == {
+        "outcome": "RuntimeError",
+        "cause": "None",
+        "leftover_tasks": "0",
+        "state": "stopped",
+        "writer_closed": "1",
+        "released": "[]",
+    }
+
+
+def test_main_partial_start_keeps_the_original_over_a_cleanup_error() -> None:
+    out = _run(
+        'main.AsyncDispatcher = LateStartFailure\nWRITER.close.side_effect = OSError("close failed")\n'
+        "report(lambda: asyncio.run(checked(perception())))\nafter()"
+    )
+    assert _pick(out, *_START_KEYS) == {
+        "outcome": "RuntimeError",
+        "cause": "None",
+        "note": "cleanup dispatcher.stop() also failed",
+        "leftover_tasks": "0",
+        "state": "stopped",
+        "writer_closed": "1",
+        "released": "[]",
+    }
+    assert "start failed late" not in out["notes_full"]
+
+
+def test_main_producer_task_creation_failure_is_cleaned_up() -> None:
+    out = _run(
+        """
+good = producer()
+def picky(sid, dispatcher, source):
+    if sid == "s2":
+        raise TypeError("bad stream config")
+    return good(sid, dispatcher, source)
+report(lambda: asyncio.run(checked(main.run_perception(
+    detector_factory=FakeDetector, producer=picky, streams=("s1", "s2"), source="x"))))
+after()
+"""
+    )
+    assert _pick(out, *_START_KEYS) == {
+        "outcome": "TypeError",
+        "cause": "None",
+        "leftover_tasks": "0",
+        "state": "stopped",
+        "writer_closed": "1",
+        # s1's task was created but cancelled before it ran its first step
+        "released": "[]",
     }
 
 
@@ -576,4 +669,47 @@ def test_run8_workbench_stop_timeout_keeps_the_batcher() -> None:
         "batcher_down": "False",
         "telemetry_stopped": "1",
         "released": "['0', '1']",
+    }
+
+
+def test_run8_stream_url_failure_cancels_created_tasks() -> None:
+    out = _run(
+        """
+real_url = run8.build_stream_url
+def flaky_url(args, i):
+    if i == 1:
+        raise ValueError("bad rtsp url")
+    return real_url(args, i)
+run8.build_stream_url = flaky_url
+report(lambda: asyncio.run(checked(run8.run_multistream_perception(args()))))
+after_dispatcher()
+""",
+        prelude=_DISPATCHER_SCRIPT,
+    )
+    assert _pick(out, *_DISPATCHER_KEYS, "leftover_tasks") == {
+        "outcome": "ValueError",
+        "cause": "None",
+        "leftover_tasks": "0",
+        "state": "stopped",
+        "rm_closed": "1",
+        "telemetry_stopped": "1",
+        "released": "[]",
+    }
+
+
+def test_run8_partial_dispatcher_start_is_cleaned_up() -> None:
+    out = _run(
+        "run8.AsyncDispatcher = LateStartFailure\n"
+        "report(lambda: asyncio.run(checked(run8.run_multistream_perception(args()))))\n"
+        "after_dispatcher()",
+        prelude=_DISPATCHER_SCRIPT,
+    )
+    assert _pick(out, *_DISPATCHER_KEYS, "leftover_tasks") == {
+        "outcome": "RuntimeError",
+        "cause": "None",
+        "leftover_tasks": "0",
+        "state": "stopped",
+        "rm_closed": "1",
+        "telemetry_stopped": "1",
+        "released": "[]",
     }

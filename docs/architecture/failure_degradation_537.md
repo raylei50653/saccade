@@ -539,3 +539,40 @@ host 層的保證不能取代 D2-GPU 的 buffer lifetime 驗證。
 - orchestrator 自己被取消時的清理不在本 PR 範圍。
 - 兩個入口各有一份 `supervise` 與 `same_failure`；範圍限定在這兩個檔案，所以沒有抽成共用模組。
 - C0-08 的 AST 測試（`test_b0_f07_full_mode_builds_orchestrator_before_dispatcher_start`）改為檢查新的寫法：`run_full()` 改用 `supervise()`，在建立 task list 時同步建構 orchestrator，`create_task()` 只負責排程，所以 orchestrator 仍在 `run_perception()` 啟動 writer 之前建立，順序沒有改變。
+
+**啟動例外補件**（owner merge gate 裁決，2026-10-17）：
+
+owner 讀 #605 的程式碼時，找到兩條測試沒有涵蓋的啟動例外路徑。它們和「所有結束路徑都會清理」的說法不一致：
+
+- `run_full()` 在 `supervise([...])` 的引數中，先建立 perception task，才呼叫 `orchestrator_factory()`。`PipelineOrchestrator.__init__()` 會初始化 Redis、Chroma 等資源；如果它同步拋出例外，`supervise()` 根本不會被呼叫，已經排入的 perception task 就沒有被取消或回收。
+- `run_perception()` 把 `dispatcher.start()` 與 producer task 的建立放在清理用的 `try` 外面。啟動到一半失敗，或某個 producer task 建立失敗時，都會繞過 `dispatcher.stop()`，已建立的 task 也不會被取消。
+
+**修正**：
+
+- `run_full()` 在建立任何 task 之前先建構 orchestrator，所以建構失敗時沒有任何東西在執行；它仍然在 perception 啟動 writer 之前建立，C0-08 的順序不變。
+- 兩個 task 都用 `spawn()` 建立：建立後先登記，若後面的建立失敗，就取消並等待已建立的 task。無法建立 task 的 coroutine 會被 close，不會留下沒有 await 的 coroutine。
+- `run_perception()` 把 `dispatcher.start()`、producer 與 watcher 的建立都移進 `try`。`except` 時先 `cancel_and_wait()` 所有在 `supervise()` 接手之前建立的 task，再呼叫 `stop_after(dispatcher.stop)`；清理錯誤仍然只附為 note。
+- `run_8stream_perception.py` 的 producer／watcher 建立改用 `_spawn_and_supervise()`：建立其中一個失敗時（例如 stream URL 錯誤），先取消並等待已建立的 task，再交給外層的 `finally` 清理。`dispatcher.start()`／`pool.start()` 原本就在外層 `try` 之內。
+- C0-08 的 AST 測試改為檢查：`orchestrator = orchestrator_factory()` 位於第一個 `spawn()` 之前。
+
+**新增的故障注入測試**（[test_caller_lifecycle_538.py](../../tests/unit/test_caller_lifecycle_538.py)，共 22 個情境）。每個情境結束時，都會檢查目前 task 以外還有沒有殘留的 task：
+
+| 情境 | 結果 |
+|:--|:--|
+| `run_full`：orchestrator 建構時拋 `ConnectionError` | 拋原始例外；殘留 task 0；沒有建立 dispatcher |
+| `main`：`dispatcher.start()` 讓 writer 與 worker 跑起來之後才失敗 | 拋原始的 `RuntimeError`；殘留 task 0；dispatcher 為 STOPPED、writer 關閉一次 |
+| 同上，再加上 `writer.close()` 失敗 | 仍拋原始的 `RuntimeError`，`OSError` 附為 note |
+| `main`：第二個 producer 建立時拋 `TypeError` | 拋原始例外；殘留 task 0（第一個 producer 在執行前就被取消）；dispatcher 已停止 |
+| 8stream：第二個 stream 的 URL 建立失敗 | 拋原始的 `ValueError`；殘留 task 0；dispatcher、resource manager、telemetry 都已釋放 |
+| 8stream：dispatcher 啟動到一半失敗 | 拋原始例外；殘留 task 0；全部資源都已釋放 |
+
+負控制（caller 測試 22 個；只替換入口檔案；harness 與輸出在 `results/caller_startup_20261018/`，gitignored）：
+
+| 變體 | 結果 |
+|:--|:--|
+| 修補前的兩個入口（`78e984d6`） | **5 個失敗**：上表的 orchestrator 建構、兩個部分啟動、producer 建立與 URL 建立 |
+| 只替換 `main.py` | 4 個失敗 |
+| 只替換 8stream | 1 個失敗（URL）。8stream 的部分啟動在修補前就在 `try` 之內，所以通過 |
+| `main.py` 不取消 `supervise()` 接手前建立的 task | 1 個失敗 |
+| 8stream 建立 task 失敗時不取消 | 1 個失敗 |
+| `run_full()` 改成在第一個 `spawn()` 之後才建構 orchestrator | **全部通過**。建構呼叫仍在 `try` 之內，已建立的 task 會被取消，就「不殘留 task」而言是等價 mutant。先建構的順序由 C0-08 的 AST 測試另外釘住 |

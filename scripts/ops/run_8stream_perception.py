@@ -3,6 +3,7 @@
 # status: stable
 import argparse
 import asyncio
+import functools
 import inspect
 import time
 from typing import Any, Callable, Optional, Sequence
@@ -229,6 +230,41 @@ async def _supervise(
         raise first
 
 
+async def _cancel_and_wait(tasks: Sequence["asyncio.Task[Any]"]) -> None:
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _spawn(created: list["asyncio.Task[Any]"], make: Callable[[], Any]) -> None:
+    coro = make()
+    try:
+        task = asyncio.create_task(coro)
+    except BaseException:
+        coro.close()  # never scheduled; do not leave it un-awaited
+        raise
+    created.append(task)
+
+
+async def _spawn_and_supervise(
+    producers: Sequence[Callable[[], Any]], watchers: Sequence[Callable[[], Any]]
+) -> None:
+    """Create every task, then supervise them. If creating one fails (for
+    example a bad stream URL), the tasks already created are cancelled and
+    awaited before the error is raised."""
+    tasks: list["asyncio.Task[Any]"] = []
+    watching: list["asyncio.Task[Any]"] = []
+    try:
+        for make in producers:
+            _spawn(tasks, make)
+        for make in watchers:
+            _spawn(watching, make)
+    except BaseException:
+        await _cancel_and_wait([*tasks, *watching])
+        raise
+    await _supervise(tasks, watching)
+
+
 async def _raise_when_failed(
     target: AsyncDispatcher | WorkbenchPool, poll_s: float = 0.1
 ) -> None:
@@ -356,19 +392,19 @@ async def _run_workbench(
             )
 
     await pool.start()
-    tasks = [
-        asyncio.create_task(
-            run_stream_producer_workbench(
-                f"stream_{i}", pool, build_stream_url(args, i)
-            )
-        )
-        for i in range(n)
-    ]
-    await _supervise(
-        tasks,
+    await _spawn_and_supervise(
         [
-            asyncio.create_task(_stats_loop(args.stats_interval_sec, report)),
-            asyncio.create_task(_raise_when_failed(pool)),
+            functools.partial(
+                lambda i: run_stream_producer_workbench(
+                    f"stream_{i}", pool, build_stream_url(args, i)
+                ),
+                i,
+            )
+            for i in range(n)
+        ],
+        [
+            functools.partial(_stats_loop, args.stats_interval_sec, report),
+            functools.partial(_raise_when_failed, pool),
         ],
     )
 
@@ -425,17 +461,19 @@ async def _run_dispatcher(
             )
 
     await dispatcher.start()
-    tasks = [
-        asyncio.create_task(
-            run_stream_producer(f"stream_{i}", dispatcher, build_stream_url(args, i))
-        )
-        for i in range(n)
-    ]
-    await _supervise(
-        tasks,
+    await _spawn_and_supervise(
         [
-            asyncio.create_task(_stats_loop(args.stats_interval_sec, report)),
-            asyncio.create_task(_raise_when_failed(dispatcher)),
+            functools.partial(
+                lambda i: run_stream_producer(
+                    f"stream_{i}", dispatcher, build_stream_url(args, i)
+                ),
+                i,
+            )
+            for i in range(n)
+        ],
+        [
+            functools.partial(_stats_loop, args.stats_interval_sec, report),
+            functools.partial(_raise_when_failed, dispatcher),
         ],
     )
 
