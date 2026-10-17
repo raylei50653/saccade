@@ -251,7 +251,7 @@ function 標籤是 `diagnostic`。要修復時，必須在同一個 PR 把這些
 | 降級 | FAST_PATH 以上呼叫不存在的 tracker 方法；batch 上限固定 2 | 只限制 batch 為 `min(max_batch, 2)`；`get_stats()` 的 `current_level` 是 resource level，`tracker_degradation` 固定為 `"none"` |
 | extractor | 只決定 `embedding_dim=768`，tracker 從沒收到 embedding | 建構時拒絕 |
 
-**沒有改變的部分**：worker 失敗的語義（§9 的 D2 觀察）保留現況，由 D2-AD 處理。adapter 不吞 tracker 的錯誤，tracker 拋例外時 worker 仍會結束。facade、native binding、tracker 演算法與 CUDA kernel 都沒有改。`main.py --mode full` 在 SigLIP extractor 載入成功時，會把 extractor 傳給 dispatcher，因此現在會在建構時被拒絕（修復前是在第一個有 detection 的 batch 失敗）。`main.py` 沒有改，要不要改由 owner 決定。
+**沒有改變的部分**：worker 失敗的語義（§9 的 D2 觀察）保留現況，由 D2-AD 處理（§11）。adapter 不吞 tracker 的錯誤，tracker 拋例外時 worker 仍會結束。facade、native binding、tracker 演算法與 CUDA kernel 都沒有改。`main.py --mode full` 在 SigLIP extractor 載入成功時，會把 extractor 傳給 dispatcher，因此現在會在建構時被拒絕（修復前是在第一個有 detection 的 batch 失敗）。`main.py` 沒有改，要不要改由 owner 決定。
 
 **證據**：
 
@@ -267,3 +267,59 @@ function 標籤是 `diagnostic`。要修復時，必須在同一個 PR 把這些
 **未驗證**：沒有執行 `main.py`、完整 online service、真實 detector 或 RTSP／DALI 輸入；GPU 證據只涵蓋合成的 detection。adapter 每次呼叫都會建立 host tensor 再複製到 device，沒有量測延遲。多條 stream 共用 CUDA stream 的行為沒有驗證（歸 D2-GPU）。
 
 **Runtime identity**：`dispatcher.py` 與新模組都屬於 `decision_relevant`，修改後 implementation 軸會落後，staleness checker 會 fail closed。重新發佈需要 owner 決定，見 PR 描述。
+
+## 11. #538 D2-AD：AsyncDispatcher worker 失敗與停止
+
+本節記錄 D2-AD 修復 PR（stack 在 R-1 修復之上）。§9 的 D2 觀察是修復前的基線。裁決同 §10（2026-10-17）：worker 出現例外後，要立即進入可觀察的 FAILED 狀態；拒絕新工作；保留原始錯誤；`stop()` 必須嘗試完成每一步清理，不能因為例外而跳過。本節內容屬於 #538，暫時寫在這裡，是為了和 §9／§10 的基線放在一起。
+
+**修改**（[dispatcher.py](../../src/saccade/perception/dispatcher.py)）：
+
+- 新增 `DispatcherState`（CREATED／RUNNING／FAILED／STOPPED）與 `DispatcherFailed(RuntimeError)`，`__cause__` 是原始錯誤。`state`、`failure` 為唯讀屬性。
+- `_worker_loop()` 從決策、收集 batch 到 `_process_batch()` 的整段都包在 `except Exception` 裡。worker 在自己的 task 內記錄狀態：
+  - 狀態改為 FAILED，保留原始錯誤，`_running` 設為 False。
+  - 失敗那一批與 queue 中剩下的幀都呼叫 `task_done()` 並計數，然後結束。
+  - 狀態在 task 結束前就已設定，所以 task 一結束就看得到 FAILED。
+  - task 本身正常結束，不留下 "exception was never retrieved"。
+  - `CancelledError` 不算失敗。
+- FAILED 狀態下，`put_frame()` 拋 `DispatcherFailed`，`start()` 也一樣（要先 `stop()`）。RUNNING 時再呼叫 `start()` 拋 `RuntimeError`。`stop()` 之後可以重新 `start()`，`failure` 在那時才清除。
+- `stop()`：
+  - 取消 worker 之後，在 `finally` 依序執行三個步驟：結算 queue、清除 tracker、關閉 writer。每一步各自 try，前一步失敗不影響後面。
+  - 狀態改為 STOPPED。
+  - 如果這次執行失敗過，拋 `DispatcherFailed`，清理錯誤附在 `__notes__`；否則若有清理錯誤，拋第一個；第二次呼叫 `stop()` 不再報告。
+- `get_stats()` 新增以下欄位。`queue_depth` 原本就有，修復前在失敗後會一直停在 100。
+
+  | 欄位 | 內容 |
+  |:--|:--|
+  | `state`、`failure` | 狀態與原始錯誤的 repr |
+  | `dropped_queue_full` | `put_frame()` 因 queue 滿而丟掉的幀（修復前沒有計數） |
+  | `failed_batch_frames` | 失敗那一批的幀數，其中部分可能已送到 callback |
+  | `discarded_on_failure` | 失敗時仍在 queue 中、沒有處理的幀 |
+  | `discarded_on_stop` | `stop()` 時取消的 in-flight 幀與 queue 中的幀 |
+
+**修復後的行為**（對照 §9 的 D2 觀察）：
+
+| 項目 | 修復前 | 修復後 |
+|:--|:--|:--|
+| worker 例外 | task 帶著例外結束，外部沒有任何記錄 | 立即變為 FAILED，原始錯誤保存在 `failure`，`get_stats()` 看得到 |
+| 之後的 `put_frame()` | 不報錯，queue 滿 100 筆後靜默丟棄 | 拋 `DispatcherFailed` |
+| queue | 失敗那一批沒有 `task_done()`，`queue.join()` 會永遠等待 | 全部結算並計數，`join()` 立即返回 |
+| `stop()` | 再拋原始例外，跳過 tracker 清理與 writer 關閉 | 每一步清理都執行，之後拋 `DispatcherFailed`（`__cause__` 是原始錯誤） |
+
+**證據**：
+
+| 測試 | 涵蓋 | 環境 |
+|:--|:--|:--|
+| [test_dispatcher_failure_contract_538.py](../../tests/unit/test_dispatcher_failure_contract_538.py) | 四種失敗來源（tracker、detector、resource manager 的 `ZeroDivisionError`、callback）都進入 FAILED 並保留原始錯誤（同一個物件）；失敗後拒絕 `put_frame()`／`start()`；失敗那一批與 queue 的結算與計數，`join()` 不會卡住；queue 滿的計數；`stop()` 取消 in-flight batch 時的結算；失敗後 `stop()` 先清理再拋例外，第二次不拋；清理步驟失敗時後面的步驟仍執行；清理錯誤附在 notes；正常停止不算失敗；`start()` 的規則與重新啟動 | host-only |
+| [test_dispatcher_tracker_contract_537.py](../../tests/unit/test_dispatcher_tracker_contract_537.py) | R-1 的「tracker 錯誤不被吞掉」改為檢查 `failure` 與 `DispatcherFailed` | host-only |
+| [test_dispatcher_tracker_contract_observed_537.py](../../tests/unit/test_dispatcher_tracker_contract_observed_537.py) | §9 的 D2 觀察已失效，移到上面的契約測試；這個檔只留 facade／native 介面檢查 | — |
+
+負控制輸出附在 PR 描述：同一個 harness 只替換 `dispatcher.py`，執行 D2-AD、R-1 契約測試與 extended 測試（共 60 個）。以 R-1 head 的 `dispatcher.py` 為基準（只補上兩個 class 名稱）有 14 個失敗；7 個 mutation 各自造成 1～10 個失敗（worker 改回往外拋、失敗後仍接受 `put_frame()`、失敗時不結算 queue、`stop()` 吞掉失敗、清理步驟不隔離、`start()` 不清除 failure、queue 滿不計數）。
+
+**沒有處理**：
+
+- 失敗時沒有立即關閉 VRAM writer。snapshot 停在最後一次 FRESH 的值，超過上限 T 才讀為 STALE；`stop()` 會關閉 writer。
+- `put_frame()` 在 CREATED／STOPPED 狀態仍會把幀放進 queue（沒有裁決）。
+- 呼叫端的影響：`main.py` 只在 `CancelledError` 時呼叫 `stop()`。producer 收到 `DispatcherFailed` 時，`gather()` 往外拋，不會呼叫 `stop()`。`run_8stream_perception.py` 在 `finally` 中呼叫 `stop()`，它現在可能拋 `DispatcherFailed`，使後面的 `resource_manager.close()` 與 `telemetry.stop()` 被跳過。這兩個呼叫端都沒有修改，待 owner 決定。
+- 沒有自動重啟、health endpoint 或告警；health 只限於 `state`／`failure`／`get_stats()`。
+- WorkbenchPool（D2-WB-0／1）與 CUDA stream／buffer lifetime（D2-GPU）不在本節範圍。
+- 沒有執行完整 online service。

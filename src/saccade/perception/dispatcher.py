@@ -4,6 +4,7 @@ import threading
 import time
 from collections import OrderedDict, deque
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable, Optional
 
 import numpy as np
@@ -440,6 +441,17 @@ class WorkbenchPool:
             self._drop_count = 0
 
 
+class DispatcherState(Enum):
+    CREATED = "created"
+    RUNNING = "running"
+    FAILED = "failed"
+    STOPPED = "stopped"
+
+
+class DispatcherFailed(RuntimeError):
+    """The worker task failed; ``__cause__`` is the original error (#538 D2-AD)."""
+
+
 class AsyncDispatcher:
     def __init__(
         self,
@@ -482,6 +494,15 @@ class AsyncDispatcher:
         self._vram_writer: Optional[VRAMLevelWriter] = None
         self._worker_task: Optional[asyncio.Task[None]] = None
         self._current_level = DegradationLevel.NORMAL
+        # #538 D2-AD: lifecycle state, the worker's original error, the batch
+        # taken off the queue but not yet task_done(), and frame accounting.
+        self._state = DispatcherState.CREATED
+        self._failure: Optional[Exception] = None
+        self._inflight: list[_QueuedFrame | tuple[str, torch.Tensor, float]] = []
+        self._dropped_queue_full = 0
+        self._failed_batch_frames = 0
+        self._discarded_on_failure = 0
+        self._discarded_on_stop = 0
 
         self._batch_sizes: deque[int] = deque(maxlen=stats_window)
         self._queue_wait_ms: deque[float] = deque(maxlen=stats_window)
@@ -514,10 +535,31 @@ class AsyncDispatcher:
         if tracker is not None:
             del tracker
 
+    @property
+    def state(self) -> DispatcherState:
+        return self._state
+
+    @property
+    def failure(self) -> Optional[Exception]:
+        """The worker's original error, kept until the next ``start()``."""
+        return self._failure
+
+    def _failed(self) -> DispatcherFailed:
+        err = DispatcherFailed(f"AsyncDispatcher worker failed: {self._failure!r}")
+        err.__cause__ = self._failure
+        return err
+
     async def start(self) -> None:
+        if self._state is DispatcherState.RUNNING:
+            raise RuntimeError("AsyncDispatcher is already running")
+        if self._state is DispatcherState.FAILED:
+            # A failed run must be stopped (and cleaned up) before a restart.
+            raise self._failed()
         reason = native_unavailable_reason()
         if reason is not None:
             raise OnlineTrackerUnavailable(reason)
+        self._failure = None
+        self._state = DispatcherState.RUNNING
         self._running = True
         try:
             self._vram_writer = VRAMLevelWriter()
@@ -526,24 +568,79 @@ class AsyncDispatcher:
         self._worker_task = asyncio.create_task(self._worker_loop())
 
     async def stop(self) -> None:
+        """Stop the worker and always clean up; raise ``DispatcherFailed`` afterwards
+        when this run's worker had failed."""
         self._running = False
-        if self._worker_task is not None:
-            self._worker_task.cancel()
-            try:
-                await self._worker_task
-            except asyncio.CancelledError:
-                pass
-            self._worker_task = None
+        task, self._worker_task = self._worker_task, None
+        try:
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        finally:
+            # Every step runs even if an earlier one raises; the first cleanup
+            # error is raised only after all of them (#538 D2-AD).
+            cleanup_errors: list[Exception] = []
+            for step in (self._stop_settle, self._stop_trackers, self._stop_writer):
+                try:
+                    step()
+                except Exception as e:
+                    cleanup_errors.append(e)
+            failed = self._state is DispatcherState.FAILED
+            if self._state is not DispatcherState.CREATED:
+                self._state = DispatcherState.STOPPED
+        if failed:
+            err = self._failed()
+            for cleanup_error in cleanup_errors:
+                err.add_note(f"cleanup also failed: {cleanup_error!r}")
+            raise err
+        if cleanup_errors:
+            raise cleanup_errors[0]
+
+    def _stop_settle(self) -> None:
+        self._discarded_on_stop += self._settle_queue()
+
+    def _stop_trackers(self) -> None:
         while self.trackers:
             _, tracker = self.trackers.popitem()
             del tracker
-        if self._vram_writer is not None:
-            self._vram_writer.close()
-            self._vram_writer = None
+
+    def _stop_writer(self) -> None:
+        writer, self._vram_writer = self._vram_writer, None
+        if writer is not None:
+            writer.close()
+
+    def _settle_queue(self) -> int:
+        """task_done() the in-flight batch and every queued frame; return how many."""
+        settled = len(self._inflight)
+        for _ in self._inflight:
+            self.queue.task_done()
+        self._inflight = []
+        while True:
+            try:
+                self.queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            self.queue.task_done()
+            settled += 1
+        return settled
+
+    def _fail(self, error: Exception) -> None:
+        self._failure = error
+        self._state = DispatcherState.FAILED
+        self._running = False
+        in_batch = len(self._inflight)
+        self._failed_batch_frames += in_batch
+        self._discarded_on_failure += self._settle_queue() - in_batch
+        print(f"❌ [Dispatcher] Worker failed: {error!r}")
 
     async def put_frame(
         self, stream_id: str, frame: torch.Tensor, timestamp: float
     ) -> None:
+        if self._state is DispatcherState.FAILED:
+            raise self._failed()
         try:
             self.queue.put_nowait(
                 _QueuedFrame(
@@ -554,7 +651,7 @@ class AsyncDispatcher:
                 )
             )
         except asyncio.QueueFull:
-            pass
+            self._dropped_queue_full += 1
 
     def get_stats(self) -> dict[str, float | int | str]:
         batch_sizes = list(self._batch_sizes)
@@ -568,6 +665,12 @@ class AsyncDispatcher:
         return {
             "queue_depth": self.queue.qsize(),
             "active_streams": len(self.trackers),
+            "state": self._state.value,
+            "failure": repr(self._failure) if self._failure is not None else "",
+            "dropped_queue_full": self._dropped_queue_full,
+            "failed_batch_frames": self._failed_batch_frames,
+            "discarded_on_failure": self._discarded_on_failure,
+            "discarded_on_stop": self._discarded_on_stop,
             "current_level": self._current_level.name,
             # The level only caps the batch size; the tracker itself is never
             # degraded (#537 R-1).
@@ -633,33 +736,41 @@ class AsyncDispatcher:
             batch_items: list[_QueuedFrame | tuple[str, torch.Tensor, float]] = [
                 first_item
             ]
-            decided_at_ns = vram_level_clock_ns()
-            level = self.resource_manager.decide_degradation_level()
-            self._current_level = level
-            if self._vram_writer is not None:
-                self._vram_writer.write(level, decided_at_ns)
-            current_max = (
-                self.max_batch
-                if level < DegradationLevel.FAST_PATH
-                else min(self.max_batch, 2)
-            )
-            deadline = time.perf_counter() + max(self.batch_timeout_ms, 0.0) / 1000.0
+            self._inflight = batch_items
+            try:
+                decided_at_ns = vram_level_clock_ns()
+                level = self.resource_manager.decide_degradation_level()
+                self._current_level = level
+                if self._vram_writer is not None:
+                    self._vram_writer.write(level, decided_at_ns)
+                current_max = (
+                    self.max_batch
+                    if level < DegradationLevel.FAST_PATH
+                    else min(self.max_batch, 2)
+                )
+                deadline = (
+                    time.perf_counter() + max(self.batch_timeout_ms, 0.0) / 1000.0
+                )
 
-            while len(batch_items) < current_max:
-                remaining = deadline - time.perf_counter()
-                if remaining <= 0:
-                    break
-                try:
-                    batch_items.append(
-                        await asyncio.wait_for(self.queue.get(), timeout=remaining)
-                    )
-                except asyncio.TimeoutError:
-                    break
+                while len(batch_items) < current_max:
+                    remaining = deadline - time.perf_counter()
+                    if remaining <= 0:
+                        break
+                    try:
+                        batch_items.append(
+                            await asyncio.wait_for(self.queue.get(), timeout=remaining)
+                        )
+                    except asyncio.TimeoutError:
+                        break
 
-            await self._process_batch(batch_items, level)
+                await self._process_batch(batch_items, level)
+            except Exception as e:
+                self._fail(e)
+                return
 
             for _ in batch_items:
                 self.queue.task_done()
+            self._inflight = []
 
     async def _process_batch(
         self,

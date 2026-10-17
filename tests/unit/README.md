@@ -8,8 +8,9 @@
 | `test_check_association_tools.py` | eval | contract | active | Unit tests for scripts/tools/check_association_tools.py. |
 | `test_compiled_head_reverse_engineering_runner.py` | system | contract | active | The #465 compiled-head reverse-engineering runner implements its frozen declaration. |
 | `test_config_consistency.py` | eval | contract | active | Guard against silent divergence across the three config layers. |
+| `test_dispatcher_failure_contract_538.py` | perception,resource | contract | active | #538 D2-AD: AsyncDispatcher worker failure, health, error propagation, queue accounting, stop clean… |
 | `test_dispatcher_tracker_contract_537.py` | perception,resource | contract | active | #537 R-1: the AsyncDispatcher↔tracker contract after the adapter fix. |
-| `test_dispatcher_tracker_contract_observed_537.py` | perception,resource | diagnostic | active | #537 C0-11: pin the tracker surfaces behind AsyncDispatcher, and what a dead worker leaves behind. |
+| `test_dispatcher_tracker_contract_observed_537.py` | perception,resource | diagnostic | active | #537 C0-11: pin the tracker surfaces that AsyncDispatcher used to call. |
 | `test_eval_script_paths.py` | eval | contract | active | Pin the scripts/eval compat wrappers to their relocated implementations. |
 | `test_headline_decision_contract.py` | eval,tracking,cross-module | contract | active | Unit tests for scripts/tools/check_headline_decision_contract.py. |
 | `test_headline_head_export_binding.py` | system | contract | active | The headline head exporter binds to the preset and the committed lineage inventory. |

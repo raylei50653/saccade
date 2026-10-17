@@ -12,8 +12,8 @@ Owner decisions (2026-10-17):
 
 The host-only tests use a strict fake: ``create_autospec`` of the real facade
 class. Unknown methods or keywords raise on it as they do on the facade, so the
-calls that the pre-fix dispatcher made fail on it. Worker failure semantics stay
-as they were; #538 D2-AD owns them.
+calls that the pre-fix dispatcher made fail on it. Worker failure semantics are
+#538 D2-AD's (test_dispatcher_failure_contract_538.py).
 """
 
 # scope: perception, resource
@@ -235,8 +235,8 @@ def test_extractor_is_refused() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tracker_failure_still_ends_the_worker() -> None:
-    """The adapter does not swallow tracker errors. What a dead worker means is #538 D2-AD."""
+async def test_tracker_errors_are_not_swallowed() -> None:
+    """The adapter passes tracker errors through; #538 D2-AD defines the FAILED state."""
     fake = _strict_facade()
     fake.update.side_effect = RuntimeError("native tracker failed")
     with (
@@ -249,8 +249,8 @@ async def test_tracker_failure_still_ends_the_worker() -> None:
         assert task is not None
         await disp.put_frame("cam0", torch.rand(3, *_HW), 0.0)
         await asyncio.wait_for(asyncio.shield(asyncio.wait({task})), timeout=2.0)
-        assert isinstance(task.exception(), RuntimeError)
-        with pytest.raises(RuntimeError, match="native tracker failed"):
+        assert disp.failure is fake.update.side_effect
+        with pytest.raises(dmod.DispatcherFailed):
             await disp.stop()
 
 
