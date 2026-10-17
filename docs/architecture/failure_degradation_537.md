@@ -538,3 +538,4 @@ host 層的保證不能取代 D2-GPU 的 buffer lifetime 驗證。
 - `on_detection_finished()` 仍是 no-op，`--mode full` 沒有接通 detection→cognition。
 - orchestrator 自己被取消時的清理不在本 PR 範圍。
 - 兩個入口各有一份 `supervise` 與 `same_failure`；範圍限定在這兩個檔案，所以沒有抽成共用模組。
+- C0-08 的 AST 測試（`test_b0_f07_full_mode_builds_orchestrator_before_dispatcher_start`）改為檢查新的寫法：`run_full()` 改用 `supervise()`，在建立 task list 時同步建構 orchestrator，`create_task()` 只負責排程，所以 orchestrator 仍在 `run_perception()` 啟動 writer 之前建立，順序沒有改變。

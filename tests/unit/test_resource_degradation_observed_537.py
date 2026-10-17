@@ -172,21 +172,30 @@ def test_b0_f07_reader_built_before_writer_restart_follows_new_writer(
 
 
 def test_b0_f07_full_mode_builds_orchestrator_before_dispatcher_start() -> None:
-    """`main.py --mode full` evaluates PipelineOrchestrator() as a gather()
-    argument, so its reader exists before run_perception() starts the writer.
-    Kept after F07: the order is unchanged, the stateless reader makes it harmless."""
+    """`main.py --mode full` builds the orchestrator (and its reader) while it
+    evaluates the task list, before the loop runs run_perception() and starts
+    the writer. Kept after F07: the order is unchanged, and the stateless
+    reader makes it harmless. The #538 caller-lifecycle fix replaced gather()
+    with supervise() over two tasks; create_task() only schedules, so the order
+    holds (orchestrator_factory defaults to PipelineOrchestrator)."""
     tree = ast.parse((REPO / "main.py").read_text(encoding="utf-8"))
     run_full = next(
         node
         for node in ast.walk(tree)
         if isinstance(node, ast.AsyncFunctionDef) and node.name == "run_full"
     )
-    gather = next(
+    supervise = next(
         node
         for node in ast.walk(run_full)
         if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "gather"
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "supervise"
     )
-    rendered = [ast.unparse(arg) for arg in gather.args]
-    assert rendered == ["run_perception()", "PipelineOrchestrator().run()"]
+    assert isinstance(supervise.args[0], ast.List)
+    rendered = [ast.unparse(arg) for arg in supervise.args[0].elts]
+    assert rendered == [
+        "asyncio.create_task((perception or run_perception)())",
+        "asyncio.create_task(orchestrator_factory().run())",
+    ]
+    default = run_full.args.defaults[-1]
+    assert ast.unparse(default) == "PipelineOrchestrator"
