@@ -6,7 +6,10 @@ target (D-537-2, docs/modules/resource/architecture_degradation.md §5) or
 REQ-535-07-01 says is wrong. A later fix PR changes the code and these
 expectations together; the matrix lives in
 docs/architecture/failure_degradation_537.md. The B0-F07 fix flipped the
-VRAM-level snapshot tests (C0-06/07/08) to the target semantics.
+VRAM-level snapshot tests (C0-06/07/08) to the target semantics. The C2
+hysteresis fix moved the seven rows that changed to the contract tests in
+test_resource_degradation_hysteresis_537.py; the rows kept here hold under both
+the C0 baseline and the D-537-2 target.
 """
 
 # scope: resource
@@ -51,31 +54,25 @@ def _decide(current: L, usage: float) -> L:
     return _manager([usage], current).decide_degradation_level()
 
 
-# ── C2: single-decision transition table (observed as-is) ────────────────────
-# Upward thresholds are strict (> 85 / 92 / 96). Rows marked "target differs"
-# violate the adopted D-537-2 semantics.
+# ── C2: single-decision transition table (rows unchanged by the C2 fix) ──────
+# Upward thresholds are strict (> 85 / 92 / 96). The seven C0 rows that
+# violated D-537-2 (FAST_PATH@92.0/90.0, EMERGENCY@96.0/94.0/92.1/92.0/91.0)
+# now live, with the target values, in test_resource_degradation_hysteresis_537.py.
 OBSERVED_STEPS = [
     # from NORMAL
     (L.NORMAL, 85.0, L.NORMAL),
     (L.NORMAL, 85.1, L.REDUCED),
     (L.NORMAL, 92.1, L.FAST_PATH),
     (L.NORMAL, 96.1, L.EMERGENCY),  # escalation may skip levels
-    # from REDUCED: the only working -5% deadband (< 80)
+    # from REDUCED
     (L.REDUCED, 80.0, L.REDUCED),
     (L.REDUCED, 79.9, L.NORMAL),
     (L.REDUCED, 92.1, L.FAST_PATH),
-    # from FAST_PATH: no effective hysteresis, leaves at <= 92
+    # from FAST_PATH
     (L.FAST_PATH, 92.1, L.FAST_PATH),
-    (L.FAST_PATH, 92.0, L.REDUCED),  # target differs: stay until < 87
-    (L.FAST_PATH, 90.0, L.REDUCED),  # issue counterexample; target differs
     (L.FAST_PATH, 0.0, L.REDUCED),
-    # from EMERGENCY: non-monotonic in usage
+    # from EMERGENCY
     (L.EMERGENCY, 96.1, L.EMERGENCY),
-    (L.EMERGENCY, 96.0, L.FAST_PATH),  # target differs: stay until < 91
-    (L.EMERGENCY, 94.0, L.FAST_PATH),  # issue counterexample; target differs
-    (L.EMERGENCY, 92.1, L.FAST_PATH),  # target differs
-    (L.EMERGENCY, 92.0, L.REDUCED),  # two levels in one decision; target differs
-    (L.EMERGENCY, 91.0, L.REDUCED),  # two levels in one decision; target differs
     (L.EMERGENCY, 90.9, L.FAST_PATH),
     (L.EMERGENCY, 0.0, L.FAST_PATH),
 ]

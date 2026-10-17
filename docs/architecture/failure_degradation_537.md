@@ -56,6 +56,8 @@
 
 C0 測試釘住的是「現況」欄。「目標」欄只是記錄已採納的方向，不是 C0 的斷言；對應的目標測試和實作屬於後續 C2 PR。
 
+**C2 修復後**（§8）：「目標」欄就是現行行為；「現況」欄保留為修復前（`978e5538`）的基線，不再描述現行程式。
+
 ## 4. Owner 裁決（引用）
 
 以下來自 [#537 C0 起步](https://github.com/raylei50653/saccade/issues/537#issuecomment-6139603145)，是 2026-10-13 工作 session 的轉錄；同一天也記入 [#550](https://github.com/raylei50653/saccade/issues/550#issuecomment-6139619832)。
@@ -71,7 +73,7 @@ C0 測試釘住的是「現況」欄。「目標」欄只是記錄已採納的�
 | [test_resource_degradation_observed_537.py](../../tests/unit/test_resource_degradation_observed_537.py) | C0-04～C0-08：§3 的現況欄（19 個單步案例，含兩個 issue 反例）、NVML 失敗、SHM 缺失／非法值、B0-F07 的 SHM 行為；`main.py --mode full` 的建構順序只以 AST 靜態檢查 | 不需 GPU；NVML 以 mock 取代；SHM 使用每個測試程序私有的 segment 名稱 |
 | [test_native_missing_observed_537.py](../../tests/unit/test_native_missing_observed_537.py) | C0-01～C0-03 | 子程序中封鎖 `saccade_tracking_ext`；C0-02／C0-03 隱藏 CUDA；C0-01 標 `gpu`，在 CI 會略過 |
 
-F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義，其餘維持現況特徵；F07 的目標測試見 §7。這兩個檔的 function 標籤都是 `diagnostic`：只觀察、不構成正式保證。後續修復 PR 若改變某列的行為，要在同一個 PR 更新對應測試與本稿，並說明這項改變是哪一條裁決授權的。
+F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義，其餘維持現況特徵；F07 的目標測試見 §7。C2 修復後，第一個檔的 7 個不一致單步案例移到 contract 測試（§8），留下的 12 個單步案例在修復前後結果相同。這兩個檔的 function 標籤都是 `diagnostic`：只觀察、不構成正式保證。後續修復 PR 若改變某列的行為，要在同一個 PR 更新對應測試與本稿，並說明這項改變是哪一條裁決授權的。
 
 **限制**：沒有執行完整 online service、Redis／Chroma 或真實 VRAM 壓力；C0-07、C0-08 對 orchestrator 事件的影響、C0-08 的 `--mode full` 建構順序，以及 C0-03 的觸發時間，都沒有執行驗證。C0-01 需要 CUDA，只在本機執行過。沒有新增 runtime／GPU／installed-package qualification 或 equivalence 證據。
 
@@ -83,7 +85,8 @@ F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義�
 | C0-05 | NVML 不可用時，consumer 應該看到什麼（unknown、停用降級，或其他具名狀態）；F07 後仍發佈 FRESH NORMAL | REQ-535-07-01 |
 | C0-06～C0-08 | 已由 F07 修復（§7）；T 預設值、多 writer、shutdown 仍待 #538 | #538 |
 | C0-09 | WorkbenchPool 是否支援 resource degradation | REQ-535-07-02 |
-| C2 其他參數 | 重啟時的初值、非法 usage（NaN、負值、>100）、決策頻率 | D-537-2 未涵蓋 |
+| C2 其他參數 | 重啟初值與決策頻率已裁決（R0、F0，見 §8）；非法 usage（NaN、負值、>100）只在 C2 PR 內維持現況（O0），不構成支持契約，仍待裁決 | D-537-2 未涵蓋 |
+| R-1（C0-11 候選） | native tracker 的 degradation API 契約；worker task 異常終止後的錯誤傳遞、health、stop 與 shutdown 語義（見 §8） | #537 C0-11；#538 D2 |
 | health CLI、orchestrator 錯誤後的 ACK | 報告 unknown 的方式；ACK 語義 | REQ-535-07-03；REQ-535-06-01（#538） |
 
 建議順序：先提出 C0-08（B0-F07）的修復方案給 owner，方案要包含事件持久化與 ACK 的負控制（非 anomaly 事件在舊 reader 下不得未寫入就被 ACK）；C2 依 D-537-2 另開 PR，附上目標測試和負控制。每個修復 PR 只處理一類行為。
@@ -128,3 +131,45 @@ F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義�
 - dispatcher 閒置時讀為 STALE，屬於預期行為（不加 heartbeat）。
 - 沒有在真實 Redis、Chroma 或 VRAM 壓力下做端到端驗證。
 - 部署：新舊版本不能混用，升級或 rollback 時要先停掉兩端。
+
+## 8. C2 遲滯修復（C0-04 收斂）
+
+本節記錄 C2 修復 PR，§3 的「現況」欄保留為修復前的基線。方案（單行 clamp，即方案 A）由 owner 在 2026-10-16 的工作 session 採納並授權受限實作：只允許 Draft PR，merge 要在提交確切 head、審查結果、CI 與 runtime identity 證據後另行裁決。目標語義是 D-537-2，契約內容在 [degradation 文件 §5](../modules/resource/architecture_degradation.md#5-hysteresis遲滯保護)。
+
+**根因**：`decide_degradation_level()` 的升級判斷只看 usage 所在的區段，直接賦值，所以會把仍應保留的高階狀態改低。恢復鏈判斷的是 `self.current_level`，只在條件成立時覆寫；條件不成立時，被改低的值就直接成為結果。因此 FAST_PATH 在 [87, 92] 掉回 REDUCED，EMERGENCY 在 [91, 92] 一次跳兩級、在 (92, 96] 掉回 FAST_PATH（例如 EMERGENCY@91：升級判斷得到 REDUCED，91 不小於 91，恢復不觸發）。門檻常數、嚴格比較與恢復鏈本身都符合 D-537-2。
+
+**修改**：升級判斷之後、恢復判斷之前加一行 `new_level = max(new_level, self.current_level)`。只要門檻遞增且遲滯寬度不為負，有效升級（clamp 後的結果高於目前級別，也就是 usage 高於上一級門檻）與恢復條件（usage 低於本級門檻 −5）不會同時成立；未 clamp 的升級賦值本身仍可能和恢復重疊（例如 EMERGENCY@88 先得到 REDUCED，再由恢復改為 FAST_PATH），但 clamp 之後不影響結果，所以每次決策只會升級、降一級或維持。
+
+**Owner 裁決**（2026-10-16 工作 session）：
+
+| 項目 | 決定 |
+|:--|:--|
+| 修復方案 | A（單行 clamp）；與 if/elif 改寫在本契約下等價 |
+| EMERGENCY 保留區間 | 接受：進入 EMERGENCY 後，usage 要低於 91 才恢復到 FAST_PATH；事件卸載因此延長，是 D-537-2 的預期效果 |
+| 重啟初值 | R0：維持 NORMAL，第一次量測後立即決策；不繼承前一個 writer 的狀態 |
+| 非法 usage | O0，只限本 PR：維持既有行為（NaN 維持原級、負值降一級、>100 升到 EMERGENCY），不視為支持契約，仍待後續裁決 |
+| 決策頻率 | F0：維持每個 batch 決策一次，不加停留時間或 heartbeat |
+| R-1 | 獨立的 P1 候選缺口，不併入 C2；要在 online service 端到端驗收前處理 |
+
+**修復後的行為**：§3 的三個不一致區間都改為目標值（FAST_PATH 在 [87, 92] 維持 FAST_PATH；EMERGENCY 在 [91, 96] 維持 EMERGENCY），其餘各列不變。C0-05（NVML 不可用時從 EMERGENCY 逐次衰減到 NORMAL）不變。
+
+**Consumer 影響**（程式不變，出現時間變長）：進入 EMERGENCY 後，usage 在 [91, 96] 期間 orchestrator 讀到 FRESH EMERGENCY，非 anomaly 事件會被刻意卸載並計入 `shed_events`；FAST_PATH 在 [87, 92] 維持，這段期間不啟動新的 RAG，dispatcher 的 batch 上限維持 2。snapshot 記錄格式、freshness 與「決策前取時戳」的順序都沒有改。
+
+**證據**（都不需要 GPU）：
+
+| 測試 | 涵蓋 |
+|:--|:--|
+| [test_resource_degradation_hysteresis_537.py](../../tests/unit/test_resource_degradation_hysteresis_537.py) | 86 個案例：4 個級別 × 15 個臨界 usage 的單步表（依 D-537-2 手寫）、issue 反例、跨級升級、逐級恢復、遲滯區內來回 100 次不轉換、0.1% 網格（0～100）上的單調性與「每次最多降一級」、兩步路徑對照獨立參考模型；另釘住修復不得移動的 C0-05、R0 與 O0 現況（O0 列只是觀察，不是契約） |
+| [test_resource_degradation_observed_537.py](../../tests/unit/test_resource_degradation_observed_537.py) | 移除 7 個不一致的單步案例，留下修復前後相同的 12 個 |
+
+負控制的輸出附在 PR 描述：同一個與版本無關的 harness 只替換 `resource_manager.py`，以本 PR 的 contract 測試執行。修復前的 `978e5538` 有 17 個行為斷言失敗；6 個有效 mutation（恢復改 `<=`、升級改 `>=`、一次恢復多級、clamp 放在恢復之後、遲滯寬度 4、升級限一級）各自造成 7～23 個失敗。把恢復鏈改成以 `new_level` 判斷的 mutation 是**等價 mutant**：理由同上段的互斥性，它與修復版在所有輸入上結果相同，因此不算測試漏洞。
+
+**Runtime identity**：`resource_manager.py` 是 `decision_relevant`，修改後 implementation 軸會移動，staleness checker 會 fail closed。依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) 在 controlled host 重新捕捉，以 stacked PR 與本 PR 一次合入。probe 相等不代表等價，也不這樣主張。
+
+**殘留與交接**：
+
+- **R-1（C0-11 候選）**：level ≥ FAST_PATH 時，`dispatcher.py` 的 `_process_batch()` 呼叫 `tracker.set_degradation_params(level)`，而 `_worker_loop()` 沒有包住 `_process_batch()` 的例外處理（source 已核對）。原生 `GPUByteTracker` binding 沒有這個方法；這只依 binding 檢查與 repo 內找不到實作來判斷，沒有在真實 service 重現。分工：#537 C0-11 確認 native tracker 的 degradation API 契約，並用無 GPU 的 strict fake 做出能觸發 `AttributeError` 的負控制；#538 D2 處理 worker task 異常終止後的錯誤傳遞、health、stop 與 shutdown。不得以 `hasattr` 檢查後略過呼叫，把缺少的能力偽裝成降級成功。R-1 不阻擋本 PR 的 source-level 修復，但在處理前不能宣稱 online degradation 已完整可用。
+- 非法 usage（O0）：NVML 以整數相除，實務上不會產生 NaN 或負值；`total == 0` 會拋 `ZeroDivisionError`，NVML 執行期錯誤也會往外拋，都屬於 C0-05／REQ-535-07-01，本 PR 不處理。
+- 遲滯只在 usage 維度，沒有時間維度：從 EMERGENCY 回到 NORMAL 只要 3 次決策，速度取決於 batch 頻率（F0）。
+- #538 的 ACK／PEL 資料遺失風險不因本修復而解除。
+- 沒有在真實 service、Redis、Chroma 或 VRAM 壓力下做端到端驗證。
