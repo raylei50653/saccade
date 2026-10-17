@@ -629,3 +629,33 @@ owner 讀 #605 的程式碼時，找到兩條測試沒有涵蓋的啟動例外�
 | stream id 不檢查上限 | 1 個失敗（變成 `IndexError`，不是明確的 `ValueError`） |
 
 **沒有處理**：async callback 的支援（需要另訂契約）；AsyncDispatcher 的 stream 命名不受限制；`--workbench` 仍標為不支援。
+
+## 16. Runtime identity：線上入口的路徑分類與封存驗證
+
+Owner 最終裁決（2026-10-17）批准重新發佈 runtime identity：「不變更 runtime identity」的限制是禁止未經審查地修改既有身分證據，不是禁止實作變更後依程序重新發佈。裁決同時指出，`main.py` 與 `scripts/ops/run_8stream_perception.py` 是可執行的入口，原本落在 `unclassified`，必須先明確納入適當的 `decision_relevant` 分類，並審查分類變更對 `identity_semantics` 軸的影響。
+
+**分類**：
+
+- [h2_path_partition.py](../../scripts/tools/h2_path_partition.py) 新增 `_ONLINE_ENTRYPOINTS`，兩個入口以精確路徑列入 `DECISION_RELEVANT_PATHS`。`src/` 之外沒有 prefix 規則涵蓋它們。
+- [test_h2_path_partition.py](../../tests/contract/test_h2_path_partition.py) 釘住兩者為 `decision_relevant`，而 `scripts/ops/` 的其他檔案仍是 `unclassified`。
+- 對座標的影響：implementation 軸多了這兩個檔；`h2_path_partition.py` 本身是 ruler 路徑，所以 identity_semantics 軸也會移動。兩者在 stacked publication PR 中重新發佈。
+- 其他 `unclassified` 的可執行腳本（`scripts/ops/`、`scripts/benchmarks/`、repo 根目錄，共約 75 個 tracked 檔）不在本次裁決範圍，維持不變。
+
+**對既有封存的影響與修正**：
+
+- 重新分類「原本就存在」的路徑，會讓已 commit 的 H2 Layer-M 封存 `h2_measure_7646f421…` 驗證失敗，3 個 research packet 測試因此失敗。原因：
+  - `verify_h2_measurement._commit_content_axes(head)` 重算封存 commit 的各軸時，用的是**驗證端目前的** partition；
+  - 那個 commit 中本來就有這兩個入口，所以重算出的 implementation 軸多了它們，和 producer 當時寫下的 checkout witness 不一致。
+- 以前加入 `shipping/` 等規則沒有遇到這個問題，因為那些都是新路徑。
+- Owner 選擇的修正：驗證器改用**封存 commit 自己的** `h2_path_partition.py`（從該 commit 的 git tree 讀出，在隔離的 module 中載入，每個 head 快取一次）來分類。那正是 witness 當初所用的分類器。分類的變更只對之後生效，舊封存仍可驗證。
+- 沒有刪除、skip、xfail 或弱化任何測試。新增的 `test_h2_archive_axes_use_the_partition_of_the_archived_commit` 檢查：
+  - 兩個入口在封存 head 為 `unclassified`、在目前為 `decision_relevant`；
+  - 重算出的 implementation 軸不含它們。
+- 負控制：改回目前的分類器時，原本 3 個封存測試會失敗。這正是修正前觀察到的結果。
+
+**重新發佈**（照 [republication runbook](../reference/runbooks/runtime_identity_republication.md)）：
+
+- 在最終整合 tree 上，用 controlled host、完整 runtime inputs 與獨立的 build 目錄，以 `--run-probe --require-complete` 重新捕捉候選。probe 重跑，不沿用。
+- 舊的 canonical 以 append-only 方式封存，再用新候選取代。
+- 以獨立的 stacked publication Draft PR 提交，逐軸交代 delta。
+- `equivalence.state` 維持 `unproven`；即使 behavior digest 相同，也不主張語義等價。
