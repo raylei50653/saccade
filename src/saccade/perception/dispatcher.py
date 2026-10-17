@@ -108,8 +108,12 @@ class _WorkbenchWorker(threading.Thread):
         queue_wait_window: deque[float],
         telemetry: OnlineTelemetry | None = None,
         use_nv12: bool = False,
+        stop_event: Optional[threading.Event] = None,
+        on_failure: Optional[Callable[[str, Exception], None]] = None,
     ):
         super().__init__(daemon=True, name=f"wb-{stream_id}")
+        self.stop_event = stop_event if stop_event is not None else threading.Event()
+        self.on_failure = on_failure
         self.stream_id = stream_id
         self.workbench = workbench
         self.stream_queue = stream_queue
@@ -123,118 +127,146 @@ class _WorkbenchWorker(threading.Thread):
         self.use_nv12 = use_nv12
 
     def run(self) -> None:
-        while True:
-            item = self.stream_queue.get()
-            if item is None:
-                break  # stop signal
+        # #538 D2-WB-1: exit on stop_event (no blocking sentinel put), and hand
+        # any exception to the pool instead of dying silently.
+        try:
+            while not self.stop_event.is_set():
+                try:
+                    item = self.stream_queue.get(timeout=0.05)
+                except queue.Empty:
+                    continue
+                if item is None:
+                    break  # legacy stop signal
+                self._process(item)
+        except Exception as e:
+            if self.on_failure is None:
+                raise
+            self.on_failure(self.stream_id, e)
 
-            enqueued_at = item.enqueued_at
-            queue_wait_ms = (time.perf_counter() - enqueued_at) * 1000.0
-            self.queue_wait_window.append(queue_wait_ms)
+    def _process(self, item: _StreamFrame) -> None:
+        enqueued_at = item.enqueued_at
+        queue_wait_ms = (time.perf_counter() - enqueued_at) * 1000.0
+        self.queue_wait_window.append(queue_wait_ms)
 
-            t_start = time.perf_counter()
-            preproc_start = t_start
+        t_start = time.perf_counter()
+        preproc_start = t_start
 
-            if self.use_nv12:
-                if _nv12_letterbox_kernel is None:
-                    raise RuntimeError(
-                        "WorkbenchPool NV12 mode requires nv12_to_chw_letterbox "
-                        "from saccade_tracking_ext to be available."
-                    )
-                if not isinstance(item.frame, Nv12Frame):
-                    raise TypeError("WorkbenchPool NV12 mode expects Nv12Frame inputs.")
-                nv12_frame: Nv12Frame = item.frame
-                src_w = nv12_frame.width
-                src_h = nv12_frame.height
-                y_pitch = nv12_frame.y_pitch
-                uv_pitch = nv12_frame.uv_pitch
-                nv12_buf = nv12_frame.buf
-
-                dst_w, dst_h = self.input_size
-                scale = min(dst_w / src_w, dst_h / src_h)
-                new_w = int(round(src_w * scale))
-                new_h = int(round(src_h * scale))
-                x_off = (dst_w - new_w) // 2
-                y_off = (dst_h - new_h) // 2
-
-                padded = torch.zeros(
-                    3,
-                    dst_h,
-                    dst_w,
-                    dtype=torch.float32,
-                    device=nv12_buf.device,
+        if self.use_nv12:
+            if _nv12_letterbox_kernel is None:
+                raise RuntimeError(
+                    "WorkbenchPool NV12 mode requires nv12_to_chw_letterbox "
+                    "from saccade_tracking_ext to be available."
                 )
-                stream = torch.cuda.current_stream().cuda_stream
-                _nv12_letterbox_kernel(
-                    nv12_buf.data_ptr(),
-                    y_pitch,
-                    nv12_buf.data_ptr() + nv12_buf.element_size() * src_h * y_pitch,
-                    uv_pitch,
-                    src_w,
-                    src_h,
-                    padded.data_ptr(),
-                    dst_w,
-                    x_off,
-                    y_off,
-                    new_w,
-                    new_h,
-                    114.0 / 255.0,
-                    stream,
-                )
-            else:
-                # Preprocess: normalize to [0,1] and letterbox to input_size
-                frame_hwc = item.frame
-                frame_chw = frame_hwc.permute(2, 0, 1).float() / 255.0
-                # Letterbox to input_size
-                w, h = frame_chw.shape[2], frame_chw.shape[1]
-                scale = min(self.input_size[0] / w, self.input_size[1] / h)
-                new_w, new_h = int(round(w * scale)), int(round(h * scale))
-                letterbox = torch.nn.functional.interpolate(
-                    frame_chw.unsqueeze(0),
-                    size=(new_h, new_w),
-                    mode="bilinear",
-                    align_corners=False,
-                ).squeeze(0)
-                padded = torch.zeros(
-                    3,
-                    self.input_size[1],
-                    self.input_size[0],
-                    dtype=torch.float32,
-                    device=letterbox.device,
-                )
-                padded[:, :new_h, :new_w] = letterbox
+            if not isinstance(item.frame, Nv12Frame):
+                raise TypeError("WorkbenchPool NV12 mode expects Nv12Frame inputs.")
+            nv12_frame: Nv12Frame = item.frame
+            src_w = nv12_frame.width
+            src_h = nv12_frame.height
+            y_pitch = nv12_frame.y_pitch
+            uv_pitch = nv12_frame.uv_pitch
+            nv12_buf = nv12_frame.buf
 
-            preproc_ms = (time.perf_counter() - preproc_start) * 1000.0
-            if self.telemetry is not None:
-                self.telemetry.observe("workbench_preprocess", preproc_ms)
+            dst_w, dst_h = self.input_size
+            scale = min(dst_w / src_w, dst_h / src_h)
+            new_w = int(round(src_w * scale))
+            new_h = int(round(src_h * scale))
+            x_off = (dst_w - new_w) // 2
+            y_off = (dst_h - new_h) // 2
 
-            # Process frame through Workbench
-            process_start = time.perf_counter()
-            result = self.workbench.process_frame(
-                padded,
-                frame_w=self.frame_w,
-                frame_h=self.frame_h,
+            padded = torch.zeros(
+                3,
+                dst_h,
+                dst_w,
+                dtype=torch.float32,
+                device=nv12_buf.device,
             )
-            if self.telemetry is not None:
-                self.telemetry.observe(
-                    "workbench_process",
-                    (time.perf_counter() - process_start) * 1000.0,
-                )
-
-            elapsed_ms = (time.perf_counter() - t_start) * 1000.0
-            self.stats_window.append(elapsed_ms)
-            if self.telemetry is not None:
-                self.telemetry.observe("workbench_worker", elapsed_ms)
-
-            # Emit result via callback (runs in caller's thread)
-            self.on_result(
-                self.stream_id,
-                item.timestamp,
-                result.ids,
-                result.boxes,
-                result.classes,
-                None,  # keypoints not available in workbench path
+            stream = torch.cuda.current_stream().cuda_stream
+            _nv12_letterbox_kernel(
+                nv12_buf.data_ptr(),
+                y_pitch,
+                nv12_buf.data_ptr() + nv12_buf.element_size() * src_h * y_pitch,
+                uv_pitch,
+                src_w,
+                src_h,
+                padded.data_ptr(),
+                dst_w,
+                x_off,
+                y_off,
+                new_w,
+                new_h,
+                114.0 / 255.0,
+                stream,
             )
+        else:
+            # Preprocess: normalize to [0,1] and letterbox to input_size
+            frame_hwc = item.frame
+            frame_chw = frame_hwc.permute(2, 0, 1).float() / 255.0
+            # Letterbox to input_size
+            w, h = frame_chw.shape[2], frame_chw.shape[1]
+            scale = min(self.input_size[0] / w, self.input_size[1] / h)
+            new_w, new_h = int(round(w * scale)), int(round(h * scale))
+            letterbox = torch.nn.functional.interpolate(
+                frame_chw.unsqueeze(0),
+                size=(new_h, new_w),
+                mode="bilinear",
+                align_corners=False,
+            ).squeeze(0)
+            padded = torch.zeros(
+                3,
+                self.input_size[1],
+                self.input_size[0],
+                dtype=torch.float32,
+                device=letterbox.device,
+            )
+            padded[:, :new_h, :new_w] = letterbox
+
+        preproc_ms = (time.perf_counter() - preproc_start) * 1000.0
+        if self.telemetry is not None:
+            self.telemetry.observe("workbench_preprocess", preproc_ms)
+
+        # Process frame through Workbench
+        process_start = time.perf_counter()
+        result = self.workbench.process_frame(
+            padded,
+            frame_w=self.frame_w,
+            frame_h=self.frame_h,
+        )
+        if self.telemetry is not None:
+            self.telemetry.observe(
+                "workbench_process",
+                (time.perf_counter() - process_start) * 1000.0,
+            )
+
+        elapsed_ms = (time.perf_counter() - t_start) * 1000.0
+        self.stats_window.append(elapsed_ms)
+        if self.telemetry is not None:
+            self.telemetry.observe("workbench_worker", elapsed_ms)
+
+        # Emit result via callback (runs in caller's thread)
+        self.on_result(
+            self.stream_id,
+            item.timestamp,
+            result.ids,
+            result.boxes,
+            result.classes,
+            None,  # keypoints not available in workbench path
+        )
+
+
+class PoolState(Enum):
+    CREATED = "created"
+    RUNNING = "running"
+    FAILED = "failed"
+    STOPPING = "stopping"  # stop() hit its deadline; call stop() again
+    STOPPED = "stopped"
+
+
+class WorkbenchPoolFailed(RuntimeError):
+    """A worker failed; ``__cause__`` is the original error (#538 D2-WB-1)."""
+
+
+class WorkbenchPoolStopTimeout(RuntimeError):
+    """stop() reached its deadline with workers alive; the batcher was kept."""
 
 
 class WorkbenchPool:
@@ -286,26 +318,89 @@ class WorkbenchPool:
         self._drop_count = 0
         self._lock = threading.Lock()
 
-    async def start(self) -> None:
-        """Start the pool: create batcher, workbenches, and worker threads."""
-        self._running = True
-        self._loop = asyncio.get_event_loop()
+        # #538 D2-WB-1: lifecycle state, the first worker failure, and counters.
+        self._state = PoolState.CREATED
+        self._failure: Optional[Exception] = None
+        self._failed_stream: Optional[str] = None
+        self._stop_event = threading.Event()
+        self._late_callbacks = 0
+        self._discarded_on_stop = 0
+        self._stop_timeouts = 0
 
+    @property
+    def state(self) -> PoolState:
+        return self._state
+
+    @property
+    def failure(self) -> Optional[Exception]:
+        """The first worker's original error, kept until the next ``start()``."""
+        return self._failure
+
+    def _failed(self) -> WorkbenchPoolFailed:
+        err = WorkbenchPoolFailed(
+            f"WorkbenchPool worker {self._failed_stream} failed: {self._failure!r}"
+        )
+        err.__cause__ = self._failure
+        return err
+
+    def _on_worker_failure(self, stream_id: str, error: Exception) -> None:
+        with self._lock:
+            if self._failure is None:
+                self._failure = error
+                self._failed_stream = stream_id
+            if self._state is PoolState.RUNNING:
+                self._state = PoolState.FAILED
+                self._running = False
+        print(f"❌ [WorkbenchPool] Worker {stream_id} failed: {error!r}")
+
+    async def start(self) -> None:
+        """Start the pool: create batcher, workbenches, and worker threads.
+
+        A failure part-way through stops what was started before re-raising.
+        """
+        if self._state is PoolState.RUNNING:
+            raise RuntimeError("WorkbenchPool is already running")
+        if self._state is PoolState.FAILED:
+            raise self._failed()  # stop() first
+        if self._state is PoolState.STOPPING:
+            raise WorkbenchPoolStopTimeout(
+                "WorkbenchPool is still stopping; call stop() again first"
+            )
+
+        # Checks that need no resources come before the batcher is created.
         if self.use_nv12 and _nv12_letterbox_kernel is None:
             raise RuntimeError(
                 "WorkbenchPool NV12 mode requires nv12_to_chw_letterbox from "
                 "saccade_tracking_ext to be available."
             )
-
-        # Create shared batching detector
-        self._batcher = BatchingTRTDetector(self.engine_path, batch_size=self.n_streams)
-
         if PerceptionPipelineConfig is None:
             raise RuntimeError(
                 "saccade_tracking_ext C++ extension is not available. "
                 "Please build the extension: `pip install -e .` or check "
                 "CONCURRENT_EVAL.md for build instructions."
             )
+
+        # A restart gets fresh queues, workers and stop event.
+        self._queues = []
+        self._workers = []
+        self._stop_event = threading.Event()
+        self._failure = None
+        self._failed_stream = None
+        self._loop = asyncio.get_event_loop()
+        self._state = PoolState.RUNNING
+        self._running = True
+        try:
+            self._start_workers()
+        except BaseException as e:
+            try:
+                self.stop()
+            except Exception as cleanup_error:
+                e.add_note(f"rollback after failed start: {cleanup_error!r}")
+            raise
+
+    def _start_workers(self) -> None:
+        # Create shared batching detector
+        self._batcher = BatchingTRTDetector(self.engine_path, batch_size=self.n_streams)
         pipeline_cfg = PerceptionPipelineConfig()
 
         # Create per-workbench worker threads
@@ -334,7 +429,9 @@ class WorkbenchPool:
             loop = self._loop
             assert loop is not None
 
-            # Callback: forward actual workbench results to asyncio event loop
+            # Callback: forward actual workbench results to asyncio event loop.
+            # Results that arrive after stop() began, or after the loop closed,
+            # are dropped and counted instead of killing the worker (D2-WB-1).
             def make_callback(sid: str = sid) -> Any:
                 def _cb(
                     sid: str,
@@ -344,10 +441,20 @@ class WorkbenchPool:
                     classes: torch.Tensor,
                     kps: Optional[torch.Tensor],
                 ) -> None:
-                    if self.on_result:
+                    if not self.on_result:
+                        return
+                    if (
+                        self._state not in (PoolState.RUNNING, PoolState.FAILED)
+                        or loop.is_closed()
+                    ):
+                        self._count_late_callback()
+                        return
+                    try:
                         loop.call_soon_threadsafe(
                             self.on_result, sid, ts, ids, boxes, classes, kps
                         )
+                    except RuntimeError:  # the loop closed after the check
+                        self._count_late_callback()
 
                 return _cb
 
@@ -363,6 +470,8 @@ class WorkbenchPool:
                 queue_wait_window=self._queue_wait_window,
                 telemetry=self.telemetry,
                 use_nv12=self.use_nv12,
+                stop_event=self._stop_event,
+                on_failure=self._on_worker_failure,
             )
             worker.start()
             self._workers.append(worker)
@@ -376,6 +485,8 @@ class WorkbenchPool:
         self, stream_id: str, frame: torch.Tensor | Any, timestamp: float
     ) -> None:
         """Enqueue a frame for the given stream. Latest-wins on overflow."""
+        if self._state is PoolState.FAILED:
+            raise self._failed()
         idx = int(stream_id.split("_")[-1]) if "_" in stream_id else 0
         if idx >= len(self._queues):
             return
@@ -400,17 +511,55 @@ class WorkbenchPool:
                 pass
             q.put_nowait(item)
 
-    def stop(self) -> None:
-        """Stop all workers and shut down the batcher."""
-        self._running = False
-        for q in self._queues:
-            q.put(None)  # stop signal
+    def _count_late_callback(self) -> None:
+        with self._lock:
+            self._late_callbacks += 1
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Stop all workers within ``timeout`` seconds, then shut down the batcher.
+
+        Never blocks past the deadline. If a worker is still alive at the
+        deadline, the batcher is kept, the state is STOPPING, and
+        ``WorkbenchPoolStopTimeout`` is raised; call ``stop()`` again to retry.
+        After the workers end, a failed run raises ``WorkbenchPoolFailed``.
+        """
+        if self._state in (PoolState.CREATED, PoolState.STOPPED):
+            return
+        with self._lock:
+            self._state = PoolState.STOPPING
+            self._running = False
+        self._stop_event.set()
+        deadline = time.monotonic() + max(timeout, 0.0)
         for w in self._workers:
-            w.join(timeout=5.0)
-        if self._batcher is not None:
-            self._batcher.shutdown()
+            w.join(timeout=max(deadline - time.monotonic(), 0.0))
+        alive = [w.name for w in self._workers if w.is_alive()]
+        if alive:
+            with self._lock:
+                self._stop_timeouts += 1
+            raise WorkbenchPoolStopTimeout(
+                f"WorkbenchPool workers still running after {timeout}s: {alive}; "
+                "the batcher was not shut down"
+            )
+
+        discarded = 0
+        for q in self._queues:
+            while True:
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    break
+                discarded += 1
+        with self._lock:
+            self._discarded_on_stop += discarded
+        try:
+            if self._batcher is not None:
+                self._batcher.shutdown()
+        finally:
             self._batcher = None
+            self._state = PoolState.STOPPED
         print("🛑 [WorkbenchPool] Stopped.")
+        if self._failure is not None:
+            raise self._failed()
 
     def get_stats(self) -> dict[str, Any]:
         """Return current stats. Does not reset counters."""
@@ -422,6 +571,12 @@ class WorkbenchPool:
         telemetry = self.telemetry.summary() if self.telemetry is not None else {}
 
         return {
+            "state": self._state.value,
+            "failure": repr(self._failure) if self._failure is not None else "",
+            "failed_stream": self._failed_stream or "",
+            "late_callbacks": self._late_callbacks,
+            "discarded_on_stop": self._discarded_on_stop,
+            "stop_timeouts": self._stop_timeouts,
             "current_level": "NORMAL",
             "active_streams": self.n_streams,
             "queue_depth": sum(q.qsize() for q in self._queues),

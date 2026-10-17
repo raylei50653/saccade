@@ -1,16 +1,15 @@
-"""#538 D2-WB-0: pin WorkbenchPool's CPU lifecycle under fault injection (status quo).
+"""#538 D2-WB-0: WorkbenchPool CPU lifecycle scenarios that D2-WB-1 left as they were.
 
-Characterization only. These record what ``WorkbenchPool`` does on ``main``
-(R-1 and D2-AD did not touch it). They do not choose the target contract. The
-owner's target is in failure_degradation_537.md §12, and D2-WB-1 owns the fix.
+Characterization only. D2-WB-0 pinned 13 scenarios. D2-WB-1 changed eight of
+them (WB-02..08, WB-10), and those moved to
+``test_workbench_pool_lifecycle_contract_538.py``. Evidence from before the fix
+is in failure_degradation_537.md §12 and in the D2-WB-0 PR. The ones below are
+unchanged, and the owner has not ruled on them (WB-09, WB-11..13) or they are
+the normal path (WB-01).
 
-Every scenario runs in a fresh interpreter under an outside timeout, because
-some of them hang by design (``stop()`` blocks forever). The batcher, Workbench
-and pipeline config are CPU fakes. A real ``BatchingTRTDetector`` has a server
-thread; after ``shutdown()``, a worker that calls ``submit()`` waits on an event
-that nothing will set. The fake records such calls instead of blocking.
-
-Not covered here: CUDA streams, events and buffer lifetime (D2-GPU).
+This module also holds the shared harness (``_PRELUDE`` and ``_run``). Every
+scenario runs in a fresh interpreter under an outside timeout, with CPU fakes
+for the batcher, Workbench and pipeline config. CUDA is out of scope (D2-GPU).
 """
 
 # scope: perception
@@ -146,177 +145,6 @@ asyncio.run(main())
     assert out == {"results": "3", "stop_s": "0.0", "alive_at_shutdown": "0"}
 
 
-def test_stuck_worker_stop_claims_success_and_shuts_down_batcher_in_use() -> None:
-    out = _run(
-        """
-async def main():
-    MODE["process"] = "block"
-    pool = make_pool(1)
-    await pool.start()
-    pool.put_frame("stream_0", frame(), 0.0)
-    wait_until(lambda: pool.get_stats()["queue_depth"] == 0)
-    print(f"@stop_s={timed_stop(pool)}")          # join(timeout=5.0), then shutdown
-    print(f"@alive_at_shutdown={FakeBatcher.last.alive_at_shutdown}")
-    print(f"@worker_alive_after_stop={pool._workers[0].is_alive()}")
-    GATE.set()                                       # the worker resumes and uses the batcher
-    wait_until(lambda: FakeBatcher.last.used_after_shutdown > 0)
-    print(f"@used_after_shutdown={FakeBatcher.last.used_after_shutdown}")
-asyncio.run(main())
-"""
-    )
-    assert out == {
-        "stop_s": "5.0",
-        "alive_at_shutdown": "1",
-        "worker_alive_after_stop": "True",
-        "used_after_shutdown": "1",
-    }
-
-
-def test_stop_with_full_queue_and_stuck_worker_hangs() -> None:
-    body = """
-async def main():
-    MODE["process"] = "block"
-    pool = make_pool(1)
-    await pool.start()
-    pool.put_frame("stream_0", frame(), 0.0)
-    wait_until(lambda: pool.get_stats()["queue_depth"] == 0)
-    for i in range(4):                               # fills the maxsize=4 queue
-        pool.put_frame("stream_0", frame(), float(1 + i))
-    print("@queue_depth=" + str(pool.get_stats()["queue_depth"]), flush=True)
-    pool.stop()                                      # q.put(None) has no timeout
-    print("@stop_returned=True")
-asyncio.run(main())
-"""
-    assert _run(body, timeout=20.0) is None
-
-
-def test_worker_exception_is_silent() -> None:
-    out = _run(
-        """
-async def main():
-    MODE["process"] = "raise"
-    pool = make_pool(1)
-    await pool.start()
-    pool.put_frame("stream_0", frame(), 0.0)
-    wait_until(lambda: not pool._workers[0].is_alive())
-    print(f"@worker_alive={pool._workers[0].is_alive()}")
-    print(f"@thread_errors={THREAD_ERRORS}")
-    print(f"@running={pool._running}")
-    for i in range(6):                               # accepted; latest-wins drains
-        pool.put_frame("stream_0", frame(), float(1 + i))
-    stats = pool.get_stats()
-    print(f"@drops={stats['drops']}")
-    print(f"@error_keys={[k for k in stats if 'err' in k or 'health' in k or 'fail' in k]}")
-    print(f"@stop_s={timed_stop(pool)}")
-asyncio.run(main())
-"""
-    )
-    assert out == {
-        "worker_alive": "False",
-        "thread_errors": "['wb-stream_0:RuntimeError']",
-        "running": "True",
-        "drops": "1",
-        "error_keys": "[]",
-        "stop_s": "0.0",
-    }
-
-
-def test_dead_worker_with_full_queue_makes_stop_hang() -> None:
-    body = """
-async def main():
-    MODE["process"] = "raise"
-    pool = make_pool(1)
-    await pool.start()
-    pool.put_frame("stream_0", frame(), 0.0)
-    wait_until(lambda: not pool._workers[0].is_alive())
-    for i in range(4):
-        pool.put_frame("stream_0", frame(), float(1 + i))
-    pool.stop()
-    print("@stop_returned=True")
-asyncio.run(main())
-"""
-    assert _run(body, timeout=20.0) is None
-
-
-def test_partial_start_failure_leaves_resources_running() -> None:
-    out = _run(
-        """
-async def main():
-    MODE["construct_fail_at"] = 1
-    pool = make_pool(3)
-    try:
-        await pool.start()
-    except RuntimeError as e:
-        print(f"@start_error={e}")
-    print(f"@running={pool._running}")
-    print(f"@workers_alive={sum(w.is_alive() for w in pool._workers)}")
-    print(f"@queues={len(pool._queues)}")
-    print(f"@batcher_down={FakeBatcher.last.down}")
-asyncio.run(main())
-"""
-    )
-    assert out == {
-        "start_error": "workbench construction failed",
-        "running": "True",
-        "workers_alive": "1",
-        "queues": "2",
-        "batcher_down": "False",
-    }
-
-
-def test_missing_extension_after_batcher_leaks_batcher() -> None:
-    out = _run(
-        """
-async def main():
-    d.PerceptionPipelineConfig = None
-    pool = make_pool(1)
-    try:
-        await pool.start()
-    except RuntimeError as e:
-        print(f"@start_error={type(e).__name__}")
-    print(f"@running={pool._running}")
-    print(f"@batcher_created={FakeBatcher.last is not None}")
-    print(f"@batcher_down={FakeBatcher.last.down}")
-asyncio.run(main())
-"""
-    )
-    assert out == {
-        "start_error": "RuntimeError",
-        "running": "True",
-        "batcher_created": "True",
-        "batcher_down": "False",
-    }
-
-
-def test_repeated_stop_and_restart() -> None:
-    out = _run(
-        """
-async def main():
-    pool = make_pool(1)
-    await pool.start()
-    print(f"@stop1_s={timed_stop(pool)}")
-    print(f"@stop2_s={timed_stop(pool)}")       # a second stop() returns
-    await pool.start()                           # restart appends to the old lists
-    print(f"@queues={len(pool._queues)}")
-    print(f"@workers_alive={[w.is_alive() for w in pool._workers]}")
-    pool.put_frame("stream_0", frame(), 0.0)     # index 0 is the old, dead queue
-    await asyncio.sleep(0.3)
-    print(f"@results={len(RESULTS)}")
-    print(f"@old_queue_depth={pool._queues[0].qsize()}")
-    timed_stop(pool)
-asyncio.run(main())
-"""
-    )
-    assert out == {
-        "stop1_s": "0.0",
-        "stop2_s": "0.0",
-        "queues": "2",
-        "workers_alive": "[False, True]",
-        "results": "0",
-        "old_queue_depth": "2",  # the second stop's sentinel + the new frame
-    }
-
-
 def test_late_frame_after_stop_is_accepted_silently() -> None:
     out = _run(
         """
@@ -331,28 +159,8 @@ async def main():
 asyncio.run(main())
 """
     )
-    # The stop sentinel was consumed; 6 puts into maxsize=4 → one drain → 2 left.
+    # 6 puts into maxsize=4 → one latest-wins drain → 2 left.
     assert out == {"queue_depth": "2", "drops": "1"}
-
-
-def test_late_callback_after_loop_closed_kills_worker() -> None:
-    out = _run(
-        """
-async def main():
-    MODE["process"] = "block"
-    pool = make_pool(1)
-    await pool.start()
-    pool.put_frame("stream_0", frame(), 0.0)
-    wait_until(lambda: pool.get_stats()["queue_depth"] == 0)
-    return pool
-pool = asyncio.run(main())                       # the loop is closed now
-GATE.set()
-wait_until(lambda: not pool._workers[0].is_alive())
-print(f"@thread_errors={THREAD_ERRORS}")
-print(f"@results={len(RESULTS)}")
-"""
-    )
-    assert out == {"thread_errors": "['wb-stream_0:RuntimeError']", "results": "0"}
 
 
 def test_async_on_result_is_never_awaited() -> None:

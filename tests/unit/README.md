@@ -63,6 +63,7 @@
 | `test_tracker_block_divergence_465_r2_runner.py` | system | contract | active | The tracker block-divergence r2 runner implements its exploratory declaration. |
 | `test_tracker_block_divergence_465_runner.py` | system | contract | active | The tracker block-divergence runner implements its exploratory declaration. |
 | `test_vram_level_snapshot_contract_537.py` | resource | contract | active | #537 B0-F07: VRAM-level snapshot contract (rename-published record, stateless reader). |
-| `test_workbench_pool_lifecycle_observed_538.py` | perception | diagnostic | active | #538 D2-WB-0: pin WorkbenchPool's CPU lifecycle under fault injection (status quo). |
+| `test_workbench_pool_lifecycle_contract_538.py` | perception | contract | active | #538 D2-WB-1: WorkbenchPool bounded stop, worker failure and safe release. |
+| `test_workbench_pool_lifecycle_observed_538.py` | perception | diagnostic | active | #538 D2-WB-0: WorkbenchPool CPU lifecycle scenarios that D2-WB-1 left as they were. |
 
 <!-- END generated test index -->
