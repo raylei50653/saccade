@@ -323,3 +323,41 @@ function 標籤是 `diagnostic`。要修復時，必須在同一個 PR 把這些
 - 沒有自動重啟、health endpoint 或告警；health 只限於 `state`／`failure`／`get_stats()`。
 - WorkbenchPool（D2-WB-0／1）與 CUDA stream／buffer lifetime（D2-GPU）不在本節範圍。
 - 沒有執行完整 online service。
+
+## 12. #538 D2-WB-0：WorkbenchPool CPU lifecycle 現況與目標
+
+本節是 D2-WB-0：**只固定現況，不修改 `WorkbenchPool`**，同時寫下 D2-WB-1 要依循的目標。R-1 與 D2-AD 都沒有改動 `WorkbenchPool`，以下現況等同 `main@82126e7c`。依 #538 D2 的要求，每個情境都在獨立子程序中執行，外部 timeout 20～30 s，因為有些情境會永遠卡住。batcher、Workbench 與 pipeline config 都是 CPU fake，所以只證明 host lifecycle；CUDA stream、event 與 buffer lifetime 歸 D2-GPU。
+
+**現況**（[test_workbench_pool_lifecycle_observed_538.py](../../tests/unit/test_workbench_pool_lifecycle_observed_538.py)，13 個情境）：
+
+| ID | 情境 | 觀察到的結果 |
+|:--|:--|:--|
+| WB-01 | 正常啟動、送 3 幀、停止 | 3 個結果；`stop()` 立即返回；shutdown batcher 時沒有存活的 worker |
+| WB-02 | worker 卡在 `process_frame()`，queue 未滿 | `stop()` 用 `join(timeout=5.0)` 等 5 s 後，在 worker 仍存活時 shutdown batcher，並印出「Stopped.」正常返回。worker 之後恢復，又使用了已 shutdown 的 batcher（真實 batcher 的 `submit()` 會永遠等不到結果，屬 source 判讀） |
+| WB-03 | worker 卡住，queue 已滿（maxsize 4） | `stop()` 的 `q.put(None)` 沒有 timeout，**永遠卡住** |
+| WB-04 | `process_frame()` 拋例外 | worker thread 結束，例外只交給 `threading.excepthook`；`_running` 仍為 True；`put_frame()` 繼續接受（overflow 時清空 queue，計入 `drops`）；`get_stats()` 沒有錯誤欄位 |
+| WB-05 | worker 已死，queue 又被填滿 | `stop()` **永遠卡住**（同 WB-03） |
+| WB-06 | 第 2 個 Workbench 建構失敗（3 條 stream） | `start()` 拋原始例外；`_running` 仍為 True；第 1 個 worker 仍在執行；建立了 2 個 queue；batcher 沒有 shutdown |
+| WB-07 | `PerceptionPipelineConfig` 不可用 | 檢查排在建立 batcher 之後，所以 `start()` 拋例外時 batcher 已建立且沒有 shutdown；`_running` 仍為 True |
+| WB-08 | 連續 `stop()` 兩次後再 `start()` | 第二次 `stop()` 會返回；再次 `start()` 會把新的 queue 與 worker 加到舊 list 後面，`stream_0` 仍對到已死的舊 queue，幀不會被處理（舊 queue 中還有第二次 stop 留下的 sentinel） |
+| WB-09 | `stop()` 之後再 `put_frame()` | 不報錯，放進沒有 consumer 的 queue；overflow 時清空並計數 |
+| WB-10 | event loop 關閉後，worker 才送出結果 | `loop.call_soon_threadsafe` 拋 `RuntimeError`，worker thread 結束 |
+| WB-11 | `on_result` 是 coroutine function | `call_soon_threadsafe` 只建立 coroutine，從不 await，callback 從未執行（Python 會發出 "never awaited" 警告） |
+| WB-12 | stream id 超出範圍（`stream_9`，只有 1 條） | 靜默丟棄 |
+| WB-13 | stream id 沒有 `_`（`cam`） | 對到 index 0 |
+
+**Owner 目標**（2026-10-17）：worker 還沒有真正結束時，不得宣稱正常停止，也不得提前 shutdown 仍在使用的 batcher。D2-WB-1 負責有界停止、worker failure 與資源安全釋放。
+
+**D2-WB-1 依循的契約**（沿用 D2-AD 的形式；裁決以外的選擇已標出，待 owner 確認）：
+
+| 項目 | 契約 |
+|:--|:--|
+| 停止有上限 | `stop(timeout)` 不能無限阻塞，所有 worker 共用同一個 deadline（WB-02、03、05）|
+| 不提前回收 batcher | 有 worker 在 deadline 時仍存活，就不 shutdown batcher，並拋出具名的 stop-timeout 例外，不印出「Stopped.」；之後再呼叫 `stop()` 會重試（WB-02）|
+| worker 失敗 | 記錄 FAILED 與原始錯誤；之後 `put_frame()` 拒絕並拋出具名例外；`get_stats()` 顯示狀態與失敗（WB-04）|
+| 啟動失敗 | 回收已啟動的 worker 與 batcher 後，才把原始例外拋出；不需要資源的檢查要排在建立 batcher 之前（WB-06、07）|
+| 重新啟動 | `stop()` 之後再 `start()` 時，換一組新的 queue 與 worker，或明確拒絕（WB-08）。**選擇：換新的一組** |
+| 晚到的 callback | pool 不在 RUNNING 或 event loop 已關閉時，丟棄 callback 並計數，不讓 worker 因此結束（WB-10）。**選擇：丟棄並計數** |
+| 不在本切片 | `stop()` 之後的 `put_frame()`（WB-09）、coroutine 型的 `on_result`（WB-11）、stream id 的對應方式（WB-12、13）都沒有裁決，只記錄現況 |
+
+**限制**：只在 CPU fake 上驗證，沒有真實 TensorRT、CUDA 或 Workbench。WB-02 中「真實 batcher 在 shutdown 後讓 worker 永遠等待」屬 source 判讀。8stream `--workbench` 入口仍會用到未定義的名稱（[總覽](system_overview_536.md)），所以 WorkbenchPool 目前只有測試會建構。
