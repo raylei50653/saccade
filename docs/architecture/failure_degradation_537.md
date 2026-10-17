@@ -576,3 +576,56 @@ owner 讀 #605 的程式碼時，找到兩條測試沒有涵蓋的啟動例外�
 | `main.py` 不取消 `supervise()` 接手前建立的 task | 1 個失敗 |
 | 8stream 建立 task 失敗時不取消 | 1 個失敗 |
 | `run_full()` 改成在第一個 `spawn()` 之後才建構 orchestrator | **全部通過**。建構呼叫仍在 `try` 之內，已建立的 task 會被取消，就「不殘留 task」而言是等價 mutant。先建構的順序由 C0-08 的 AST 測試另外釘住 |
+
+## 15. #538 其餘 lifecycle 契約：拒絕無效狀態的提交、async callback、stream id
+
+本節依 owner 最終裁決（2026-10-17）的第 5 項，另開小 PR 實作（stack 在 caller lifecycle 之上），不擴充 #604。§11、§12、§13 中原本列為「沒有裁決，維持現況」的項目在此收斂。
+
+**Owner 裁決**（引用）：
+
+- CREATED／STOPPED 時的 `put_frame()`：拒絕。AsyncDispatcher 與 WorkbenchPool 只在真正 RUNNING 時接收新工作，FAILED 或 STOPPING 也要拒絕。不可以在沒有 consumer 的狀態下靜默放進 queue，或當成成功。
+- WorkbenchPool 的 coroutine callback：目前不支援，啟動前就拒絕，不能在呼叫後產生沒有 await 的 coroutine。要支援 async callback，必須另外訂定 task ownership、completion、failure 與 cancellation 的契約。
+- WorkbenchPool 的 stream id：嚴格對應，只接受 `stream_0` 到 `stream_{n_streams-1}`；不合法、負數或超出範圍的都明確拒絕，沒有底線的名稱不得默默對應到 stream 0。這只限 WorkbenchPool，AsyncDispatcher 不需要採用同一套命名。
+
+**修改**（[dispatcher.py](../../src/saccade/perception/dispatcher.py)）：
+
+- AsyncDispatcher：
+  - 新增 `DispatcherNotRunning(RuntimeError)`。
+  - `put_frame()` 在 FAILED 時仍拋 `DispatcherFailed`；在其他非 RUNNING 狀態，或 `stop()` 進行中（`_running` 已為 False）時，拋 `DispatcherNotRunning`。訊息會指出目前是 created、stopping 或 stopped。
+- WorkbenchPool：
+  - 新增 `WorkbenchPoolNotRunning(RuntimeError)`。
+  - `put_frame()` 在 FAILED 時拋 `WorkbenchPoolFailed`，在其他非 RUNNING 狀態（CREATED／STOPPING／STOPPED）拋 `WorkbenchPoolNotRunning`。
+  - stream id 必須完全符合 `stream_(0|[1-9][0-9]*)`，而且小於 `n_streams`，否則拋 `ValueError`（拒絕前導零、負數、空編號與其他名稱）。
+  - `start()` 在建立任何資源之前，先拒絕 coroutine function，以及 `__call__` 是 coroutine 的 callable，拋 `TypeError`。
+
+**修復後的行為**：
+
+| ID | 修復前 | 修復後 |
+|:--|:--|:--|
+| AsyncDispatcher：CREATED／stopping／STOPPED 時的 `put_frame()` | 放進 queue，沒有 consumer | 拋 `DispatcherNotRunning`，queue 不變 |
+| WB-09：stop 之後的 `put_frame()` | 放進沒有 consumer 的 queue | CREATED／STOPPING／STOPPED 時都拋 `WorkbenchPoolNotRunning`，queue 不變 |
+| WB-11：coroutine 型的 `on_result` | 從不 await，callback 從不執行 | `start()` 拋 `TypeError`；狀態維持 CREATED，batcher 沒有建立 |
+| WB-12：stream id 超出範圍 | 靜默丟棄 | `ValueError` |
+| WB-13：stream id 沒有底線 | 對應到 index 0 | `ValueError` |
+
+**證據**：
+
+| 測試 | 涵蓋 |
+|:--|:--|
+| [test_dispatcher_failure_contract_538.py](../../tests/unit/test_dispatcher_failure_contract_538.py) | `test_put_frame_is_refused_outside_running`：CREATED、`stop()` 進行中、STOPPED 都被拒絕，queue 保持空的。queue 滿的計數測試改為先 `start()`，再用卡住的 callback 讓 queue 填滿 |
+| [test_workbench_pool_lifecycle_contract_538.py](../../tests/unit/test_workbench_pool_lifecycle_contract_538.py) | CREATED／STOPPING／STOPPED 時拒絕；coroutine function 與 async `__call__` 在建立 batcher 之前就被拒絕；7 種不合法的 stream id（`stream_2`（n=2）、`stream_-1`、`stream_01`、`stream_`、`cam`、`x_0`、`stream_0x`）都被拒絕，而合法的 id 仍可使用 |
+| [test_workbench_pool_lifecycle_observed_538.py](../../tests/unit/test_workbench_pool_lifecycle_observed_538.py) | 修復後失效的 WB-09、11、12、13 已移出，只留下正常路徑（WB-01）與共用 harness |
+
+負控制（76 個測試：D2-AD、WB 契約與 observed、caller、extended；只替換 `dispatcher.py`。harness 與輸出在 `results/lifecycle_20261017/`，gitignored）：
+
+| 變體 | 結果 |
+|:--|:--|
+| 修復前（caller head `78e984d6`，只補上兩個例外名稱） | 8 個失敗 |
+| AsyncDispatcher 接受 CREATED／STOPPED | 1 個失敗 |
+| AsyncDispatcher 接受 stopping | 1 個失敗 |
+| WorkbenchPool 接受非 RUNNING | 1 個失敗 |
+| async 檢查只看 function（不看 `__call__`） | 1 個失敗 |
+| stream id 接受前導零 | 1 個失敗 |
+| stream id 不檢查上限 | 1 個失敗（變成 `IndexError`，不是明確的 `ValueError`） |
+
+**沒有處理**：async callback 的支援（需要另訂契約）；AsyncDispatcher 的 stream 命名不受限制；`--workbench` 仍標為不支援。

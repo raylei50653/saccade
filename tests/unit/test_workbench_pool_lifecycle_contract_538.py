@@ -323,3 +323,101 @@ asyncio.run(main())
         "state2": "stopped",
         "batcher_cleared": "True",
     }
+
+
+# ── Owner's final ruling, item 5 ────────────────────────────────────────
+
+
+def test_put_frame_is_refused_outside_running() -> None:
+    out = _run(
+        """
+def attempt(pool, label):
+    try:
+        pool.put_frame("stream_0", frame(), 0.0)
+        print(f"@{label}=accepted")
+    except d.WorkbenchPoolNotRunning:
+        print(f"@{label}=refused")
+async def main():
+    MODE["process"] = "block"
+    pool = make_pool(1)
+    attempt(pool, "created")
+    await pool.start()
+    pool.put_frame("stream_0", frame(), 0.0)
+    wait_until(lambda: pool.get_stats()["queue_depth"] == 0)
+    try:
+        pool.stop(timeout=0.2)
+    except d.WorkbenchPoolStopTimeout:
+        pass
+    attempt(pool, "stopping")
+    GATE.set()
+    wait_until(lambda: not pool._workers[0].is_alive())
+    pool.stop()
+    attempt(pool, "stopped")
+    print(f"@queue_depth={pool.get_stats()['queue_depth']}")
+asyncio.run(main())
+"""
+    )
+    assert out == {
+        "created": "refused",
+        "stopping": "refused",
+        "stopped": "refused",
+        "queue_depth": "0",
+    }
+
+
+def test_coroutine_on_result_is_refused_before_start() -> None:
+    out = _run(
+        """
+async def async_on_result(*args):
+    pass
+class AsyncCallable:
+    async def __call__(self, *args):
+        pass
+async def main():
+    for label, cb in (("function", async_on_result), ("callable", AsyncCallable())):
+        pool = d.WorkbenchPool("fake.engine", n_streams=1, on_result=cb, input_hw=(8, 8))
+        globals()["POOL"] = pool
+        try:
+            await pool.start()
+            print(f"@{label}=ok")
+        except TypeError:
+            print(f"@{label}=refused")
+        print(f"@{label}_state={pool.state.value}")
+    print(f"@batcher_created={FakeBatcher.last is not None}")
+asyncio.run(main())
+"""
+    )
+    assert out == {
+        "function": "refused",
+        "function_state": "created",
+        "callable": "refused",
+        "callable_state": "created",
+        "batcher_created": "False",
+    }
+
+
+@pytest.mark.parametrize(
+    "stream_id",
+    ["stream_2", "stream_-1", "stream_01", "stream_", "cam", "x_0", "stream_0x"],
+)
+def test_stream_ids_are_strict(stream_id: str) -> None:
+    out = _run(
+        f"""
+async def main():
+    pool = make_pool(2)
+    await pool.start()
+    try:
+        pool.put_frame({stream_id!r}, frame(), 0.0)
+        print("@put=accepted")
+    except ValueError:
+        print("@put=refused")
+    print(f"@queue_depth={{pool.get_stats()['queue_depth']}}")
+    pool.put_frame("stream_1", frame(), 0.0)          # the valid ids still work
+    wait_until(lambda: pool.get_stats()["queue_depth"] == 0)
+    await asyncio.sleep(0.2)
+    print(f"@results={{len(RESULTS)}}")
+    pool.stop()
+asyncio.run(main())
+"""
+    )
+    assert out == {"put": "refused", "queue_depth": "0", "results": "1"}

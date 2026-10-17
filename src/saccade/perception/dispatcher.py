@@ -1,5 +1,7 @@
 import asyncio
+import inspect
 import queue
+import re
 import threading
 import time
 from collections import OrderedDict, deque
@@ -269,6 +271,16 @@ class WorkbenchPoolStopTimeout(RuntimeError):
     """stop() reached its deadline with workers alive; the batcher was kept."""
 
 
+class WorkbenchPoolNotRunning(RuntimeError):
+    """put_frame() outside RUNNING: there is no consumer for new work (#538)."""
+
+
+def _is_async_callable(fn: Any) -> bool:
+    return inspect.iscoroutinefunction(fn) or inspect.iscoroutinefunction(
+        getattr(fn, "__call__", None)
+    )
+
+
 class WorkbenchPool:
     """Production-ready multi-stream pool using per-thread Workbenches + shared BatchingTRTDetector.
 
@@ -374,6 +386,11 @@ class WorkbenchPool:
             )
 
         # Checks that need no resources come before the batcher is created.
+        if self.on_result is not None and _is_async_callable(self.on_result):
+            # Results are handed over with call_soon_threadsafe; a coroutine
+            # would be created and never awaited. Async callbacks need their
+            # own task ownership/failure/cancellation contract (#538).
+            raise TypeError("WorkbenchPool does not support a coroutine on_result")
         if self.use_nv12 and _nv12_letterbox_kernel is None:
             raise RuntimeError(
                 "WorkbenchPool NV12 mode requires nv12_to_chw_letterbox from "
@@ -493,13 +510,19 @@ class WorkbenchPool:
     def put_frame(
         self, stream_id: str, frame: torch.Tensor | Any, timestamp: float
     ) -> None:
-        """Enqueue a frame for the given stream. Latest-wins on overflow."""
+        """Enqueue a frame for ``stream_0``..``stream_{n_streams-1}``.
+
+        Latest-wins on overflow. Refused outside RUNNING (#538): FAILED raises
+        ``WorkbenchPoolFailed``, any other state ``WorkbenchPoolNotRunning``.
+        Any other stream id raises ``ValueError``.
+        """
         if self._state is PoolState.FAILED:
             raise self._failed()
-        idx = int(stream_id.split("_")[-1]) if "_" in stream_id else 0
-        if idx >= len(self._queues):
-            return
-        q = self._queues[idx]
+        if self._state is not PoolState.RUNNING:
+            raise WorkbenchPoolNotRunning(
+                f"WorkbenchPool is {self._state.value}; put_frame() needs running"
+            )
+        q = self._queues[self._stream_index(stream_id)]
         item = _StreamFrame(
             frame=frame,
             timestamp=timestamp,
@@ -519,6 +542,15 @@ class WorkbenchPool:
             except queue.Empty:
                 pass
             q.put_nowait(item)
+
+    def _stream_index(self, stream_id: str) -> int:
+        m = re.fullmatch(r"stream_(0|[1-9][0-9]*)", stream_id)
+        if m is None or int(m.group(1)) >= self.n_streams:
+            raise ValueError(
+                f"WorkbenchPool stream id must be stream_0..stream_{self.n_streams - 1}, "
+                f"got {stream_id!r}"
+            )
+        return int(m.group(1))
 
     def _count_late_callback(self) -> None:
         with self._lock:
@@ -643,6 +675,10 @@ class DispatcherState(Enum):
 
 class DispatcherFailed(RuntimeError):
     """The worker task failed; ``__cause__`` is the original error (#538 D2-AD)."""
+
+
+class DispatcherNotRunning(RuntimeError):
+    """put_frame() outside RUNNING: there is no consumer for new work (#538)."""
 
 
 class AsyncDispatcher:
@@ -834,6 +870,12 @@ class AsyncDispatcher:
     ) -> None:
         if self._state is DispatcherState.FAILED:
             raise self._failed()
+        if self._state is not DispatcherState.RUNNING or not self._running:
+            # Also covers stop() in progress (_running is already False).
+            raise DispatcherNotRunning(
+                f"AsyncDispatcher is {self._state.value}"
+                f"{'' if self._running else ' (stopping)'}; put_frame() needs running"
+            )
         try:
             self.queue.put_nowait(
                 _QueuedFrame(

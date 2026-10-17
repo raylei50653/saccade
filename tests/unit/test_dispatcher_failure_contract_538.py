@@ -34,7 +34,11 @@ import pytest
 import torch
 
 from saccade.perception import dispatcher as dmod
-from saccade.perception.dispatcher import DispatcherFailed, DispatcherState
+from saccade.perception.dispatcher import (
+    DispatcherFailed,
+    DispatcherNotRunning,
+    DispatcherState,
+)
 from saccade.perception.online_tracker_adapter import OnlineTrackerAdapter
 from saccade.perception.tracking import tracker_gpu as facade
 from saccade.resource.resource_manager import DegradationLevel, ResourceManager
@@ -206,10 +210,22 @@ async def test_failure_settles_the_failed_batch_and_the_queue() -> None:
 
 @pytest.mark.asyncio
 async def test_queue_full_drops_are_counted() -> None:
-    disp = _dispatcher()
+    gate = asyncio.Event()
+    started = asyncio.Event()
+
+    async def blocked(*_: Any) -> None:
+        started.set()
+        await gate.wait()
+
+    disp = _dispatcher(on_track_result=blocked)
+    await disp.start()
+    await disp.put_frame("cam0", _frame(), -1.0)  # the worker takes it and blocks
+    await asyncio.wait_for(started.wait(), timeout=2.0)
     for i in range(disp.queue.maxsize + 5):
         await disp.put_frame("cam0", _frame(), float(i))
     assert disp.get_stats()["dropped_queue_full"] == 5
+    gate.set()
+    await disp.stop()
 
 
 @pytest.mark.asyncio
@@ -317,3 +333,34 @@ async def test_start_rules() -> None:
     await disp.start()  # restart after stop clears the old failure
     assert disp.state is DispatcherState.RUNNING and disp.failure is None
     await disp.stop()
+
+
+# ── New work only while RUNNING (owner's final ruling, item 5) ───────────
+
+
+@pytest.mark.asyncio
+async def test_put_frame_is_refused_outside_running() -> None:
+    gate = asyncio.Event()
+    started = asyncio.Event()
+
+    async def blocked(*_: Any) -> None:
+        started.set()
+        await gate.wait()
+
+    disp = _dispatcher(on_track_result=blocked)
+    with pytest.raises(DispatcherNotRunning, match="created"):
+        await disp.put_frame("cam0", _frame(), 0.0)  # CREATED
+    assert disp.queue.qsize() == 0
+
+    await disp.start()
+    await disp.put_frame("cam0", _frame(), 0.0)
+    await asyncio.wait_for(started.wait(), timeout=2.0)
+    stopping = asyncio.create_task(disp.stop())
+    await asyncio.sleep(0)  # stop() has begun: _running is False
+    with pytest.raises(DispatcherNotRunning, match="stopping"):
+        await disp.put_frame("cam0", _frame(), 1.0)
+    await asyncio.wait_for(stopping, timeout=2.0)
+
+    with pytest.raises(DispatcherNotRunning, match="stopped"):
+        await disp.put_frame("cam0", _frame(), 2.0)  # STOPPED
+    assert disp.queue.qsize() == 0

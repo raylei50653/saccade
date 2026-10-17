@@ -1,11 +1,11 @@
-"""#538 D2-WB-0: WorkbenchPool CPU lifecycle scenarios that D2-WB-1 left as they were.
+"""#538 D2-WB-0: the WorkbenchPool normal path, plus the harness that the contract tests share.
 
-Characterization only. D2-WB-0 pinned 13 scenarios. D2-WB-1 changed eight of
-them (WB-02..08, WB-10), and those moved to
-``test_workbench_pool_lifecycle_contract_538.py``. Evidence from before the fix
-is in failure_degradation_537.md §12 and in the D2-WB-0 PR. The ones below are
-unchanged, and the owner has not ruled on them (WB-09, WB-11..13) or they are
-the normal path (WB-01).
+Characterization only. D2-WB-0 pinned 13 scenarios. Two later changes moved the
+rest to ``test_workbench_pool_lifecycle_contract_538.py``:
+- D2-WB-1 changed eight of them (WB-02..08, WB-10);
+- the owner's final ruling changed four more (WB-09, WB-11..13).
+Evidence from before each fix is in failure_degradation_537.md §12/§13/§15 and in
+the PRs. The normal path (WB-01) remains here.
 
 This module also holds the shared harness (``_PRELUDE`` and ``_run``). Every
 scenario runs in a fresh interpreter under an outside timeout, with CPU fakes
@@ -23,7 +23,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -150,65 +149,3 @@ asyncio.run(main())
 """
     )
     assert out == {"results": "3", "stop_s": "0.0", "alive_at_shutdown": "0"}
-
-
-def test_late_frame_after_stop_is_accepted_silently() -> None:
-    out = _run(
-        """
-async def main():
-    pool = make_pool(1)
-    await pool.start()
-    timed_stop(pool)
-    for i in range(6):
-        pool.put_frame("stream_0", frame(), float(i))
-    print(f"@queue_depth={pool.get_stats()['queue_depth']}")
-    print(f"@drops={pool.get_stats()['drops']}")
-asyncio.run(main())
-"""
-    )
-    # 6 puts into maxsize=4 → one latest-wins drain → 2 left.
-    assert out == {"queue_depth": "2", "drops": "1"}
-
-
-def test_async_on_result_is_never_awaited() -> None:
-    out = _run(
-        """
-import warnings
-CALLED = []
-async def async_on_result(*args):
-    CALLED.append(args[1])
-async def main():
-    pool = d.WorkbenchPool("fake.engine", n_streams=1, on_result=async_on_result, input_hw=(8, 8))
-    globals()["POOL"] = pool
-    await pool.start()
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        pool.put_frame("stream_0", frame(), 0.0)
-        wait_until(lambda: pool.get_stats()["queue_depth"] == 0)
-        await asyncio.sleep(0.2)
-        import gc; gc.collect()
-    print(f"@called={len(CALLED)}")
-    print(f"@never_awaited={any('never awaited' in str(w.message) for w in caught)}")
-    timed_stop(pool)
-asyncio.run(main())
-"""
-    )
-    assert out == {"called": "0", "never_awaited": "True"}
-
-
-@pytest.mark.parametrize("stream_id", ["stream_9", "cam"])
-def test_put_frame_stream_mapping(stream_id: str) -> None:
-    out = _run(
-        f"""
-async def main():
-    pool = make_pool(1)
-    await pool.start()
-    pool.put_frame({stream_id!r}, frame(), 0.0)
-    await asyncio.sleep(0.3)
-    print(f"@results={{len(RESULTS)}}")
-    timed_stop(pool)
-asyncio.run(main())
-"""
-    )
-    # "stream_9" is out of range and silently dropped; an id without "_" maps to index 0.
-    assert out == {"results": "0" if stream_id == "stream_9" else "1"}
