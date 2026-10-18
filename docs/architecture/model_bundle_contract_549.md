@@ -1,6 +1,6 @@
 <!-- doc-status: active -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-10-12 -->
+<!-- doc-date: 2026-10-18 -->
 <!-- doc-module: cross -->
 
 # Model bundle 契約與 G01–G07 處置（#549 S1）
@@ -8,6 +8,8 @@
 本稿是 [#549](https://github.com/raylei50653/saccade/issues/549) S1 的介面契約，對應 [ADR 028](../decisions/028-model-bundle-runtime-separation.md)。架構圖、信任邊界、責任分工、A／B／C 比較，以及 D1–D7 與其裁決，都只放在 ADR 028，本稿只引用。
 
 **狀態**：本稿的設計是 `accepted target`，依據是 [ADR 028 S1 設計決策](../decisions/028-model-bundle-runtime-separation.md#decision-549-s1)。決策的範圍與邊界以該段為準，本稿不重述。D5 只接受安全目標，第 5 節與第 7 節提到的 memfd 等做法都只是候選。第 6 節「已存在的 enforcement」一欄記的是 source baseline `46ab79c1785b85f8afbef1d43909f1a7cb2eff23` 讀原始碼的現況，不是對本設計的驗證。跨 Issue 排序只在 [#550](https://github.com/raylei50653/saccade/issues/550)。
+
+**#610 修訂（2026-10-18）**：依 [ADR 028 #610 修訂決策](../decisions/028-model-bundle-runtime-separation.md#decision-610)，以下幾處的 accepted target 有更新：3.4 第 2 步（installed 預設 `checksum_matched`）、新增的 3.5（自訓模型的 v2 前置條件）、新增的 4.5（VL2 信任根的範圍）、4.4，以及第 7 節的 S2-3。這些都只是設計目標，沒有改任何 runtime 行為。
 
 <a id="implementation-status"></a>**實作狀態（2026-10-12）**：S2-1（[#576](https://github.com/raylei50653/saccade/pull/576)，merge `c5ddf51c62c382b8f6851c57bb07b2b72d18d083`）與 S2-2 的三個 PR（[#582](https://github.com/raylei50653/saccade/pull/582)、[#584](https://github.com/raylei50653/saccade/pull/584)、[#586](https://github.com/raylei50653/saccade/pull/586)，最後一個 merge `793c5d56ad6be2d0f85c98112dc63ae7948f4bec`）讓本稿的一部分成為 **source-level implemented**；S2-2 仍是 **PARTIAL**。各節以「S2-1 狀態」「S2-2 狀態」標註。狀態的唯一寫入處是 [CC-536-01-02 S2-1 實作狀態](ship_export_contracts_536.md#cc-536-01-02-status-s2-1) 與 [CC-536-01-02 S2-2 實作狀態](ship_export_contracts_536.md#cc-536-01-02-status-s2-2)，逐列證據在 [S2-1 evidence page](../reference/model_bundle_s2_1_549.md)、[S2-2 evidence page](../reference/model_bundle_s2_2_549.md) 與 [N03 Phase 2 page](../reference/model_bundle_s2_2_n03_phase2_549.md)。
 
@@ -121,9 +123,42 @@ Policy 只有一個旗標：`--require-identity {none,checksum_matched,expected_
 預設值分兩步改，避免 S2-1 改變現行行為：
 
 1. **S2-1**：所有 entrypoint 預設 `none`。legacy 模式的行為只多寫出 `checksum_matched`，其他不變；manifest 模式是新增的。
-2. **S2-3**（package 拆分，同時有 allowlist entry 可用時）：installed launcher 的預設改成 `expected_source_verified`。這是版本化的 CLI 變更，寫進 package README 與 CLI 說明。此後 legacy 模式在 installed launcher 下需要明確加 `--require-identity checksum_matched` 才能執行，結果不得引用已發表數字。legacy 模式何時移除另外決定，不在本稿。
+2. **S2-3**（package 拆分）：installed launcher 的預設改成 `checksum_matched`（[#610 R1](../decisions/028-model-bundle-runtime-separation.md#decision-610)，取代原本的 `expected_source_verified`）。
+   - **opt-in**：`expected_source_verified` 只在 caller 明確加 `--require-identity expected_source_verified` 時要求；指定了就 fail closed，不新增任何降級旗標。
+   - **行為**：任何通過的 Gate A，level 都至少是 `checksum_matched`，所以這個預設的行為和 `none` 相同，legacy 模式也不需要額外旗標。唯一可見的差異是 journal／report 的 `identity.required` 值，寫進版本化的 package README 與 CLI 說明。
+   - **代價**：預設不能阻止自洽替換（MB-31）。結果只在 VL2 時才可能符合引用已發表數字的條件，而且還要滿足 G07；VL2 的信任根範圍見 [4.5](#vl2-authority)。
+   - legacy 模式何時移除另外決定，不在本稿。
 
 **S2-1 狀態**：第 1 步是 source-level implemented。兩個 entrypoint、兩種模式預設都是 `none`，legacy 模式的 level 上限是 `checksum_matched`（MB-57）。從 S2-1 起，兩種模式都寫 journal v3／report v5。第 2 步屬 S2-3，未實作。
+
+### <a id="v2-prerequisites"></a>3.5 自訓模型與 v2 的前置條件（[#610 R3](../decisions/028-model-bundle-runtime-separation.md#decision-610)，accepted target，未實作）
+
+v1 無法誠實描述一個沒有 SACCADE inventory 與 A_L 證據的自訓模型。在 source baseline `68c482c0` 上有兩層限制：
+
+| 層 | v1 的限制 | 位置 |
+|:--|:--|:--|
+| manifest | `schema` 固定為 `saccade.model_bundle/v1`；member 的 `json_schema` enum 只列 `saccade.resolved_shipping_config/v1`、`saccade.head_artifact_lineage_torchscript/v1`、`saccade.head_realization_attestation/v1`；R-06 在 reader 中寫死相同的三個版本 | [schema](model_bundle_549/saccade.model_bundle.v1.schema.json) `$defs/member/properties/json_schema`；[model_bundle.cpp](../../shipping/src/model_bundle.cpp) `json_schema_of()` |
+| plan | lineage 的 `inventory.ckpt_sha256_match`、`backbone_engine_sha256_match` 都要是 `true`，preset path／sha 要等於 config 的 source，`head_calls` 要和 headline 相同；attestation（manifest 模式必填，D6）的 `a_l_reproduction.identical` 要是 `true` | [detector_plan.cpp](../../shipping/src/detector_plan.cpp) `plan_detector` |
+
+所以只讓 plan 接受新的 lineage／attestation 不夠：manifest reader 會先在 VL0 拒絕新的 `json_schema`。自訓支援的前置條件如下：
+
+1. **新的 `saccade.model_bundle/v2`**，v1 保持原封不動：schema、R-01..R-09、examples 與既有 fixture 的 bytes 都不變。reader 依 `schema` 字串的完全相同與否分派；不認得的版本依 3.3 exit 2。
+2. **版本化的 v2 lineage 與 attestation**：沒有提供的來源記錄成**明確的值**，例如 `not_provided` 或 `not_performed`，不得省略，也不得填入不存在的來源。至少包括：
+   - SACCADE inventory 綁定；
+   - training lineage repository reference；
+   - A_L 重現。
+
+   operator realization（N03，runtime 的事）和 A_L 重現（headline 證據）要拆開。
+3. **fail closed 的部分不變**：
+   - `detector_contract`、preprocessing／postprocessing 的 enum、I/O 與 R-08 等價的結構條件；
+   - 每個 member 的路徑限制與 size／sha；
+   - N03 pin；
+   - Gate B（verified bytes、SM／TRT／dtype）；
+   - N02 的 TorchScript admission（F-1）。
+
+   不符合 `saccade.native_detector_contract/v1` 的模型一律拒絕。換架構要走新的版本化 detector contract。
+4. **不提升任何等級**：「沒有提供」的欄位不會提升 `identity.level`，不構成 VL4 證據，也不讓結果可以引用 A_L parity 或已發表數字。自訓 bundle 在空的 production allowlist 下最高只到 `checksum_matched`。
+5. **實作順序**：v2 schema、exporter、bundler 先行；runtime plan 整合與必要的 coordinate republication 另片進行。每一片都要另外授權（[#610 R7](../decisions/028-model-bundle-runtime-separation.md#decision-610)）。
 
 ## 4. Identity、信任根與驗證層級
 
@@ -133,7 +168,7 @@ level 和 binding 的格式沿用 CC-536-01-02：`null` → `checksum_matched` �
 
 - **Bindings 加入 manifest**：manifest 模式下，`bindings` 除了 config、lineage、attestation、op library、head、engine，還要加上 `bundle_manifest`。六個 members 的 expected 值全部來自 manifest。manifest 自己的 sha256 是觀察到的值，它的 expected 值來自 allowlist。
 - **`checksum_matched`**：manifest 通過 schema 和 R-01..R-09，路徑都在 root 內，每個 member 的 size 和 sha256 都相符。
-- **`expected_source_verified`**：在 `checksum_matched` 之上，manifest sha256 是 allowlist 中某筆 `state: approved` 的 entry，而 allowlist 檔的 sha256 等於 entrypoint 建置時記錄的值。此時寫 `identity.expected_source = "runtime_allowlist"`，並記錄 `allowlist_sha256` 和 `bundle_manifest_sha256`。`example`、`revoked` 或沒列在 allowlist 的 manifest，最高只到 `checksum_matched`。
+- **`expected_source_verified`**：在 `checksum_matched` 之上，manifest sha256 是 allowlist 中某筆 `state: approved` 的 entry，而 allowlist 檔的 sha256 等於 entrypoint 建置時記錄的值。此時寫 `identity.expected_source = "runtime_allowlist"`，並記錄 `allowlist_sha256` 和 `bundle_manifest_sha256`。`example`、`revoked` 或沒列在 allowlist 的 manifest，最高只到 `checksum_matched`。這個信任根的範圍見 [4.5](#vl2-authority)。
 - **`identity` 只描述 Gate A 檢查過的 bytes**：它是 Gate A 的不可變證據，不描述載入。Gate A 寫完之後，任何 gate 都不再改它，也不在其中預先寫入任何載入保證。
 - <a id="load-verification"></a>**`load_verification`（Gate B 寫入，與 `identity` 分開）**：journal 建立時是 `null`。Gate B **全部**載入（operator、head、engine）與載入檢查都成功之後，才寫入一次 `{status: "verified", byte_scope}`；可捕捉的失敗寫 `{status: "failed", byte_scope: null}` 並 exit 2。無法捕捉的結束（loader auditor 的 `_exit(127)`、SIGKILL、abort）可能讓 `load_verification` 維持 `null`、journal 維持 `running`，本契約不承諾這些情況會寫入 `failed`；F3 known limit 保留。這是 journal v3／report v5 的欄位，不改變 identity 的寫入者與 #537 的 state 語義。
   - **Byte scope**：S2-1 是 `hashed_before_load`（hash 與載入是兩次開檔）。S2-2 在每個物件都從核對過的 bytes 載入、通過相應檢查後，manifest 模式才可寫 `loaded_buffer`；任一物件仍以路徑重新開檔，就不得提升。legacy 模式一律 `hashed_before_load`。逐物件 `artifact_byte_scopes` 是各物件適用範圍的權威訊號，不由整體值反推。
@@ -171,11 +206,19 @@ lineage 是 producer 對 checkpoint、export 工具、structural check 和 runti
 
 ### 4.4 Policy
 
-見 [3.4](#modes)。D4 的推薦是 installed launcher 最終預設要求 VL2，生效時點是 S2-3，不是 S2-1。
+見 [3.4](#modes)。依 [#610 R1](../decisions/028-model-bundle-runtime-separation.md#decision-610)，installed launcher 在 S2-3 的預設是 `checksum_matched`。VL2 只在明確要求時才強制，用於 opt-in 或受控部署。原本 D4 推薦的「最終預設要求 VL2」已由這項修訂取代。
 
-## 5. Fail-closed 規則
+### <a id="vl2-authority"></a>4.5 VL2 信任根的範圍（[#610 R2](../decisions/028-model-bundle-runtime-separation.md#decision-610)）
 
-以下所有失敗都是 exit 2。Gate A 失敗時不呼叫 CUDA，journal 記 `failed`。runtime **永遠不**下載、不改找其他路徑、不改用預設模型，也不改用另一個 detector 路徑。
+- **VL2 說的是什麼**：`expected_source_verified` 代表「manifest sha256 是**正在執行的 entrypoint** 建置時所釘 allowlist 中的 approved entry」。信任根由建置這個 entrypoint 的人選定。report 中的 `allowlist_sha256` 指出用的是哪一份 allowlist。
+- **自建 runtime**：用自己的 allowlist 自建 runtime 而達到 VL2 是允許的，屬於受控部署，但它只代表該 build 自選的信任根。
+- **不足以宣稱 SACCADE 官方認可**：runtime 無法證明自己的 binary 是誰發布的（[ADR 028 第 3 節](../decisions/028-model-bundle-runtime-separation.md#trust-root-limits)「仍然成立的限制」）。所以 VL2 本身，包括 `allowlist_sha256` 剛好等於 SACCADE 公布值的情況，都**不足以單獨**證明執行的是 SACCADE release。要宣稱 SACCADE 官方認可，必須另外通過 VL5，也就是以 SACCADE release key 驗證 runtime package 的 digest 與簽章，確認發布來源與 package identity。
+- **現況**：#547 的 release key 尚未建立，`distribution.status=local-only`，所以目前沒有任何 run 可以宣稱 SACCADE 官方認可。
+- **與其他層的關係**：VL2 不是權利批准，也不是 benchmark 資格（VL4，G07）；`publisher_authentication` 照舊固定為 `not_checked_by_runtime`。
+
+## <a id="fail-closed"></a>5. Fail-closed 規則
+
+以下所有失敗都是 exit 2。Gate A 失敗時不呼叫 CUDA，journal 記 `failed`。runtime **永遠不**下載、不改找其他路徑、不改用預設模型，也不改用另一個 detector 路徑。模型的取得與核對由 repo 側的 fetch／verify 工具負責，不進 runtime package（[#610 R4、R6](../decisions/028-model-bundle-runtime-separation.md#decision-610)）。
 
 **S2-1 狀態**：
 
@@ -213,7 +256,7 @@ lineage 是 producer 對 checkpoint、export 工具、structural check 和 runti
 | SM 不在 targets 內 | 在反序列化之前 exit 2 | Gate B |
 | I/O 的 dtype、shape 或順序不符 | exit 2 | Gate B |
 
-## 6. G01–G07 處置
+## <a id="gap-disposition"></a>6. G01–G07 處置
 
 控制欄引用 [verification matrix](model_bundle_549/verification_matrix.json) 的 ID。`現況` 一欄是 baseline 的 source 事實，不是對本設計的驗證。
 
@@ -241,7 +284,7 @@ lineage 是 producer 對 checkpoint、export 工具、structural check 和 runti
 
 **特別關注的四種情況**：
 
-- **自洽但未授權的替換**（MB-31）：今天的 Gate A 會通過，[preflight 測試](../../tests/native/test_shipping_preflight.cpp)中的自洽替身 bundle 就是反證。目標設計下，這種替換最高只到 `checksum_matched`；在 `--require-identity expected_source_verified` 下（S2-3 起是 installed launcher 的預設）exit 2。
+- **自洽但未授權的替換**（MB-31）：今天的 Gate A 會通過，[preflight 測試](../../tests/native/test_shipping_preflight.cpp)中的自洽替身 bundle 就是反證。目標設計下，這種替換最高只到 `checksum_matched`；在 `--require-identity expected_source_verified` 下 exit 2。依 [#610 R1](../decisions/028-model-bundle-runtime-separation.md#decision-610)，S2-3 的 installed 預設是 `checksum_matched`，所以預設下這種替換會被執行，只有明確 opt-in VL2 才會擋下。
 - **路徑逃逸與 symlink**：MB-10..12 由 schema 擋下；MB-38、MB-39 由 S2-1 實作（source-level，CI ctest 涵蓋，見 [S2-1 coverage](../reference/model_bundle_s2_1_coverage_549.json)）。
 - **TOCTOU**：MB-41 要到 S2-2；operator 的處理方式依 D5。D5 只接受安全目標；memfd 是候選做法。現行 auditor 以名稱（basename／SONAME family）辨識 operator，並與由 install prefix 固定的路徑比對（[loader_audit.c](../../shipping/src/loader_audit.c) `la_objopen`）。memfd 映射（`/proc/self/fd/N`，`realpath` 失敗）不會被辨識為 operator，等於繞過這項 provenance 檢查；S2-2 必須證明不削弱此檢查，不得用放寬或繞過 auditor 換取通過。**S2-2 狀態**：engine 與 head 從 buffer 載入（#582）；N03 依 owner 接受的 P-N03 rev 3d 從 sealed memfd 載入（#584）。auditor 改以 kernel 的 mapping 記錄辨識物件，只放行驗證過的 operator memfd，並以負控制證明 main 上的幾種繞過現在被拒（[§17.9](../reference/native_runtime_resolved_config.md)）。main 的 MB-41 仍 OPEN、整體 scope 仍 `hashed_before_load`；歷史 G-1 核對保留在 [MB-41 紀錄](../reference/model_bundle_mb41_549.md)，最新有界契約依 [#590 裁決](#mb41-head-admission)，F-1＋F-2 尚未合併。
 - **版本不相容**：MB-14、MB-15 由 schema 擋下；MB-43..45 要到 S2-2。**S2-2 狀態**：MB-43..45 已實作（source-level，本機 GPU 正負控制）。
@@ -250,8 +293,17 @@ lineage 是 producer 對 checkpoint、export 工具、structural check 和 runti
 
 1. **S2-1：manifest 模式 Gate A＋resolved bindings（推薦作為第一片，只需 CPU）**。**已 merge**（[#576](https://github.com/raylei50653/saccade/pull/576)，`c5ddf51c`），屬 source-level，狀態見 [CC-536-01-02 S2-1 實作狀態](ship_export_contracts_536.md#cc-536-01-02-status-s2-1)。和下面的建議有兩點不同：一，只重新發布了 runtime coordinate（[#578](https://github.com/raylei50653/saccade/pull/578) r3，以祖先身份隨 #576 落地），entrypoint **沒有** re-pin，installed package 仍是 **UNVERIFIED**；二，本機 GPU smoke 的結果只是 diagnostic，V5 **UNRESOLVED**。S2-1a 已先由 [#572](https://github.com/raylei50653/saccade/pull/572) merge。以下保留原建議：加入 `--model-bundle` 和 `--require-identity`（預設 `none`）；做 VL0、VL1、VL2；用 `openat2` 限制路徑；所有 member（含 config、lineage、attestation）的 size 和 sha256；allowlist 加上建置時寫入的 sha256；N-T3 的 level 和 per-binding status。Gate B 的改變只有兩項：manifest 模式下路徑只取自 Gate A 的 resolved bindings（第 2 節），以及全部載入成功後寫入 `load_verification`（`byte_scope=hashed_before_load`）；`dlopen`／`jit::load`／TRT 的載入方式與載入前重新 hash 都不變。legacy 模式的行為不變，只多寫出 `checksum_matched`。負控制 MB-30..MB-40、MB-54、MB-57 放進 ctest，用 fork 出的 process 執行，不需要 GPU。MB-55 與 MB-58 發生在 Gate B（CUDA 初始化之後），不能在 GPU-free 的 process 中觸發，和「operator 與模型來自不同 root 時 Gate B 的實際載入」一起放進本機 GPU smoke（不是 parity 宣稱）。allowlist 一開始是空的；真正的 N01–N06 entry 要由 owner 另外批准後才加入。entrypoint re-pin 和 coordinate republication 依 runbook 以 stacked chore 一併處理。如果 owner 想要更小的一片，可以先只做 S2-1a：legacy 模式的 N-T3 `checksum_matched` 加 per-binding status，不加 manifest 模式。這部分已在 #536 第一批設計中批准，也不碰 Gate B。
 2. **S2-2：Gate B 強化（需要 GPU）**。從已 hash 的 buffer 載入（D5）、SM 和版本 gate、TRT dtype。完成後重跑 A_L parity（MB-52）。**部分 merge，PARTIAL**（[#582](https://github.com/raylei50653/saccade/pull/582)、[#584](https://github.com/raylei50653/saccade/pull/584)、[#586](https://github.com/raylei50653/saccade/pull/586)），狀態見 [CC-536-01-02 S2-2 實作狀態](ship_export_contracts_536.md#cc-536-01-02-status-s2-2)。整體 `loaded_buffer` 與 MB-41 結案採 #590 已裁決的有界 F-1＋F-2 路徑，由 #591／#592 準備 atomic co-land；候選驗證與最終 head merge 授權仍各自必要，不再另排 F-2。A_L parity（MB-52）未取得 qualification（V5 **UNRESOLVED**）。
-3. **S2-3：package 拆分**。model-free runtime tarball 和 private bundle tarball 分開建置；各自的 MANIFEST、digest 和簽章；檢查 runtime tarball 不含 `carried_by: model_bundle` 的 member，而 N03 照常存在（MB-48、MB-56）；並存安裝和 rollback（MB-49）；installed launcher 的預設 policy 改成 VL2（3.4）。`distribution.status` 維持 `local-only`。
+3. **S2-3：package 拆分**。model-free runtime tarball 和 private bundle tarball 分開建置；各自的 MANIFEST、digest 和簽章；檢查 runtime tarball 不含 `carried_by: model_bundle` 的 member，而 N03 照常存在（MB-48、MB-56）；並存安裝和 rollback（MB-49）；installed launcher 的預設 policy 改成 `checksum_matched`，VL2 改為 opt-in（3.4，[#610 R1](../decisions/028-model-bundle-runtime-separation.md#decision-610)）。`distribution.status` 維持 `local-only`。依 #610，S2-3 另外包括下列項目：
+   - **`--check-bundle`**（[#610 R5](../decisions/028-model-bundle-runtime-separation.md#decision-610)）：
+     - 重用 C++ Gate A 的同一套驗證核心；
+     - 不建立 run、journal 或 `<out>` lock，不讀 sequence 或影格，不呼叫任何 CUDA API，不修改 bundle；
+     - 成功只代表 Gate A 通過（VL0／VL1，有 approved entry 時加上 VL2）；
+     - 不宣稱 engine 已反序列化、N03 已載入、Gate B 或 `load_verification` 已通過，也不宣稱 V5。
+   - **runtime 不聯網的負控制**：在 `check_shipping_bundle.py runtime` 的 strace 檢查中加入 `socket`／`connect`。
+   - **package README 與 CLI 說明的版本化更新**。
+   - **re-pin 與驗證**。
 4. **S2-4（延後）**：TR-2，runtime 驗 bundle 簽章。前提是 #547 先審過新的 crypto 依賴。
+5. **#610 的工具與 v2 切片**（[#610 R7](../decisions/028-model-bundle-runtime-separation.md#decision-610)）：順序是文件 → fetch／verify（repo 側 Python stdlib，只用 CPU，不碰 runtime）→ v2 schema、exporter、bundler（3.5）→ runtime plan 整合 → S2-3。每一片都要另外授權；本稿只記錄順序，不授權任何一片。
 
 ## 8. 本稿沒有做的事
 
