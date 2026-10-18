@@ -1,6 +1,6 @@
 <!-- doc-status: active -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-10-12 -->
+<!-- doc-date: 2026-10-18 -->
 <!-- doc-module: cross -->
 
 # S-SHIP／S-EXPORT 架構圖與接口契約（#536 第一批）
@@ -19,7 +19,7 @@
 
 CC-536-01-02 其餘部分仍只是 `accepted target`，整張卡沒有完成：
 
-- 正式 shipping policy 要求 `expected_source_verified`，也就是 installed launcher 預設（S2-3）；
+- 正式 shipping policy，也就是 installed launcher 預設（S2-3）。原本的目標是 `expected_source_verified`，已由 [ADR 028 #610 R1](../decisions/028-model-bundle-runtime-separation.md#decision-610) 改成 `checksum_matched`，VL2 改為明確 opt-in；
 - S2-2 的其餘部分（S2-2 仍 PARTIAL）。MB-41 已依 [#590 Owner 最終裁決](https://github.com/raylei50653/saccade/issues/590#issuecomment-6123060172) 的有界宣告結案：[#591](https://github.com/raylei50653/saccade/pull/591) F-1＋F-2 合併後，manifest 模式整體 `load_verification.byte_scope` 在三項物件 scope 都成立時為 `loaded_buffer`，見下方 [canonical 段落](#cc-536-01-02-status-s2-2)。
 
 source-level implemented 不代表 runtime、GPU、installed package 或 production qualification 已完成。需求批准不等於設計批准，設計批准也不等於實作已驗證。
@@ -212,7 +212,7 @@ flowchart TB
   2. **Fail-closed 點**：
      - **Gate A（N-T2，CUDA-free，第一個 CUDA API 呼叫之前）**：strict config、lineage 與 attestation 的一致性（沿用 N-R4）、三個 artifact 的存在性與 sha256（從 N-R6 移過來）、所有 sequence 的 seqinfo.ini 與 img1 frame 清單（從 N-R7 移過來）、`--out`／`--report`／`--trace` 可以寫入。任何一項失敗：exit 2，journal 記 `failed`，不呼叫 CUDA。
      - **Gate B（N-R6，GPU，第一個 sequence 之前）**：`dlopen`、runtime requirements 讀回、`jit::load` 與 graph 檢查、TRT engine 的反序列化與 I/O。這些本質上需要 GPU，所以留在原地；它們已經在任何推論之前。
-     - **分階段強制**：現階段允許以 `checksum_matched` 執行，但輸出不得宣稱可信來源；#549 S1 批准 expected 來源之後，正式 shipping policy 才要求 `expected_source_verified`，那是另一個實作 PR。**後續狀態**：S2-1 實作了 policy flag `--require-identity`，預設 `none`，現行行為不變；正式 shipping policy（installed launcher 預設 `expected_source_verified`）屬 #549 S2-3，未實作（[CC-536-01-02 S2-1 實作狀態](#cc-536-01-02-status-s2-1)）。
+     - **分階段強制**：現階段允許以 `checksum_matched` 執行，但輸出不得宣稱可信來源；#549 S1 批准 expected 來源之後，正式 shipping policy 才要求 `expected_source_verified`，那是另一個實作 PR。**後續狀態**：S2-1 實作了 policy flag `--require-identity`，預設 `none`，現行行為不變；正式 shipping policy（installed launcher 預設）屬 #549 S2-3，未實作（[CC-536-01-02 S2-1 實作狀態](#cc-536-01-02-status-s2-1)）。**2026-10-18 修訂**：依 [ADR 028 #610 R1](../decisions/028-model-bundle-runtime-separation.md#decision-610)，這個預設改成 `checksum_matched`，`expected_source_verified` 改為明確 opt-in，指定了就 fail closed；本卡「現階段允許 `checksum_matched`、不宣稱可信來源」的判準不變。
 - **取捨**：把 hash 移到 Gate A 的代價，是在 CUDA 初始化之前同步讀完整個 engine 與 head 檔（現在也會讀，只是順序不同）。移動 sequence 輸入檢查的代價，是在開頭多走訪一次各個 img1 目錄；frame 的解碼錯誤仍然只能在執行時發現。不在 runtime 內驗 minisign，因為那會引入新的 crypto 依賴，而且 local-only package 不要求簽章（#546）。
 - **State writer**：`identity` 只由 Gate A 寫入（`null` → 各 binding 的 status → level），之後不再改變；Gate B 的結果記在 run 的 `state`，不改 identity。
 - **Evidence**：[detector plan](../../tests/native/test_shipping_detector_plan.cpp)、[resolved config](../../tests/unit/test_resolved_shipping_config.py)、[bundle](../../tests/unit/test_shipping_bundle_checks.py)、[package](../../tests/unit/test_shipping_package.py)、[signature](../../tests/unit/test_package_signature.py)。新的負控制（替換 head、替換 lineage 但仍自洽、缺 attestation、不可讀的 sequence）都應該在 Gate A 失敗，而且不呼叫 CUDA；#565 以 [preflight 協定測試](../../tests/native/test_shipping_preflight.cpp) 與 [preflight CLI](../../tests/unit/test_saccade_track_preflight_cli.py) 涵蓋（哪些在 CI、哪些只在本機，見下方實作狀態），requirement↔check 對應交給 #541。
@@ -226,7 +226,7 @@ flowchart TB
 
   **main 尚未合併**的部分：
 
-  - 強制 policy，也就是 installed launcher 預設要求 `expected_source_verified`（#549 S2-3）；
+  - installed launcher 的預設 policy（#549 S2-3）。依 [ADR 028 #610 R1](../decisions/028-model-bundle-runtime-separation.md#decision-610)，預設是 `checksum_matched`，`expected_source_verified` 改為明確 opt-in；
 
   production allowlist 是空的，所以目前沒有任何 shipping bundle 能達到 `expected_source_verified`。CC-536-01-02 整張卡仍是 `accepted target`。
 
