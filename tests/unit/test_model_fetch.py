@@ -19,7 +19,12 @@ the host and no real model is downloaded.
 * interruption: SIGINT / SIGTERM mid-download remove the staging file; after
   SIGKILL the leftover staging file is reported, never published, and a rerun
   publishes; a file left without its record is recovered only when the bytes
-  are identical.
+  are identical;
+* signed URLs: a token in the source url's query or fragment is absent from
+  the whole record and from every diagnostic, and the record still pairs with
+  the exact source file through ``descriptor_sha256``;
+* CLI: argument errors, file system errors and internal errors still print
+  one JSON result with ``exit_code``.
 """
 
 # scope: system
@@ -45,7 +50,7 @@ from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, NoReturn
 
 import pytest
 
@@ -269,6 +274,7 @@ def make_source(
     citation: str | None = "https://example.invalid/release",
     name: str = NAME,
     accepted: Any = True,
+    terms_utc: str = "2026-10-18T00:00:00Z",
     extra: dict[str, Any] | None = None,
     raw: str | None = None,
 ) -> Path:
@@ -290,7 +296,7 @@ def make_source(
         "terms": {
             "url": "https://example.invalid/terms",
             "accepted": accepted,
-            "accepted_utc": "2026-10-18T00:00:00Z",
+            "accepted_utc": terms_utc,
         },
         **(extra or {}),
     }
@@ -642,6 +648,11 @@ def test_held_lock_is_refused(
         "record_integrity",
         "source_hash",
         "source_url",
+        "record_terms",
+        "record_descriptor",
+        "record_source_key",
+        "source_terms",
+        "source_reformatted",
     ],
 )
 def test_verify_fails_closed_offline(
@@ -674,10 +685,227 @@ def test_verify_fails_closed_offline(
         r.write_text(json.dumps(rec))
     elif damage == "source_hash":
         src = make_source(tmp_path, server.url("/m"), sha="2" * 64)
-    else:  # same bytes and hash, another URL: the record names where it came from
+    elif damage == "source_url":
+        # same bytes and hash, another URL: the record names where it came from
         src = make_source(tmp_path, server.url("/mirror"))
+    elif damage in ("record_terms", "record_descriptor", "record_source_key"):
+        rec = json.loads(r.read_text())
+        if damage == "record_terms":  # only the record's terms: a single check
+            rec["source"]["terms"]["accepted_utc"] = "2026-10-19T00:00:00Z"
+        elif damage == "record_descriptor":
+            rec["source"]["descriptor_sha256"] = "3" * 64
+        else:
+            rec["source"]["mirror"] = "x"
+        r.write_text(json.dumps(rec))
+    elif damage == "source_terms":
+        src = make_source(tmp_path, server.url("/m"), terms_utc="2026-10-19T00:00:00Z")
+    else:  # the same content, other bytes: the record binds the exact source file
+        src.write_text(json.dumps(json.loads(src.read_text()), indent=4))
     code, rep = verify(capsys, src, dest)
     assert code == 1 and rep["status"] == "failed" and rep["problems"]
+    needle = {
+        "record_terms": "record source.terms",
+        "record_descriptor": "record source.descriptor_sha256",
+        "record_source_key": "record source keys",
+        "source_terms": "record source.terms",
+        "source_reformatted": "record source.descriptor_sha256",
+    }.get(damage)
+    if needle is not None:
+        assert any(needle in p for p in rep["problems"]), rep["problems"]
+    if damage in ("record_terms", "record_source_key"):
+        assert len(rep["problems"]) == 1, rep["problems"]
+
+
+# ── signed URLs ─────────────────────────────────────────────────────────────
+
+TOKEN = "SECRET-TOKEN-610"
+
+
+def _run_both(
+    capsys: pytest.CaptureFixture[str], *argv: str
+) -> tuple[int, dict[str, Any], str]:
+    """Like run(), but also returns stdout + stderr as one text."""
+    code = mf.main(list(argv))
+    cap = capsys.readouterr()
+    out = json.loads(cap.out)
+    assert out["exit_code"] == code
+    return code, out, cap.out + cap.err
+
+
+def test_signed_source_url_token_is_never_persisted_or_printed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], server: Server, dest: Path
+) -> None:
+    server.routes["/m"] = body()
+    signed = server.url(f"/m?X-Amz-Signature={TOKEN}&X-Amz-Expires=60#frag-{TOKEN}")
+    src = make_source(tmp_path, signed)
+    ca = ("--ca-bundle", str(server.ca))
+    code, out, text = _run_both(
+        capsys, "fetch", "--source", str(src), "--dest", str(dest), *ca
+    )
+    assert code == 0 and out["status"] == "fetched"
+    assert server.requests == [f"/m?X-Amz-Signature={TOKEN}&X-Amz-Expires=60"]
+    raw = (dest / (NAME + ".fetch.json")).read_text()
+    assert TOKEN not in raw and "X-Amz" not in raw and TOKEN not in text
+    rec = json.loads(raw)
+    assert rec["source"]["url"] == server.url("/m")
+    assert (
+        rec["source"]["descriptor_sha256"]
+        == hashlib.sha256(src.read_bytes()).hexdigest()
+    )
+    assert (dest / (NAME + ".fetch.json")).stat().st_mode & 0o777 == 0o600
+    code, rep, text = _run_both(
+        capsys, "verify", "--source", str(src), "--dest", str(dest)
+    )
+    assert code == 0 and rep["status"] == "verified" and TOKEN not in text
+    code, out, text = _run_both(
+        capsys, "fetch", "--source", str(src), "--dest", str(dest), *ca
+    )
+    assert code == 0 and out["status"] == "already_present" and TOKEN not in text
+
+    # Same redacted URL, another token: only the descriptor sha256 tells them
+    # apart, and verify / a rerun still refuse the pair.
+    other = make_source(tmp_path, server.url(f"/m?X-Amz-Signature=OTHER-{TOKEN}"))
+    code, rep, text = _run_both(
+        capsys, "verify", "--source", str(other), "--dest", str(dest)
+    )
+    assert code == 1 and TOKEN not in text
+    assert [p for p in rep["problems"] if "source.url" in p] == []
+    assert any("source.descriptor_sha256" in p for p in rep["problems"])
+    before = len(server.requests)
+    code, out, text = _run_both(
+        capsys, "fetch", "--source", str(other), "--dest", str(dest), *ca
+    )
+    assert code == 2 and TOKEN not in text and len(server.requests) == before
+
+
+@pytest.mark.parametrize("route", ["404", "redirect-to-http"])
+def test_signed_source_url_token_is_absent_from_failure_diagnostics(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    server: Server,
+    dest: Path,
+    route: str,
+) -> None:
+    if route == "redirect-to-http":
+        server.routes["/m"] = redirect(f"http://127.0.0.1:{server.port}/m?t={TOKEN}")
+    src = make_source(tmp_path, server.url(f"/m?sig={TOKEN}"))
+    code, out, text = _run_both(
+        capsys,
+        "fetch",
+        "--source",
+        str(src),
+        "--dest",
+        str(dest),
+        "--ca-bundle",
+        str(server.ca),
+    )
+    assert code in (2, 3) and out["status"] == "failed"
+    assert TOKEN not in text and listing(dest) == []
+
+
+def test_scrub_removes_the_url_its_query_and_fragment() -> None:
+    url = f"https://h.invalid/m?sig={TOKEN}#f-{TOKEN}"
+    text = mf.scrub(f"reset at {url}; query sig={TOKEN}; fragment f-{TOKEN}", url)
+    assert TOKEN not in text and "https://h.invalid/m" in text
+    assert mf.scrub("no url here", "https://h.invalid/m") == "no url here"
+
+
+# ── CLI error contract ──────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [],
+        ["bogus"],
+        ["fetch"],
+        ["verify", "--source", "s.json"],
+        ["fetch", "--source", "s", "--dest", "d", "--max-redirects", "x"],
+        ["fetch", "--source", "s", "--dest", "d", "--unknown"],
+    ],
+    ids=["none", "bogus", "missing", "verify-missing", "bad-int", "unknown"],
+)
+def test_argument_errors_print_one_json_result(
+    capsys: pytest.CaptureFixture[str], argv: list[str]
+) -> None:
+    code, out = run(capsys, *argv)
+    assert code == 2 and out["status"] == "failed" and out["error"]
+
+
+def test_argument_error_json_from_a_real_process(tmp_path: Path) -> None:
+    proc = subprocess.run(
+        [sys.executable, str(TOOL), "fetch", "--source"],
+        capture_output=True,
+        env=_env(),
+        timeout=60,
+    )
+    assert proc.returncode == 2
+    out = json.loads(proc.stdout)
+    assert out["exit_code"] == 2 and out["status"] == "failed"
+    assert b"usage:" in proc.stderr
+
+
+@pytest.mark.parametrize("bundle", ["missing", "garbage"])
+def test_bad_ca_bundle_is_a_usage_failure(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    server: Server,
+    dest: Path,
+    bundle: str,
+) -> None:
+    server.routes["/m"] = body()
+    pem = tmp_path / "bundle.pem"
+    if bundle == "garbage":
+        pem.write_text(
+            "-----BEGIN CERTIFICATE-----\nnot base64\n-----END CERTIFICATE-----\n"
+        )
+    src = make_source(tmp_path, server.url("/m"))
+    code, out = run(
+        capsys,
+        "fetch",
+        "--source",
+        str(src),
+        "--dest",
+        str(dest),
+        "--ca-bundle",
+        str(pem),
+    )
+    assert code == 2 and "--ca-bundle" in out["error"]
+    assert server.requests == [] and listing(dest) == []
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file modes")
+def test_file_system_errors_print_one_json_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], server: Server, dest: Path
+) -> None:
+    server.routes["/m"] = body()
+    src = make_source(tmp_path, server.url("/m"))
+    dest.chmod(0o500)
+    try:
+        code, out = fetch(capsys, server, src, dest)
+    finally:
+        dest.chmod(0o700)
+    assert code == 2 and "file system" in out["error"] and listing(dest) == []
+
+    assert fetch(capsys, server, src, dest)[0] == 0
+    (dest / NAME).chmod(0o000)
+    try:
+        code, rep = verify(capsys, src, dest)
+    finally:
+        (dest / NAME).chmod(0o644)
+    assert code == 1 and any("Permission denied" in p for p in rep["problems"])
+
+
+def test_internal_error_prints_one_json_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(_args: Any) -> NoReturn:
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(mf, "cmd_verify", boom)
+    code, out = run(capsys, "verify", "--source", "s", "--dest", "d")
+    assert code == 4 and out["status"] == "internal_error"
+    assert "RuntimeError: bug" in out["error"]
 
 
 # ── interruption ────────────────────────────────────────────────────────────

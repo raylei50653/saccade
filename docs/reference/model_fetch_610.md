@@ -31,14 +31,21 @@
 .venv/bin/python scripts/model/model_fetch.py verify --source SOURCE.json --dest DIR
 ```
 
-`DIR` 必須已經存在，而且是目錄，不可以是 symlink。兩個子命令都會在 stdout 印出**一份 JSON**：`fetch` 印 `saccade.model_fetch_result/v1`，`verify` 印 `saccade.model_verify_report/v1`，兩者都帶 `exit_code`。失敗時另外在 stderr 印一行 `model_fetch: <原因>`。
+`DIR` 必須已經存在，而且是目錄，不可以是 symlink。
+
+**輸出契約**：下表每一種 exit 都會在 stdout 印出**一份 JSON**，帶 `exit_code`。
+- `fetch` 印 `saccade.model_fetch_result/v1`，`verify` 印 `saccade.model_verify_report/v1`；
+- 參數錯誤（缺參數、未知參數、型別錯誤、沒有子命令）、檔案系統錯誤和內部錯誤，也各印一份 `{"status": ..., "error": ..., "exit_code": ...}`；參數錯誤時 stderr 另外印 usage；
+- 失敗時 stderr 另外印一行 `model_fetch: <原因>`；
+- **唯一例外**是 `--help`／`-h`：stdout 印說明文字，exit 0，不印 JSON。
 
 | Exit | 意義 |
 |:--|:--|
 | 0 | `fetch`：`fetched`、`already_present` 或 `record_recovered`；`verify`：`verified` |
 | 1 | 核對失敗：sha256 或 size 不符、截斷、bytes 比預期多。`verify` 沒有通過時一律是 1 |
-| 2 | 用法錯誤、source 不合法、政策拒絕（沒有 hash、未接受條款、非 https、redirect 降級、迴圈、超過次數）、不安全或衝突的目標、lock 被佔用 |
+| 2 | 用法錯誤（含參數錯誤、讀不到或格式不對的 `--ca-bundle`）、source 不合法、政策拒絕（沒有 hash、未接受條款、非 https、redirect 降級、迴圈、超過次數）、不安全或衝突的目標、lock 被佔用、檔案系統錯誤（例如 `DIR` 不可寫） |
 | 3 | 傳輸錯誤：網路、TLS（含憑證不受信任）、HTTP status、`Content-Encoding` |
+| 4 | 內部錯誤，也就是工具本身的 bug：`status: internal_error`，stderr 印 traceback |
 | 128+N | 被 signal N 中斷（SIGINT 130、SIGTERM 143、SIGHUP 129） |
 
 ## 2. Source 檔：`saccade.model_source/v1`
@@ -59,7 +66,7 @@
 | 欄位 | 規則 |
 |:--|:--|
 | `name` | 單一路徑段，只允許 `[A-Za-z0-9._-]`，開頭不可以是 `.`，結尾不可以是 `.fetch.json`，不可以含 `.partial-` |
-| `url` | 只允許 `https`，不可以帶帳號密碼 |
+| `url` | 只允許 `https`，不可以帶帳號密碼。可以是簽名 URL：query 和 fragment 不會被寫進紀錄或輸出（見第 3 節） |
 | `expected.sha256`／`bytes` | `null` 或 64 個小寫 hex／`null` 或正整數。`bytes` 是選填的 size 檢查 |
 | `hash_reference.kind` | `upstream_published`：必須附 `citation`。`user_supplied`：使用者自己提供的 hash。`none`：只在 `sha256` 是 `null` 時使用，反之亦然 |
 | `terms.accepted` | 必須是 `true`，否則不送出任何請求 |
@@ -95,17 +102,25 @@
 - `name`、`bytes`、`sha256`；
 - `integrity`：`expected_sha256_matched` 或 `local_only`；
 - 固定的 `source_authentication: "not_performed"` 和 `reading`；
-- `source`：url、expected、hash_reference、terms，以及 source 檔本身的 sha256；
-- `transport`：`final_url` 和每一跳 redirect，都**去掉 query 與 fragment**，因為簽名 URL 會把 token 放在那裡；另有 `content_length`；
+- `source`：`url`（**去掉 query 與 fragment**）、`expected`、`hash_reference`、`terms`，以及 `descriptor_sha256`，也就是 source 檔 bytes 本身的 sha256；
+- `transport`：`final_url` 和每一跳 redirect，同樣**去掉 query 與 fragment**；另有 `content_length`；
 - `fetched_utc`；
 - `tool`：路徑與工具檔的 sha256。
+
+**簽名 URL**：presigned URL 會把 token 放在 query 或 fragment。
+- 工具寫進紀錄、印到 stdout／stderr 的每個 URL 都去掉這兩段，包括 source url、redirect、`final_url` 和錯誤訊息；
+- 紀錄仍然透過 `descriptor_sha256` 綁定**完整的** source 檔，所以去掉 token 不會放鬆配對：只差 token 的兩份 source 會被當成不同來源；
+- 紀錄以 0600 建立，作為額外防護。要讓別的帳號 `verify`，請自行調整權限；
+- **沒有涵蓋**：把 token 放在 URL path 裡的方案認不出來；`terms.url`、`hash_reference.citation` 原樣寫進紀錄，不要在那裡放秘密；source 檔本身含完整 URL，由使用者自行保管。
 
 ## 4. 離線核對（`verify`）
 
 不連任何網路。以下都要成立才回 `verified`（exit 0），任何一項不成立就回 `failed`（exit 1），報告列出所有原因：
 
 - `<name>` 和紀錄都存在，而且都是一般檔案；
-- 紀錄的 schema、`name`、`source.url`、`source.expected`、`source.hash_reference`、`integrity`、`source_authentication` 都和這份 source 一致；
+- 紀錄的 schema、`name`、`integrity`、`source_authentication` 都和這份 source 一致；
+- 紀錄的 `source` key 恰好是 `url`、`expected`、`hash_reference`、`terms`、`descriptor_sha256`，每一個都等於從這份 source 算出的值。`url` 比的是去掉 query 與 fragment 的 URL；完整 URL 由 `descriptor_sha256` 綁定。因此 source 檔只要改了任何 byte，包括只重新排版，`verify` 就會失敗：請保存當初 `fetch` 用的那份檔案；
+- `<name>` 和紀錄都讀得到。讀不到（例如權限不足）時列為原因，exit 1；
 - 檔案的實際 bytes 和 sha256 等於紀錄的值，也等於 source 的 expected 值。
 
 `local_only` 的檔案也可以 `verified`，但報告的 `integrity` 照實寫 `local_only`。核對通過**不**代表官方來源認證。即使比對的是使用者提供的 hash，結果也只是內容一致。
@@ -121,7 +136,7 @@
 
 ## 6. 測試矩陣
 
-[`tests/unit/test_model_fetch.py`](../../tests/unit/test_model_fetch.py)：46 個 case，CPU。全部對 127.0.0.1 上的本機 https server 進行：測試 CA 和 leaf 憑證在測試內產生，透過 `--ca-bundle` 傳給工具。body 是約 2.2 MiB 的合成資料。不連外部網路，也不下載真實模型。
+[`tests/unit/test_model_fetch.py`](../../tests/unit/test_model_fetch.py)：66 個 case，CPU。全部對 127.0.0.1 上的本機 https server 進行：測試 CA 和 leaf 憑證在測試內產生，透過 `--ca-bundle` 傳給工具。body 是約 2.2 MiB 的合成資料。不連外部網路，也不下載真實模型。
 
 | 類別 | Case | 預期 |
 |:--|:--|:--|
@@ -142,11 +157,20 @@
 | 復原 | 沒有紀錄、和 expected 不符的檔案 | exit 2；0 個請求；檔案不變 |
 | 復原 | 沒有紀錄、沒有 hash、和下載內容不同的檔案 | exit 2；檔案不變 |
 | Lock | `DIR` 的 flock 已被佔用 | exit 2；0 個請求 |
-| 離線 verify（7） | 翻轉一個 byte、截斷、刪除紀錄、竄改紀錄的 sha、竄改紀錄的 integrity、source 換 hash、source 換 URL（bytes 相同） | exit 1，而且 server 已關閉 |
+| 離線 verify（12） | 翻轉一個 byte、截斷、刪除紀錄、竄改紀錄的 sha、竄改紀錄的 integrity、source 換 hash、source 換 URL（bytes 相同）、只竄改紀錄的 `terms.accepted_utc`、只竄改紀錄的 `descriptor_sha256`、紀錄的 `source` 多一個 key、source 換 `accepted_utc`、source 只重新排版 | exit 1，而且 server 已關閉；後五項的報告點名對應的欄位，只竄改 terms 或多一個 key 時恰好一個原因 |
+| 簽名 URL | source url 的 query 和 fragment 帶 token | `fetch`、`verify`、rerun 都 exit 0；整份紀錄、stdout、stderr 都沒有 token；紀錄 `source.url` 是去掉 query 的 URL、`descriptor_sha256` 等於 source 檔的 sha256、權限 0600 |
+| 簽名 URL | 同一個去 token URL、另一個 token 的 source | `verify` 1，原因只有 `descriptor_sha256` 而沒有 `source.url`；`fetch` 2，0 個新請求；輸出沒有 token |
+| 簽名 URL（2） | 帶 token 的 source 遇到 404；redirect 到帶 token 的 http | exit 3／2；輸出沒有 token；目錄是空的 |
+| 簽名 URL | `scrub()` 單元測試 | URL、query、fragment 都被移除 |
+| CLI（6） | 沒有參數、未知子命令、缺 `--source`／`--dest`、`--max-redirects x`、未知旗標 | exit 2；stdout 一份 JSON |
+| CLI | 真實 subprocess 的參數錯誤 | exit 2；stdout 是 JSON；stderr 有 usage |
+| CLI（2） | `--ca-bundle` 不存在；內容不是合法 PEM | exit 2；0 個請求 |
+| CLI | `DIR` 不可寫；`<name>` 不可讀 | `fetch` 2（`file system`）且目錄是空的；`verify` 1 並列出 `Permission denied`。root 執行時略過 |
+| CLI | 內部錯誤（monkeypatch 讓 `cmd_verify` 拋出例外） | exit 4；`internal_error` |
 | 中斷 | 下載途中 SIGINT、SIGTERM（subprocess） | 130／143；`interrupted`；目錄是空的 |
 | 中斷 | 下載途中 SIGKILL，然後 rerun | 殘留的是隱藏 `.partial-` 檔，沒有 `<name>`，`verify` 1；rerun `fetched` 並在 `stale_partials` 列出殘留；`verify` 0 |
 
-本機 mutation 檢查（只在本機，結果沒有提交）：分別拿掉 redirect 的 https 檢查、sha 比對、staging 清理、紀錄和 source 的欄位比對，每一項都會讓至少一個 case 失敗。
+本機 mutation 檢查（只在本機，結果沒有提交）：分別拿掉 redirect 的 https 檢查、sha 比對、staging 清理、紀錄和 source 的欄位比對，每一項都會讓至少一個 case 失敗。第二輪（#612 owner review 之後）又加了九項：紀錄寫入未去 token 的 URL、不比對 `terms`、不檢查 `source` key 集合、紀錄改回 0644、argparse 預設的 `error()`、拿掉 `OSError` 處理、拿掉 `--ca-bundle` 處理、拿掉內部錯誤處理、`verify` 不捕捉讀檔錯誤，各自至少讓一個 case 失敗。第十項是把 `scrub()` 改成不做事：端對端 case 抓不到（傳輸錯誤原因通常不含 URL），因此另加單元測試，加入後這項也會失敗。
 
 ## 7. 尚未實作或整合（仍然 OPEN）
 

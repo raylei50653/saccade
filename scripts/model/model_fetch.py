@@ -42,11 +42,19 @@ Only https is fetched; a redirect must stay on https, at most --max-redirects
 hops, no loop. Content-Encoding other than identity is refused (the hash is
 over the delivered bytes). Proxies come from the usual environment variables.
 
+Signed URLs: the query and fragment of every URL the tool persists or
+prints (the source url, redirect hops, the final url, diagnostics) are
+removed, because presigned URLs carry their tokens there; the record still
+pairs with the exact source file through its sha256 (``descriptor_sha256``).
+A token in the URL *path* is not recognised. The record is created 0600.
+
 Exit: 0 fetched / already present / verified; 1 verification failed (sha256
 or size mismatch, truncated, more bytes than expected; for verify: anything
-not verified); 2 usage, invalid source, policy refusal, unsafe or conflicting
-target; 3 transport (network, TLS, HTTP status, encoding); 128+N interrupted
-by signal N. stdout carries one JSON result in every case.
+not verified); 2 usage (argument errors included), invalid source, policy
+refusal, unsafe or conflicting target, a file system error; 3 transport
+(network, TLS, HTTP status, encoding); 4 internal error (a bug; traceback on
+stderr); 128+N interrupted by signal N. stdout carries one JSON object with
+``exit_code`` for every exit; only ``--help`` prints help text instead.
 """
 
 # status: stable
@@ -67,6 +75,7 @@ import signal
 import ssl
 import stat
 import sys
+import traceback
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -93,7 +102,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 CHUNK = 1 << 20
 MAX_SOURCE_BYTES = 1 << 20
 
-EXIT_OK, EXIT_VERIFY, EXIT_USAGE, EXIT_TRANSPORT = 0, 1, 2, 3
+EXIT_OK, EXIT_VERIFY, EXIT_USAGE, EXIT_TRANSPORT, EXIT_INTERNAL = 0, 1, 2, 3, 4
 
 
 class Failure(Exception):
@@ -168,6 +177,16 @@ def redact(url: str) -> str:
     """The URL without query and fragment (signed URLs carry tokens there)."""
     p = urlsplit(url)
     return urlunsplit((p.scheme, p.netloc, p.path, "", ""))
+
+
+def scrub(text: str, url: str) -> str:
+    """text with url, and its query and fragment on their own, removed."""
+    p = urlsplit(url)
+    text = text.replace(url, redact(url))
+    for part in (p.query, p.fragment):
+        if part:
+            text = text.replace(part, "<redacted>")
+    return text
 
 
 def check_name(name: Any) -> str:
@@ -266,6 +285,8 @@ def entry(dfd: int, name: str) -> os.stat_result | None:
         st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
     except FileNotFoundError:
         return None
+    except OSError as e:
+        raise Failure(EXIT_USAGE, f"{name}: {e.strerror}") from None
     if not stat.S_ISREG(st.st_mode):
         raise Failure(
             EXIT_USAGE, f"{name} exists and is not a regular file (symlinks refused)"
@@ -295,6 +316,18 @@ def integrity_of(src: dict[str, Any]) -> str:
     )
 
 
+def record_source(src: dict[str, Any]) -> dict[str, Any]:
+    """The record's ``source`` object: the source file without the url's
+    query and fragment, bound to the exact file by its sha256."""
+    return {
+        "url": redact(src["url"]),
+        "expected": src["expected"],
+        "hash_reference": src["hash_reference"],
+        "terms": src["terms"],
+        "descriptor_sha256": src["descriptor_sha256"],
+    }
+
+
 def published_problems(
     dfd: int, src: dict[str, Any]
 ) -> tuple[list[str], dict[str, Any]]:
@@ -314,7 +347,10 @@ def published_problems(
         problems.append(f"{rec_name} does not exist (the file is not published)")
     if problems:
         return problems, observed
-    raw = read_at(dfd, rec_name, MAX_SOURCE_BYTES)
+    try:
+        raw = read_at(dfd, rec_name, MAX_SOURCE_BYTES)
+    except OSError as e:
+        return [f"{rec_name}: {e.strerror}"], observed
     if len(raw) > MAX_SOURCE_BYTES:
         return [f"{rec_name} is larger than 1 MiB"], observed
     try:
@@ -324,17 +360,23 @@ def published_problems(
     if not isinstance(rec, dict) or rec.get("schema") != RECORD_SCHEMA:
         return [f"{rec_name} schema is not {RECORD_SCHEMA}"], observed
     rsrc = rec.get("source") if isinstance(rec.get("source"), dict) else {}
+    want_src = record_source(src)
+    if set(rsrc) != set(want_src):
+        problems.append(
+            f"record source keys {sorted(rsrc)} are not exactly {sorted(want_src)}"
+        )
     for key, want, got in (
         ("name", name, rec.get("name")),
-        ("source.url", src["url"], rsrc.get("url")),
-        ("source.expected", src["expected"], rsrc.get("expected")),
-        ("source.hash_reference", src["hash_reference"], rsrc.get("hash_reference")),
+        *((f"source.{k}", v, rsrc.get(k)) for k, v in want_src.items()),
         ("integrity", integrity_of(src), rec.get("integrity")),
         ("source_authentication", "not_performed", rec.get("source_authentication")),
     ):
         if got != want:
             problems.append(f"record {key} {got!r} != {want!r}")
-    n, sha = hash_at(dfd, name)
+    try:
+        n, sha = hash_at(dfd, name)
+    except OSError as e:
+        return [*problems, f"{name}: {e.strerror}"], observed
     observed.update(bytes=n, sha256=sha, integrity=rec.get("integrity"))
     if (rec.get("bytes"), rec.get("sha256")) != (n, sha):
         problems.append(
@@ -369,7 +411,10 @@ def download(
     dfd: int, src: dict[str, Any], args: argparse.Namespace, staging: str
 ) -> dict[str, Any]:
     """Download src into DIR/staging and check it; raise Failure otherwise."""
-    ctx = ssl.create_default_context(cafile=args.ca_bundle)
+    try:
+        ctx = ssl.create_default_context(cafile=args.ca_bundle)
+    except (OSError, ssl.SSLError) as e:
+        raise Failure(EXIT_USAGE, f"--ca-bundle {args.ca_bundle}: {e}") from None
     opener = urllib.request.build_opener(
         _NoRedirect(), urllib.request.HTTPSHandler(context=ctx)
     )
@@ -409,13 +454,13 @@ def download(
             url = nxt
             continue
         except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
-            reason = getattr(e, "reason", e)
+            reason = scrub(str(getattr(e, "reason", e)), url)
             raise Failure(EXIT_TRANSPORT, f"{redact(url)}: {reason}") from None
         with resp:
             if resp.status != 200:
                 raise Failure(EXIT_TRANSPORT, f"HTTP {resp.status} from {redact(url)}")
             return {
-                **stream(dfd, src, args, staging, resp),
+                **stream(dfd, src, args, staging, resp, url),
                 "final_url": redact(url),
                 "redirects": hops,
             }
@@ -423,7 +468,12 @@ def download(
 
 
 def stream(
-    dfd: int, src: dict[str, Any], args: argparse.Namespace, staging: str, resp: Any
+    dfd: int,
+    src: dict[str, Any],
+    args: argparse.Namespace,
+    staging: str,
+    resp: Any,
+    url: str,
 ) -> dict[str, Any]:
     exp = src["expected"]
     encoding = (resp.headers.get("Content-Encoding") or "identity").strip().lower()
@@ -461,7 +511,7 @@ def stream(
                 ) from None
             except (OSError, http.client.HTTPException) as e:
                 raise Failure(
-                    EXIT_TRANSPORT, f"read failed after {n} bytes: {e}"
+                    EXIT_TRANSPORT, f"read failed after {n} bytes: {scrub(str(e), url)}"
                 ) from None
             if not chunk:
                 break
@@ -575,13 +625,7 @@ def cmd_fetch(args: argparse.Namespace) -> dict[str, Any]:
                 "sha256": got["sha256"],
                 "integrity": integrity_of(src),
                 "source_authentication": "not_performed",
-                "source": {
-                    "url": src["url"],
-                    "expected": src["expected"],
-                    "hash_reference": src["hash_reference"],
-                    "terms": src["terms"],
-                    "descriptor_sha256": src["descriptor_sha256"],
-                },
+                "source": record_source(src),
                 "transport": {
                     "final_url": got["final_url"],
                     "redirects": got["redirects"],
@@ -596,7 +640,7 @@ def cmd_fetch(args: argparse.Namespace) -> dict[str, Any]:
             fd = os.open(
                 rec_staging,
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
-                0o644,
+                0o600,
                 dir_fd=dfd,
             )
             with os.fdopen(fd, "w") as out:
@@ -642,8 +686,16 @@ def cmd_verify(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     return (EXIT_VERIFY if problems else EXIT_OK), report
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
+class _Parser(argparse.ArgumentParser):
+    """Argument errors become a Failure, so they print the JSON result too."""
+
+    def error(self, message: str) -> NoReturn:
+        self.print_usage(sys.stderr)
+        raise Failure(EXIT_USAGE, f"{self.prog}: {message}")
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = _Parser(description=(__doc__ or "").splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
     f = sub.add_parser("fetch", help="download, check and publish one model file")
     v = sub.add_parser("verify", help="check a published file offline")
@@ -668,14 +720,18 @@ def main(argv: list[str] | None = None) -> int:
         default=64 << 30,
         help="size cap when the source has no expected bytes",
     )
-    args = parser.parse_args(argv)
+    return parser
 
+
+def main(argv: list[str] | None = None) -> int:
     previous = {
         s: signal.signal(s, _raise_interrupted) for s in (signal.SIGTERM, signal.SIGHUP)
     }
-    code, result = EXIT_OK, {}
+    command, code, result = None, EXIT_OK, {}
     try:
-        if args.command == "fetch":
+        args = _parser().parse_args(argv)
+        command = args.command
+        if command == "fetch":
             if args.max_redirects < 0 or args.max_bytes <= 0 or args.timeout <= 0:
                 raise Failure(
                     EXIT_USAGE, "--max-redirects >= 0, --max-bytes > 0, --timeout > 0"
@@ -685,6 +741,12 @@ def main(argv: list[str] | None = None) -> int:
             code, result = cmd_verify(args)
     except Failure as e:
         code, result = e.code, {"status": "failed", "error": str(e)}
+    except OSError as e:
+        where = f" ({e.filename})" if e.filename is not None else ""
+        code, result = (
+            EXIT_USAGE,
+            {"status": "failed", "error": f"file system: {e.strerror or e}{where}"},
+        )
     except KeyboardInterrupt:
         code, result = (
             128 + signal.SIGINT,
@@ -692,10 +754,16 @@ def main(argv: list[str] | None = None) -> int:
         )
     except Interrupted as e:
         code, result = 128 + e.signum, {"status": "interrupted", "signal": e.signum}
+    except Exception as e:  # a bug: still one JSON result, traceback on stderr
+        traceback.print_exc()
+        code, result = (
+            EXIT_INTERNAL,
+            {"status": "internal_error", "error": f"{type(e).__name__}: {e}"},
+        )
     finally:
         for s, h in previous.items():
             signal.signal(s, h)
-    if args.command == "fetch":
+    if command == "fetch":
         result = {
             "schema": RESULT_SCHEMA,
             "command": "fetch",
