@@ -1,6 +1,6 @@
 <!-- doc-status: accepted -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-10-12 -->
+<!-- doc-date: 2026-10-18 -->
 <!-- doc-module: cross -->
 
 # ADR 028: 模型 bundle 與 native runtime 分離：可信 expected identity 與發行責任
@@ -8,6 +8,8 @@
 ## Status
 
 **Accepted — S1 design targets only**（2026-10-10）。對應 [#549](https://github.com/raylei50653/saccade/issues/549) S1；決策內容與邊界見 [S1 設計決策](#decision-549-s1)。
+
+**Amended by [#610 修訂決策](#decision-610)**（2026-10-18）：D4 第 2 步（S2-3 installed launcher 的預設 policy）改為 `checksum_matched`；另外加上 VL2 信任根的範圍限制、自訓模型的 v2 前置條件，以及 `--check-bundle` 的界線。D1–D3、D5–D7 不變。這同樣只是設計目標。
 
 本 ADR 接受的只是**設計目標**；範圍與邊界只在下方決策段落陳述。介面契約、fail-closed 規則、G01–G07 處置與控制矩陣放在 [model bundle 契約](../architecture/model_bundle_contract_549.md)，本文不重述。
 
@@ -25,7 +27,7 @@
   - manifest 模式的 TRT、LibTorch、CUDA 版本 gate（Gate A），以及 SM gate 和 TRT I/O dtype 比對（Gate B）（#582）。
   - install 只寫入驗證過的 snapshot（#586）。
 - **仍是 accepted target、未實作或待裁決**：
-  - D1 的 package 拆分，以及 D4 的 installed launcher 預設改成 `expected_source_verified`，兩者都屬 S2-3。
+  - D1 的 package 拆分，以及 D4 的 installed launcher 預設 policy，兩者都屬 S2-3。依 [#610 修訂](#decision-610)，這個預設是 `checksum_matched`，不是 `expected_source_verified`。
   - D5 的整體宣稱：`load_verification.byte_scope` 仍固定 `hashed_before_load`；提升為 `loaded_buffer` 與 MB-41 結案經條件核對後未執行，條件 2 未滿足：head 的 TorchScript 可讀取未經 hash 的外部 bytes（G-1）（[MB-41 條件核對](../reference/model_bundle_mb41_549.md)）。
   - TR-2 延後。
 - **未驗證**：qualified V5 是 **UNRESOLVED**，installed package 是 **UNVERIFIED**（entrypoint 尚未 re-pin），equivalence 是 `unproven`。manifest 模式 MOT text 相等只是 diagnostic，不是 parity。`distribution.status=local-only`。
@@ -37,12 +39,36 @@ source-level implemented 不代表 runtime、GPU、installed package 或 product
 - **D1**：接受 B，model-free runtime 加上另外管理的 **private** model bundle。不授權新 repository、模型替換或散佈；A、C 只是比較，不是被選定的實作。
 - **D2**：接受 TR-1b 作為工程上的 expected identity：release 審查過的 allowlist 列出 bundle manifest 的精確 sha256，allowlist 自己的 hash 釘在 runtime build／entrypoint 層級。caller 控制的 lineage／attestation，以及和模型放在一起的 manifest，都不是獨立的 trust anchor。這**不是**發行者認證、模型權利批准或 benchmark 資格；runtime 驗簽章（TR-2）延後。
 - **D3**：N01、N02、N04、N05、N06 屬於 private model bundle；N03 scan operator 屬於 runtime package，以精確 sha256 和相容性契約綁定。N03 不得被當成違規夾帶的模型檔。
-- **D4**：legacy 模式和 `--model-bundle` 模式互斥；只用一個 `--require-identity {none,checksum_matched,expected_source_verified}` policy。**S2-1** 所有 entrypoint 預設 `none`，維持現行行為。只有在 **S2-3**，有可用的 approved allowlist 並做版本化的 CLI／package 變更時，installed launcher 的預設才改成 `expected_source_verified`。legacy 模式維持明確 opt-in 的較低等級，不繼承已發表的模型性能宣稱。
+- **D4**：legacy 模式和 `--model-bundle` 模式互斥；只用一個 `--require-identity {none,checksum_matched,expected_source_verified}` policy。**S2-1** 所有 entrypoint 預設 `none`，維持現行行為。只有在 **S2-3**，有可用的 approved allowlist 並做版本化的 CLI／package 變更時，installed launcher 的預設才改成 `expected_source_verified`。legacy 模式維持明確 opt-in 的較低等級，不繼承已發表的模型性能宣稱。**（2026-10-18：S2-3 這一步已由 [#610 修訂](#decision-610) R1 取代，原文保留作為紀錄。）**
 - **D5**：**只接受不變式**：在任何 `load_verification.byte_scope=loaded_buffer` 宣稱之前，實際載入的 bytes 必須等於核對過的 bytes。**沒有批准任何實作技術。** sealed-memfd `dlopen` 只是 S2-2 的候選：必須先在**不放寬 auditor** 的前提下，驗證現行 `loader_audit.c` `la_objopen` 的 realpath 限制、N03 RUNPATH、依賴與真實 GPU 行為。operator 做不到這個不變式時，記成明確的殘留風險，不宣稱 `loaded_buffer`。
 - **D6**：manifest 模式下 N06 realization attestation 必填；legacy 模式的既有行為不變。
 - **D7**：v1 允許 `engine_precision: unresolved`，代表明確的未知值，**不是**已驗證的相容性、精度或性能宣稱。資格認定仍需要證據。
 - **狀態與寫入邊界**：Gate A 是不可變 `identity` 唯一的寫入者，`identity` 報告核對過的 bytes 和 expected-source level，不報告載入成功。Gate B 另外擁有 `load_verification`，初值 `null`；只有三個載入與檢查全部成功後才可以寫 `verified`，在完整 qualified 的 S2-2 路徑存在之前 `byte_scope=hashed_before_load`。Gate B 失敗永遠不改 `identity`。可捕捉的 Gate B 失敗會把 `load_verification` 寫成 `failed`；無法捕捉的 loader-auditor `_exit(127)`、SIGKILL 或 abort 可能讓 `load_verification` 維持 `null`（journal 維持 `running`），不承諾寫入 `failed`。F3 known limit 保留，這個區分由之後的實作測試涵蓋。state machine 細節歸 #537。
 - **本決策的邊界（全文唯一陳述，其他段落引用此處）**：只批准 S1 設計目標。不是在任何 head 上 merge #571 的授權，不啟動 S2-1a／S2-1 或其他 runtime／package／CI 工作，不批准 trusted allowlist 中的 N01–N06 內容，不開新 repository，不替換 weights，不公開散佈。#547 維持 `distribution.status=local-only`、`owner_confirmation=null`；權利問題、#535 A3 與 #541 as-built／check 交接各自獨立。#550 的跨 Issue checkpoint 只在 S1 PR merge 且 main 驗證成功後更新。
+
+<a id="decision-610"></a>**#610 修訂決策（2026-10-18，Asia/Taipei）**：`owner=raylei50653; decision=accepted with conditions (design targets only); scope=#610 D-610-1..7`。Decision source：[#610 owner decision](https://github.com/raylei50653/saccade/issues/610#issuecomment-6249950251)（owner 在 session 中提供，逐字保存於該 comment；具體內容以本段的版本控制紀錄為準）。輸入是 [#610 decision packet](https://github.com/raylei50653/saccade/issues/610#issuecomment-6249857371)，source baseline `68c482c0fca63cc9bf3382e180514392579d0efa`，屬 source-inspected。背景：owner 的方向是 SACCADE 提供官方來源模型與自訓模型的取得指引、下載核對工具，以及格式轉換與驗證工具；不代替上游發布，不鏡像或託管權重，也不替來源不明的模型做可信或權利保證。
+
+- **R1（D-610-1，取代 D4 第 2 步）**：S2-3 的 installed launcher 預設 `--require-identity checksum_matched`。`expected_source_verified` 只在 caller 明確指定 `--require-identity expected_source_verified` 時要求，用於 opt-in 或受控部署；指定了就 fail closed，不新增任何降級旗標，VL0、VL1、VL3 也照舊沒有放寬旗標。**D2／TR-1b 不變**：VL2 仍只能由 TR-1b allowlist 產生；production allowlist 維持空的，SACCADE 不為使用者的模型加 entry。
+  - 行為：任何通過的 Gate A，level 都至少是 `checksum_matched`（[preflight.cpp](../../shipping/src/preflight.cpp) legacy 與 manifest 兩條路徑的結尾），所以這個預設的行為和現在的 `none` 相同。唯一可見的差異是 journal／report 中的 `identity.required` 值，要以版本化方式寫進 CLI 說明與 package README。legacy 模式不需要額外旗標。
+  - 代價：預設不能阻止自洽替換（G01、MB-31）。`checksum_matched` 本來就只代表內容一致。沒有 VL2 的 run 不得引用已發表的數字（[契約 G07](../architecture/model_bundle_contract_549.md#gap-disposition)）。
+- **R2（D-610-2，VL2 信任根的範圍）**：VL2 的意思是「這份 manifest 的 sha256 是正在執行的 entrypoint 建置時所釘 allowlist 中的 approved entry」。信任根是建置這個 entrypoint 的人選的。用自己的 allowlist 自建 runtime 而達到 VL2 是允許的，但那只代表該 build 自選的信任根。runtime 無法證明自己的 binary 是誰發布的（[第 3 節「仍然成立的限制」](#trust-root-limits)），所以就算 report 的 `allowlist_sha256` 等於 SACCADE 公布的值，也**不足以單獨**證明執行的 binary 是 SACCADE 的 release。要宣稱「SACCADE 官方認可」，還必須另外驗證 runtime 的發布來源與 package identity：VL5，也就是以 SACCADE release key 驗證 package digest 與簽章。#547 的 release key 尚未建立，`distribution.status=local-only`，所以現在**沒有任何 run 可以宣稱 SACCADE 官方認可**。
+- **R3（D-610-3，自訓模型的 v2 前置條件）**：v1 無法誠實接受自訓模型，原因有兩層。只讓 `detector_plan` 接受新的 lineage／attestation 不夠，因為 manifest reader 會先拒絕：
+  - manifest 層：schema 固定為 `saccade.model_bundle/v1`，member 的 `json_schema` enum 只列 v1 的 lineage／attestation schema，[model_bundle.cpp](../../shipping/src/model_bundle.cpp) `json_schema_of()`（R-06）也寫死這兩個版本。
+  - plan 層：[detector_plan.cpp](../../shipping/src/detector_plan.cpp) 要求 lineage 的 inventory 綁定和 headline preset，也要求 attestation 的 `a_l_reproduction.identical=true`。這些是 headline 專屬的證據宣稱。
+
+  自訓支援因此需要以下幾點，細節見[契約 3.5](../architecture/model_bundle_contract_549.md#v2-prerequisites)：
+  - 新的 `saccade.model_bundle/v2`，**v1 原封不動**（schema、R-01..R-09、examples、既有 fixture）；
+  - 版本化的 v2 lineage／attestation，能把「沒有提供」如實記錄成明確值，例如沒有 SACCADE inventory、沒有 training lineage repository reference、沒有做 A_L 重現；
+  - 模型結構條件、N03 pin、Gate B 與 TorchScript admission 維持 fail closed。
+- **R4（D-610-4）**：fetch／verify 是 repo 側的 Python stdlib 工具，不進 runtime package。runtime 照舊永遠不下載（[契約第 5 節](../architecture/model_bundle_contract_549.md#fail-closed)）。
+- **R5（D-610-5，`--check-bundle` 的界線）**：離線 bundle 驗證的權威是 C++ Gate A 的同一套驗證核心，不另寫一套 R-01..R-09。這個模式有以下限制：
+  - 必須真正 CUDA-free：不建立 run、journal 或 `<out>` lock，不讀 sequence 或影格，不呼叫任何 CUDA API，不修改 bundle；
+  - 成功只代表 Gate A 通過，也就是 VL0、VL1，有 approved entry 時加上 VL2；
+  - 不得宣稱 engine 已反序列化、N03 已載入、Gate B 或 `load_verification` 已通過，也不得宣稱取得 V5 qualification；
+  - 這是 pinned entrypoint 的 CLI 變更，屬 S2-3。
+- **R6（D-610-6）**：沒有 expected hash 時，fetch 預設拒絕。只有明確放行時才會完成，而且紀錄只能是 `local_only` 的本地完整性，不得暗示來源認證。
+- **R7（D-610-7，切片順序）**：文件（本修訂）→ fetch／verify → v2 schema、exporter、bundler → runtime plan 整合，含必要的 coordinate republication → S2-3（package 拆分、installed 預設、`--check-bundle`、無聯網負控制、README、re-pin 與驗證）。每一片都要另外授權。
+- **本修訂的邊界**：只改設計目標與文件。不修改 production code 或 allowlist，不下載模型，不啟動 S2-3，不 re-pin，也不是 merge 授權。#550 的優先序與授權欄不變；#537→#538→#539 主線不受影響。#547 維持 `local-only`、`owner_confirmation=null`，V5 仍是 `UNRESOLVED`，installed package 仍是 `UNVERIFIED`。identity、性能與權利三者仍然分開：`checksum_matched` 只代表內容一致，不代表 publisher authentication、訓練權利、benchmark 或適合部署。
 
 Source baseline 是 `46ab79c1785b85f8afbef1d43909f1a7cb2eff23`（[#570](https://github.com/raylei50653/saccade/pull/570) 合併 S0 後的 main）。本文的現況描述（第 1、2 節）都是在這個 baseline 讀原始碼得到的（source-inspected），沒有跑 runtime、GPU 或 package；S2-1 之後的狀態見[實作狀態](#implementation-status)。事實來源只引用、不複製：模型 bytes、producer 與權利未知項見 [S0 inventory](../reference/model_runtime_inventory_549.md)；#536 的節點與邊 ID 見 [S-SHIP／S-EXPORT 總圖](../architecture/ship_export_contracts_536.md#1-總圖)；訓練血統見 [#421 inventory](../research/training/training_lineage_inventory.md)；權利與發行門檻見 [#547](https://github.com/raylei50653/saccade/issues/547) 和 [license audit](../../shipping/license_audit.json)。
 
@@ -142,7 +168,7 @@ flowchart LR
 
 **目標的信任根（D2）**：可信的 expected identity 是 allowlist 中 state 為 `approved` 的 entry，以 bundle manifest 檔案的 sha256 為鍵。allowlist 檔隨 runtime package 出貨，它的 sha256 在建置時編進 entrypoint。entrypoint 由 [entrypoint pin](../../shipping/entrypoint_pin.json) 釘住，並納入 runtime package 的 digest 和簽章。要讓 runtime 對替換的模型報出 `expected_source_verified`，就得連 pinned entrypoint 一起換掉，光換模型 bundle 做不到。這回答了 CC-536-01-02 要求的判準：expected 來源能不能和模型被同一個 caller 一起替換。
 
-**仍然成立的限制**：caller 如果能寫 runtime prefix，就能直接換掉 entrypoint，runtime 無法自我防禦。這種情況只能靠重新驗證 runtime package 的 digest 和簽章發現。執行期仍然不驗簽章，所以 `publisher_authentication: not_checked_by_runtime` 照舊。allowlist 只認證工程上的 identity，不代表權利批准。
+<a id="trust-root-limits"></a>**仍然成立的限制**：caller 如果能寫 runtime prefix，就能直接換掉 entrypoint，runtime 無法自我防禦。這種情況只能靠重新驗證 runtime package 的 digest 和簽章發現。執行期仍然不驗簽章，所以 `publisher_authentication: not_checked_by_runtime` 照舊。allowlist 只認證工程上的 identity，不代表權利批准。同理，VL2 只說明正在執行的那個 build 選了哪個信任根；要宣稱 SACCADE 官方認可，還需要另外驗證 runtime package（[#610 R2](#decision-610)）。
 
 ## 4. 責任分工
 
@@ -174,7 +200,7 @@ flowchart LR
 | D1 | 發行架構 | B（第 5 節） | A、C |
 | D2 | 可信 expected identity 的信任根 | **TR-1b**：runtime package 帶 `saccade.trusted_model_bundles/v1` allowlist，其 sha256 編進 entrypoint | TR-1a：allowlist 直接編進 binary（效果相同，但不易審查）。TR-2：runtime 用內建公鑰驗 bundle 簽章，可以解除 bundle 和 runtime 的耦合，但要在 runtime 加 crypto 依賴（新的 #547 稽核物件），而且 CC-536-01-02 已決定執行期不驗 minisign，列為延後的 S2-4。TR-3：installed MANIFEST 或 bundle 自帶的 sidecar，因為和模型在同一棵 caller 可寫的樹而**拒絕**。TR-4：caller 的 lineage／attestation，因為自我認證而**拒絕**。TR-5：環境變數或 CLI 指定 expected sha，因為 caller 可控而**拒絕** |
 | D3 | member 由誰攜帶 | N01、N02、N05 和 binding members N04、N06 放 bundle；N03（operator，專案程式碼）放 runtime package，bundle 用 `requires_operator` 綁它的 sha256 | 把 N04／N06 放 runtime：每換一次模型，runtime 都要跟著換。把 N03 放 bundle：bundle 會帶 native code，而且 operator 的 ABI 綁的是 runtime 的 LibTorch |
-| D4 | 模式與預設 policy | legacy 模式（現行參數）和 manifest 模式（`--model-bundle`）互斥；legacy 最高只到 `checksum_matched`。policy 只有 `--require-identity {none,checksum_matched,expected_source_verified}`。S2-1 所有 entrypoint 預設 `none`（現行行為不變）；S2-3 package 拆分時 installed launcher 預設改成 `expected_source_verified`，此後 legacy 模式要明確加 `--require-identity checksum_matched`，結果不得引用已發表數字（[契約 3.4](../architecture/model_bundle_contract_549.md#modes)） | 一開始就讓 installed launcher 要求 VL2：現有 package 沒有 manifest 和 allowlist entry，等於立刻讓它無法執行。永遠只要求 `checksum_matched`：自洽替換照樣通過，G01 沒有解決 |
+| D4 | 模式與預設 policy | legacy 模式（現行參數）和 manifest 模式（`--model-bundle`）互斥；legacy 最高只到 `checksum_matched`。policy 只有 `--require-identity {none,checksum_matched,expected_source_verified}`。S2-1 所有 entrypoint 預設 `none`（現行行為不變）；S2-3 package 拆分時 installed launcher 預設改成 `expected_source_verified`，此後 legacy 模式要明確加 `--require-identity checksum_matched`，結果不得引用已發表數字（[契約 3.4](../architecture/model_bundle_contract_549.md#modes)）。**S2-3 這一步已由 [#610 R1](#decision-610) 取代：installed 預設 `checksum_matched`，VL2 改為 opt-in** | 一開始就讓 installed launcher 要求 VL2：現有 package 沒有 manifest 和 allowlist entry，等於立刻讓它無法執行。永遠只要求 `checksum_matched`：自洽替換照樣通過，G01 沒有解決 |
 | D5 | 載入 bytes 與核對 bytes 一致（TOCTOU） | 只決定安全目標：每個載入檔的實際載入 bytes 必須就是核對過的 bytes，做到之前 `load_verification` 不得宣稱 `loaded_buffer`。engine 和 head 從已 hash 的記憶體 buffer 載入。operator 的做法**不在本決策內批准**：sealed memfd `dlopen` 只是候選。現行 auditor 以名稱（basename／SONAME family）辨識 operator，並與由 install prefix 固定的路徑比對（[loader_audit.c](../../shipping/src/loader_audit.c) `la_objopen`）。memfd 映射（`/proc/self/fd/N`，`realpath` 失敗）不會被辨識為 operator，等於繞過這項 provenance 檢查；S2-2 必須證明不削弱此檢查，不得用放寬或繞過 auditor 換取通過；S2-2 還必須驗證 N03 RUNPATH 例外、依賴載入與真實 GPU 執行，否則 operator 記成殘留風險 | 三個檔案都維持用路徑載入：G03 的 TOCTOU 就留著 |
 | D6 | manifest 模式下 attestation 是否必填 | 必填（schema 的 `pairing.attestation`） | 和直接 CLI 一樣選用：operator realization 就沒有 binding |
 | D7 | v1 是否允許 `engine_precision: unresolved` | 允許。N01 的 precision 在 S0 沒有記錄，而 runtime 不以它作為 gate | 要求必須是確定值：發行第一個 bundle 前得先量出 N01 的 precision |
@@ -186,7 +212,7 @@ flowchart LR
 - **Identity 與 pin**：allowlist 每改一次，entrypoint 的 bytes 就跟著變，需要重新 pin，並依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) 重新發布 runtime coordinate，送 owner review。TR-1b 的代價是每次 approve 新 bundle 都要重建 runtime。bundle 發行頻率超過 runtime 時，再考慮 D2 的 TR-2。
 - **模型座標**：模型的 identity 是 manifest 檔的 sha256。只要任何 member 的 sha 改變，就是新的模型座標。原 A_L 證據只在 member bytes 相同、且新 loader 的 parity 已重跑時才能沿用（S3）。
 - **既有 frozen 檔不改寫**：N05 lineage v1 和 N06 attestation v1 由 manifest 包住、以 sha 綁定，不重新寫入。#465 C3/C4 的 digest、簽章、loader audit 都不放寬。
-- **CLI**：`--model-bundle` 是新增、與舊參數互斥的模式，舊參數保留。installed launcher 的預設 policy 在 S2-3 才改變（D4），這要在 CLI 說明和 package README 中以版本化方式記錄。
+- **CLI**：`--model-bundle` 是新增、與舊參數互斥的模式，舊參數保留。installed launcher 的預設 policy 在 S2-3 才改變（D4，依 [#610 R1](#decision-610) 改為 `checksum_matched`），這要在 CLI 說明和 package README 中以版本化方式記錄。S2-3 另外新增 Gate-A-only 的 `--check-bundle`（[#610 R5](#decision-610)）。
 - **Gate A → Gate B 的路徑**：拆成兩種 root 後，Gate B 不能再用單一 `model_root` 解析路徑，改為只吃 Gate A 的 resolved bindings；identity 只記 Gate A 核對過的 bytes；載入涵蓋範圍由 Gate B 另外寫在 `load_verification`，S2-2 之前最多是 `hashed_before_load`（[契約 4.1](../architecture/model_bundle_contract_549.md#load-verification)）。
 - **沒有改變的事**：`distribution.status=local-only`、`owner_confirmation=null`、#547 的所有 OPEN 項目、#465 `ENGINEERING_COMPLETE`、required checks。
 
