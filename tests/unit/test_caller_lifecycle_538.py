@@ -13,7 +13,7 @@ Owner's final ruling (2026-10-17):
 - A ``WorkbenchPool.stop()`` timeout never forces the batcher out.
 
 Each scenario runs the real entry point in a fresh interpreter under an
-outside timeout. Media, detector, orchestrator and VRAM writer are fakes, and
+outside timeout. Media, NVML, detector, orchestrator and VRAM writer are fakes, and
 the native check is bypassed, so there is no GPU, Redis or RTSP. The
 WorkbenchPool scenarios reuse the D2-WB fakes.
 """
@@ -28,6 +28,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 from tests.unit.test_workbench_pool_lifecycle_observed_538 import (
     _PRELUDE as _WB_PRELUDE,
@@ -51,6 +53,10 @@ for name, attrs in {
     sys.modules[name] = mod
 
 import saccade.perception.dispatcher as d
+import saccade.resource.resource_manager as resource_module
+# main.py constructs its process-global manager at import time, before the
+# caller-specific manager is supplied below. Keep that import host-only too.
+resource_module.pynvml = MagicMock()
 d.native_unavailable_reason = lambda: None
 WRITER = MagicMock()
 d.VRAMLevelWriter = lambda: WRITER
@@ -73,6 +79,8 @@ class FakeDetector:
 
 def fake_rm():
     rm = MagicMock()
+    from saccade.resource.resource_manager import VRAMStats
+    rm.get_stats.return_value = VRAMStats(100.0, 0.0, 100.0, 0.0)
     rm.decide_degradation_level.return_value = d.DegradationLevel.NORMAL
     return rm
 
@@ -729,4 +737,210 @@ def test_run8_partial_dispatcher_start_is_cleaned_up() -> None:
         "rm_closed": "1",
         "telemetry_stopped": "1",
         "released": "[]",
+    }
+
+
+# ── #537 D-537-4A: monitor refusal, diagnosis and caller ownership ────────
+
+_MONITOR = r"""
+from saccade.resource.resource_manager import ResourceMonitorUnavailable
+BACKEND = OSError("NVML driver unavailable")
+MONITOR = ResourceMonitorUnavailable("NVML probe failed: NVML driver unavailable")
+MONITOR.__cause__ = BACKEND
+WRITER_FACTORY = MagicMock(return_value=WRITER)
+d.VRAMLevelWriter = WRITER_FACTORY
+
+async def checked_monitor(coro):
+    try:
+        await checked(coro)
+    except BaseException as error:
+        monitor = error if isinstance(error, ResourceMonitorUnavailable) else error.__cause__
+        print(f"@monitor_identity={monitor is MONITOR}")
+        print(f"@backend_identity={monitor.__cause__ is BACKEND}")
+        raise
+
+def monitor_after():
+    dispatcher = INSTANCES[-1]
+    stats = dispatcher.get_stats()
+    print(f"@level={stats['current_level']}")
+    print(f"@monitor_status={stats['resource_monitor_status']}")
+    print(f"@monitor_error={stats['resource_monitor_error']}")
+    print(f"@writer_created={WRITER_FACTORY.call_count}")
+    print(f"@worker_missing={dispatcher._worker_task is None}")
+    print(f"@queue_empty={dispatcher.queue.empty()}")
+"""
+
+
+@pytest.mark.parametrize("phase", ["startup", "runtime"])
+def test_main_monitor_failure_preserves_diagnosis_and_cleans_up(phase: str) -> None:
+    method = "get_stats" if phase == "startup" else "decide_degradation_level"
+    out = _run(
+        f"main.resource_manager.{method}.side_effect = MONITOR\n"
+        "report(lambda: asyncio.run(checked_monitor(perception())))\n"
+        "after()\nmonitor_after()",
+        prelude=_MAIN + _MONITOR,
+    )
+    assert _pick(out, *_MAIN_KEYS, "leftover_tasks") == {
+        "outcome": "ResourceMonitorUnavailable"
+        if phase == "startup"
+        else "DispatcherFailed",
+        "cause": "OSError" if phase == "startup" else "ResourceMonitorUnavailable",
+        "leftover_tasks": "0",
+        "state": "created" if phase == "startup" else "stopped",
+        "writer_closed": "0" if phase == "startup" else "1",
+        "released": "[]" if phase == "startup" else "['s1', 's2']",
+    }
+    assert _pick(
+        out,
+        "monitor_identity",
+        "backend_identity",
+        "level",
+        "monitor_status",
+        "writer_created",
+        "worker_missing",
+        "queue_empty",
+    ) == {
+        "monitor_identity": "True",
+        "backend_identity": "True",
+        "level": "UNKNOWN",
+        "monitor_status": "unavailable",
+        "writer_created": "0" if phase == "startup" else "1",
+        "worker_missing": "True",
+        "queue_empty": "True",
+    }
+    assert "ResourceMonitorUnavailable" in out["monitor_error"]
+    assert "NVML driver unavailable" in out["monitor_error"]
+
+
+def test_main_orchestrator_only_remains_importable_when_nvml_init_fails() -> None:
+    out = _run(
+        r"""
+import saccade.resource.resource_manager as rm
+INIT_CALLS = []
+class UnavailableNVML:
+    def nvmlInit(self):
+        INIT_CALLS.append("init")
+        raise OSError("NVML driver unavailable")
+rm.pynvml = UnavailableNVML()
+sys.path.insert(0, ".")
+import main
+class OnlyOrchestrator:
+    async def run(self):
+        print("@orchestrator_ran=True")
+main.PipelineOrchestrator = OnlyOrchestrator
+sys.argv = ["main.py", "--mode", "orchestrator"]
+report(main.main)
+print(f"@init_calls={INIT_CALLS}")
+print(f"@dispatchers={len(INSTANCES)}")
+print(f"@initialized={main.resource_manager._nvml_initialized}")
+""",
+        prelude=_COMMON,
+    )
+    assert _pick(
+        out, "outcome", "orchestrator_ran", "init_calls", "dispatchers", "initialized"
+    ) == {
+        "outcome": "ok",
+        "orchestrator_ran": "True",
+        "init_calls": "['init']",
+        "dispatchers": "0",
+        "initialized": "False",
+    }
+
+
+@pytest.mark.parametrize("phase", ["startup", "runtime"])
+def test_run8_monitor_failure_preserves_diagnosis_and_releases_owned_resources(
+    phase: str,
+) -> None:
+    method = "get_stats" if phase == "startup" else "decide_degradation_level"
+    out = _run(
+        f"""
+def unavailable_rm():
+    manager = recording_rm()
+    manager.{method}.side_effect = MONITOR
+    return manager
+run8.ResourceManager = unavailable_rm
+report(lambda: asyncio.run(checked_monitor(run8.run_multistream_perception(args()))))
+after_dispatcher()
+monitor_after()
+""",
+        prelude=_DISPATCHER_SCRIPT + _MONITOR,
+    )
+    assert _pick(out, *_DISPATCHER_KEYS, "leftover_tasks") == {
+        "outcome": "ResourceMonitorUnavailable"
+        if phase == "startup"
+        else "DispatcherFailed",
+        "cause": "OSError" if phase == "startup" else "ResourceMonitorUnavailable",
+        "leftover_tasks": "0",
+        "state": "created" if phase == "startup" else "stopped",
+        "rm_closed": "1",
+        "telemetry_stopped": "1",
+        "released": "[]" if phase == "startup" else "['0', '1']",
+    }
+    assert _pick(
+        out,
+        "monitor_identity",
+        "backend_identity",
+        "level",
+        "monitor_status",
+        "writer_created",
+        "worker_missing",
+        "queue_empty",
+    ) == {
+        "monitor_identity": "True",
+        "backend_identity": "True",
+        "level": "UNKNOWN",
+        "monitor_status": "unavailable",
+        "writer_created": "0" if phase == "startup" else "1",
+        "worker_missing": "True",
+        "queue_empty": "True",
+    }
+    assert "ResourceMonitorUnavailable" in out["monitor_error"]
+    assert "NVML driver unavailable" in out["monitor_error"]
+
+
+@pytest.mark.parametrize("monitor_status", ["available", "unavailable"])
+def test_run8_text_report_preserves_unknown_level_and_monitor_reason(
+    monitor_status: str,
+) -> None:
+    out = _run(
+        f"MONITOR_STATUS = {monitor_status!r}\n"
+        + r"""
+class MonitorStatsDispatcher(RecordingDispatcher):
+    def get_stats(self):
+        stats = super().get_stats()
+        stats.update(
+            current_level="UNKNOWN", resource_monitor_status=MONITOR_STATUS,
+            resource_monitor_error=repr(MONITOR) if MONITOR_STATUS == "unavailable" else "",
+        )
+        return stats
+run8.AsyncDispatcher = MonitorStatsDispatcher
+async def idle_producer(*args):
+    await asyncio.Event().wait()
+run8.run_stream_producer = idle_producer
+async def report_once(interval, report):
+    report()
+    raise RuntimeError("report complete")
+run8._stats_loop = report_once
+report(lambda: asyncio.run(checked(run8.run_multistream_perception(args()))))
+after_dispatcher()
+""",
+        prelude=_DISPATCHER_SCRIPT + _MONITOR,
+    )
+    lines = [
+        line for line in out["_stdout"].splitlines() if "Dispatcher Stats:" in line
+    ]
+    assert len(lines) == 1
+    assert f"level=UNKNOWN monitor={monitor_status} " in lines[0]
+    if monitor_status == "unavailable":
+        assert "ResourceMonitorUnavailable" in lines[0]
+        assert "NVML driver unavailable" in lines[0]
+    else:
+        assert "monitor_error='' " in lines[0]
+    assert _pick(
+        out, "outcome", "leftover_tasks", "rm_closed", "telemetry_stopped"
+    ) == {
+        "outcome": "RuntimeError",
+        "leftover_tasks": "0",
+        "rm_closed": "1",
+        "telemetry_stopped": "1",
     }

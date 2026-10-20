@@ -6,6 +6,7 @@
 ## 🟢 目前現況
 * **ResourceManager 階梯降級邏輯**：
   * 使用 `pynvml` 連接 GPU 驅動，監控顯存佔用百分比。
+  * NVML 初始化／讀取失敗或原始 sample 無效時，拋具名 `ResourceMonitorUnavailable`，不以全零冒充健康；AsyncDispatcher 在啟動前檢查，執行中失敗進入 FAILED，stats 顯示 UNKNOWN 與監控錯誤。契約見 [degradation §7](architecture_degradation.md#7-nvml-失敗契約537-c0-05d-537-4a)。
   * 降級閾值設定為：NORMAL (<85%) ➡️ REDUCED (85%~92%，壓縮緩衝池) ➡️ FAST_PATH (92%~96%，跳過 ReID/RAG) ➡️ EMERGENCY (>96%，縮小解析度至 320p、丟棄非異常影格)。
   * **遲滯保護 (Hysteresis)**：下降門檻比上升門檻低 $5\%$，即升級到 EMERGENCY (96%) 後，必須降到 $91\%$ 以下才恢復為 FAST_PATH；FAST_PATH (92%) 必須降到 $87\%$ 以下恢復成 REDUCED，以此防止顯存處於臨界值時系統抖動。
 * **跨進程廣播設計 (`saccade_vram_level`)**：

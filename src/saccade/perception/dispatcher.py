@@ -29,6 +29,7 @@ from saccade.perception.zero_copy import Nv12Frame
 from saccade.resource.resource_manager import (
     DegradationLevel,
     ResourceManager,
+    ResourceMonitorUnavailable,
     VRAMLevelWriter,
     vram_level_clock_ns,
 )
@@ -742,7 +743,12 @@ class AsyncDispatcher:
         self._running = False
         self._vram_writer: Optional[VRAMLevelWriter] = None
         self._worker_task: Optional[asyncio.Task[None]] = None
-        self._current_level = DegradationLevel.NORMAL
+        # #537 D-537-4A: a retained hysteresis value is not a valid observation
+        # for a new run. ResourceManager owns that state; this is only the last
+        # successful decision in the current run, hidden after monitor failure.
+        self._current_level: Optional[DegradationLevel] = None
+        self._resource_monitor_status = "unprobed"
+        self._resource_monitor_error = ""
         # #538 D2-AD: lifecycle state, the worker's original error, the batch
         # taken off the queue but not yet task_done(), and frame accounting.
         self._state = DispatcherState.CREATED
@@ -798,15 +804,30 @@ class AsyncDispatcher:
         err.__cause__ = self._failure
         return err
 
+    def _monitor_unavailable(self, error: ResourceMonitorUnavailable) -> None:
+        self._resource_monitor_status = "unavailable"
+        self._resource_monitor_error = repr(error)
+        self._current_level = None
+
     async def start(self) -> None:
         if self._state is DispatcherState.RUNNING:
             raise RuntimeError("AsyncDispatcher is already running")
         if self._state is DispatcherState.FAILED:
             # A failed run must be stopped (and cleaned up) before a restart.
             raise self._failed()
+        self._current_level = None
         reason = native_unavailable_reason()
         if reason is not None:
             raise OnlineTrackerUnavailable(reason)
+        try:
+            # Probe before acquiring a writer or starting a worker. This does
+            # not decide a level or advance the manager's hysteresis state.
+            self.resource_manager.get_stats()
+        except ResourceMonitorUnavailable as error:
+            self._monitor_unavailable(error)
+            raise
+        self._resource_monitor_status = "available"
+        self._resource_monitor_error = ""
         self._failure = None
         self._state = DispatcherState.RUNNING
         self._running = True
@@ -926,7 +947,11 @@ class AsyncDispatcher:
             "failed_batch_frames": self._failed_batch_frames,
             "discarded_on_failure": self._discarded_on_failure,
             "discarded_on_stop": self._discarded_on_stop,
-            "current_level": self._current_level.name,
+            "current_level": self._current_level.name
+            if self._current_level is not None
+            else "UNKNOWN",
+            "resource_monitor_status": self._resource_monitor_status,
+            "resource_monitor_error": self._resource_monitor_error,
             # The level only caps the batch size; the tracker itself is never
             # degraded (#537 R-1).
             "tracker_degradation": "none",
@@ -994,7 +1019,13 @@ class AsyncDispatcher:
             self._inflight = batch_items
             try:
                 decided_at_ns = vram_level_clock_ns()
-                level = self.resource_manager.decide_degradation_level()
+                try:
+                    level = self.resource_manager.decide_degradation_level()
+                except ResourceMonitorUnavailable as error:
+                    self._monitor_unavailable(error)
+                    raise
+                self._resource_monitor_status = "available"
+                self._resource_monitor_error = ""
                 self._current_level = level
                 if self._vram_writer is not None:
                     self._vram_writer.write(level, decided_at_ns)

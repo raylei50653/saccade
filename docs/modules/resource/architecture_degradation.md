@@ -36,7 +36,7 @@ L6 是 Saccade 的「決策大腦」，負責高層級的 VRAM 資源監控與�
 - 一次決策不會同時升級又恢復，也不會一次降兩級。從 EMERGENCY 回到 NORMAL 至少要 3 次決策。
 - 決策頻率：dispatcher 每個 batch 決策一次，閒置時不決策；沒有最短停留時間（F0）。
 - 初值：新的 `ResourceManager` 從 NORMAL 開始，第一次決策就升到 usage 對應的級別，不繼承前一個 writer 的狀態（R0）。
-- 不在本契約內：NVML 不可用（C0-05，REQ-535-07-01）；NaN、負值或超過 100 的 usage（目前 NaN 維持原級、負值降一級、>100 升到 EMERGENCY，只是現況，不是支持契約）。
+- NVML 不可用與無效原始 sample 依 §7 明確失敗，不做這次 hysteresis 決策。測試替身直接注入 NaN、負值或超過 100 的 `VRAMStats.usage_percent` 仍不在決策支持契約內（NaN 維持原級、負值降一級、>100 升到 EMERGENCY，只是 O0 現況）。
 
 契約測試在 `tests/unit/test_resource_degradation_hysteresis_537.py`；修復前的轉換表與修復紀錄見 [#537 C0 §3、§8](../../architecture/failure_degradation_537.md#8-c2-遲滯修復c0-04-收斂)。
 
@@ -91,6 +91,30 @@ Dispatcher 端的 `VRAMLevelWriter` 把每次決策發佈為一份完整快照�
 
 - 「嘗試持久化」不等於不遺失資料。`add_memory` 失敗時例外仍被吞掉，整批照樣 ACK；PEL 也沒有回收（REQ-535-06-01，#538）。
 - 不保證 unknown 狀態下不使用 GPU。Chroma 的預設 embedding 沒有指定 provider，可能用到 GPU；已經在執行的 RAG task，以及啟動時的 RAG 初始化，都不受這個 gate 控制。
-- NVML 初始化失敗時，writer 仍會發佈 FRESH NORMAL（C0-05），本契約不涵蓋這種情況（REQ-535-07-01）。
+- NVML 失敗的處理另見 §7（C0-05／D-537-4A）；失敗時不產生新決策，現存快照仍依本節的 T 老化，不保證跨程序即時知道 monitor failure。
 
 **部署規則**：v1 記錄與修復前的 1-byte segment 不能混用。新 reader 會把舊 segment 判為 INVALID，但舊 reader 不會檢查 freshness、會保留舊 mapping，而且它結束時，它的 `resource_tracker` 會刪除公開名稱。升級或 rollback 時：(1) 停掉 perception（writer）與 orchestrator（reader）兩端；(2) 確認兩端程序與它們的 `multiprocessing.resource_tracker` 子程序都已結束（例如以服務使用者執行 `pgrep -f multiprocessing.resource_tracker` 沒有結果）；(3) 再啟動新版本。如果漏掉第 (2) 步，殘留 tracker 刪除的只是名稱：reader 會讀到 MISSING（不會讀到錯誤的 level），writer 下一次發佈就會恢復（整合測試 `test_legacy_attacher_tracker_removal_heals_on_next_decision`）。
+
+## 7. NVML 失敗契約（#537 C0-05／D-537-4A）
+
+Owner 在 2026-10-20 核准 4A，裁決與原始重現見 [#537 §19](../../architecture/failure_degradation_537.md#19-c0-05nvml-失敗的重現與核准方案)，實作證據見該文件 §20。此契約限 `ResourceManager` → `AsyncDispatcher` 的 online 路徑；不批准整個 online-service profile，也不把 WorkbenchPool、health CLI 或獨立 telemetry 視為已接上此監控。
+
+**取得有效測量才決策**：constructor 保留 NVML init 的原始錯誤，允許 import／construct，讓 orchestrator-only 入口不因監控能力缺失而在 import 時失敗。`get_stats()` 只在有效測量時回 `VRAMStats`；init／handle／memory info 取得失敗時，拋 `ResourceMonitorUnavailable(RuntimeError)` 並保留原始 cause。原始 sample 必須 total 為有限正數、used 有限且 0 ≤ used ≤ total、free 有限且非負；不要求 free+used==total。驗證失敗時，同一具名錯誤以 `ValueError` 保留驗證原因。真正 used=0 且 total>0 仍是合法測量，依 §5 恢復。
+
+**啟動與執行中失敗**：
+
+| 邊界 | 行為與可觀測結果 |
+|:--|:--|
+| `AsyncDispatcher.start()` | native preflight 後、建立 writer／worker 前先 `get_stats()`。失敗拋具名 monitor error，狀態維持 CREATED／STOPPED，不建立 writer／task、不接受 frame；成功測量不推進 hysteresis，也不發佈決策 |
+| 每個 batch | 決策成功才更新 level、發佈帶原決策開始時間的快照。monitor error 沿既有 D2-AD 通道進入 FAILED；拒絕新 frame，結清失敗批與 queue；`stop()` 清理後拋 `DispatcherFailed`，cause 鏈保留 monitor error 與原始 probe／驗證原因 |
+| dispatcher stats | `resource_monitor_status` 初始為 `unprobed`，成功測量為 `available`，監控失敗為 `unavailable`；`resource_monitor_error` 初始／成功為空字串，失敗為具名錯誤。`current_level` 在初始、start 嘗試後尚無有效 batch 決策或 monitor 失敗時是 `"UNKNOWN"`；只有有效 batch 決策才顯示 level 名稱。startup monitor error 不覆寫 D2 worker failure 的歷史 |
+| 其他 worker 錯誤 | detector／tracker／callback 失敗仍依 D2-AD；不把這些錯誤標成 NVML unavailable |
+| caller 回報 | main 的既有例外通道保留 startup／runtime cause；8stream 的 dispatcher stats 印出 UNKNOWN、monitor status 與具名 error。main 的 process-global manager 與 8stream 的 per-run cleanup 所有權保持各自的既有契約 |
+
+**跨程序與恢復限制**：
+
+- 失敗 probe 不發佈 FRESH；舊快照在 T 內仍可 FRESH，超過 T 才 STALE。preflight 拒絕不碰現存快照，其中可能有舊版 fallback 寫出的 level。
+- 正常 stop 嘗試退役自己的快照；replacement 成功才立即 STALE。退役失敗仍靠 T 老化，不能把 stop 返回當作跨程序已即時同步。
+- 沒有背景 init retry。init 失敗後要換新 manager；post-init 的暫時故障可在修復 NVML 後明確 stop／start，重新 preflight 成功才接受 frame，沿用該 manager 的 hysteresis。新 manager 則遵守 R0 的 NORMAL 初值。
+- 初始化錯誤只在建構時診斷一次；讀取失敗保留在例外／stats，不按 frame 重複印 log。FAILED 也不會繼續消費 frame 來反覆故障。
+- 本次不改快照 v1、T、事件持久化／ACK／RAG policy、tracker 數值或 public facade。D2-GPU 完成前不宣稱 online-service qualification、不部署。
