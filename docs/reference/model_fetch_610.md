@@ -1,6 +1,6 @@
 <!-- doc-status: active -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-10-18 -->
+<!-- doc-date: 2026-10-20 -->
 <!-- doc-module: cross -->
 
 # #610 第二片：`model_fetch` 模型取得與離線核對
@@ -109,6 +109,7 @@
 
 **簽名 URL**：presigned URL 會把 token 放在 query 或 fragment。
 - 工具寫進紀錄、印到 stdout／stderr 的每個 URL 都去掉這兩段，包括 source url、redirect、`final_url` 和錯誤訊息；
+- 拒絕非 identity 的 `Content-Encoding` 或無法解析的 `Content-Length` 時，只印固定診斷，不回顯原始標頭值，避免伺服器透過標頭把簽名 URL 或 token 帶進輸出；
 - 紀錄仍然透過 `descriptor_sha256` 綁定**完整的** source 檔，所以去掉 token 不會放鬆配對：只差 token 的兩份 source 會被當成不同來源；
 - 紀錄以 0600 建立，作為額外防護。要讓別的帳號 `verify`，請自行調整權限；
 - **沒有涵蓋**：把 token 放在 URL path 裡的方案認不出來；`terms.url`、`hash_reference.citation` 原樣寫進紀錄，不要在那裡放秘密；source 檔本身含完整 URL，由使用者自行保管。
@@ -136,7 +137,7 @@
 
 ## 6. 測試矩陣
 
-[`tests/unit/test_model_fetch.py`](../../tests/unit/test_model_fetch.py)：66 個 case，CPU。全部對 127.0.0.1 上的本機 https server 進行：測試 CA 和 leaf 憑證在測試內產生，透過 `--ca-bundle` 傳給工具。body 是約 2.2 MiB 的合成資料。不連外部網路，也不下載真實模型。
+[`tests/unit/test_model_fetch.py`](../../tests/unit/test_model_fetch.py)：72 個 case，CPU。全部對 127.0.0.1 上的本機 https server 進行：測試 CA 和 leaf 憑證在測試內產生，透過 `--ca-bundle` 傳給工具。body 是約 2.2 MiB 的合成資料。不連外部網路，也不下載真實模型。
 
 | 類別 | Case | 預期 |
 |:--|:--|:--|
@@ -161,6 +162,7 @@
 | 簽名 URL | source url 的 query 和 fragment 帶 token | `fetch`、`verify`、rerun 都 exit 0；整份紀錄、stdout、stderr 都沒有 token；紀錄 `source.url` 是去掉 query 的 URL、`descriptor_sha256` 等於 source 檔的 sha256、權限 0600 |
 | 簽名 URL | 同一個去 token URL、另一個 token 的 source | `verify` 1，原因只有 `descriptor_sha256` 而沒有 `source.url`；`fetch` 2，0 個新請求；輸出沒有 token |
 | 簽名 URL（2） | 帶 token 的 source 遇到 404；redirect 到帶 token 的 http | exit 3／2；輸出沒有 token；目錄是空的 |
+| 標頭回顯（6） | 帶 query token 的 source；`Content-Encoding`／無法解析的 `Content-Length` 分別回顯完整簽名 URL、單獨的 query token 或另一個 token | 真實 CLI subprocess exit 3；stdout 一份 JSON，stderr 同一個固定診斷；兩者都不含原始標頭值或 token；只有一次請求，目錄是空的 |
 | 簽名 URL | `scrub()` 單元測試 | URL、query、fragment 都被移除 |
 | CLI（6） | 沒有參數、未知子命令、缺 `--source`／`--dest`、`--max-redirects x`、未知旗標 | exit 2；stdout 一份 JSON |
 | CLI | 真實 subprocess 的參數錯誤 | exit 2；stdout 是 JSON；stderr 有 usage |

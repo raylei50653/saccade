@@ -432,7 +432,12 @@ def test_no_expected_hash_allowed_is_local_only(
         (body(length=None), {"size": len(BODY) - 10, "sha": "1" * 64}, 1, "more than"),
         (body(length=len(BODY) + 100), {"size": None}, 1, "truncated"),
         (body(close_after=1000), {}, 1, "truncated"),
-        (body(headers={"Content-Encoding": "gzip"}), {}, 3, "Content-Encoding gzip"),
+        (
+            body(headers={"Content-Encoding": "gzip"}),
+            {},
+            3,
+            "unsupported Content-Encoding",
+        ),
         (lambda h: h.send_error(404), {}, 3, "HTTP 404"),
     ],
     ids=[
@@ -801,6 +806,66 @@ def test_signed_source_url_token_is_absent_from_failure_diagnostics(
     )
     assert code in (2, 3) and out["status"] == "failed"
     assert TOKEN not in text and listing(dest) == []
+
+
+@pytest.mark.parametrize(
+    ("header", "error"),
+    [
+        ("Content-Encoding", "unsupported Content-Encoding"),
+        ("Content-Length", "invalid Content-Length"),
+    ],
+)
+@pytest.mark.parametrize("echo", ["signed-url", "query-token", "unrelated-token"])
+def test_untrusted_response_headers_are_absent_from_cli_diagnostics(
+    tmp_path: Path, server: Server, dest: Path, header: str, error: str, echo: str
+) -> None:
+    signed_path = f"/m?sig={TOKEN}"
+    signed_url = server.url(signed_path)
+    unrelated_token = "UNRELATED-HEADER-TOKEN-612"
+    value = {
+        "signed-url": signed_url,
+        "query-token": TOKEN,
+        "unrelated-token": unrelated_token,
+    }[echo]
+
+    def route(h: BaseHTTPRequestHandler) -> None:
+        h.send_response(200)
+        h.send_header(header, value)
+        if header != "Content-Length":
+            h.send_header("Content-Length", "0")
+        h.send_header("Connection", "close")
+        h.end_headers()
+        h.close_connection = True
+
+    server.routes["/m"] = route
+    src = make_source(tmp_path, signed_url)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(TOOL),
+            "fetch",
+            "--source",
+            str(src),
+            "--dest",
+            str(dest),
+            "--ca-bundle",
+            str(server.ca),
+        ],
+        capture_output=True,
+        env=_env(),
+        timeout=60,
+    )
+    assert proc.returncode == 3
+    out = json.loads(proc.stdout)
+    assert out["exit_code"] == 3 and out["status"] == "failed"
+    diagnostics = (proc.stdout + proc.stderr).decode().casefold()
+    assert TOKEN.casefold() not in diagnostics
+    assert unrelated_token.casefold() not in diagnostics
+    assert value.casefold() not in diagnostics
+    assert out["error"] == error
+    assert proc.stderr.decode() == f"model_fetch: {error}\n"
+    assert server.requests == [signed_path]
+    assert listing(dest) == []
 
 
 def test_scrub_removes_the_url_its_query_and_fragment() -> None:

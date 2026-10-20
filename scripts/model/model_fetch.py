@@ -476,16 +476,15 @@ def stream(
     url: str,
 ) -> dict[str, Any]:
     exp = src["expected"]
+    # Rejected header values may contain signed URLs or secrets; do not echo them.
     encoding = (resp.headers.get("Content-Encoding") or "identity").strip().lower()
     if encoding != "identity":
-        raise Failure(EXIT_TRANSPORT, f"Content-Encoding {encoding} refused")
+        raise Failure(EXIT_TRANSPORT, "unsupported Content-Encoding")
     length_text = resp.headers.get("Content-Length")
     try:
         length = int(length_text) if length_text is not None else None
     except ValueError:
-        raise Failure(
-            EXIT_TRANSPORT, f"invalid Content-Length {length_text!r}"
-        ) from None
+        raise Failure(EXIT_TRANSPORT, "invalid Content-Length") from None
     cap = exp["bytes"] if exp["bytes"] is not None else args.max_bytes
     if length is not None and exp["bytes"] is not None and length != exp["bytes"]:
         raise Failure(
