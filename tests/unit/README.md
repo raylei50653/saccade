@@ -42,7 +42,8 @@
 | `test_resolved_shipping_config.py` | system | contract | active | The headline resolved shipping config equals what the Python oracle uses. |
 | `test_resource_degradation_hysteresis_537.py` | resource | contract | active | #537 C2: degradation-level hysteresis contract (D-537-2). |
 | `test_resource_degradation_observed_537.py` | resource | diagnostic | active | #537 C0: pin the observed resource degradation / VRAM-level SHM behavior. |
-| `test_resource_monitor_observed_537.py` | resource,perception | diagnostic | active | #537 C0-05: characterize NVML failure and the existing dispatcher boundary. |
+| `test_resource_monitor_contract_537.py` | resource | contract | active | #537 D-537-4A: NVML measurements have explicit acquisition validity. |
+| `test_resource_monitor_dispatcher_contract_537.py` | resource,perception | contract | active | #537 D-537-4A: monitor preflight, failure reporting and explicit recovery. |
 | `test_saccade_track_completion_cli.py` | system | contract | active | ``saccade_track`` run completion at the real entrypoint, without a GPU (#536). |
 | `test_saccade_track_model_bundle_cli.py` | system | contract | active | ``saccade_track --model-bundle`` at the built entrypoints (#549 S2-1). |
 | `test_saccade_track_preflight_cli.py` | system | contract | active | ``saccade_track`` Gate A at the built entrypoint: refusals make no CUDA call (#536). |

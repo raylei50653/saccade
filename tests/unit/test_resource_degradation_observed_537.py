@@ -31,6 +31,7 @@ import saccade.resource.resource_manager as rm
 from saccade.resource.resource_manager import (
     DegradationLevel as L,
     ResourceManager,
+    ResourceMonitorUnavailable,
     VRAMLevelReader,
     VRAMLevelWriter,
     VRAMReadStatus,
@@ -87,25 +88,24 @@ def test_c2_observed_single_decision(current: L, usage: float, observed: L) -> N
     assert _decide(current, usage) is observed
 
 
-# ── C3: NVML unavailable is reported as zero usage ───────────────────────────
-def test_c3_nvml_init_failure_reports_zero_stats() -> None:
-    with mock.patch.object(pynvml, "nvmlInit", side_effect=RuntimeError("nvml")):
+# ── C3: NVML unavailable is explicit (#537 D-537-4A) ─────────────────────────
+def test_c3_nvml_init_failure_raises_named_monitor_error() -> None:
+    original = RuntimeError("nvml")
+    with mock.patch.object(pynvml, "nvmlInit", side_effect=original):
         manager = ResourceManager()
-    assert vars(manager.get_stats()) == {
-        "free_mb": 0.0,
-        "used_mb": 0.0,
-        "total_mb": 0.0,
-        "usage_percent": 0.0,
-    }
+    with pytest.raises(ResourceMonitorUnavailable) as exc:
+        manager.get_stats()
+    assert exc.value.__cause__ is original
 
 
-def test_c3_nvml_init_failure_decays_emergency_to_normal() -> None:
+def test_c3_nvml_init_failure_preserves_hysteresis_state() -> None:
     with mock.patch.object(pynvml, "nvmlInit", side_effect=RuntimeError("nvml")):
         manager = ResourceManager()
     manager.current_level = L.EMERGENCY
-    seen = [manager.decide_degradation_level() for _ in range(3)]
-    # "cannot measure" ends as NORMAL; no distinct unknown state exists.
-    assert seen == [L.FAST_PATH, L.REDUCED, L.NORMAL]
+    for _ in range(3):
+        with pytest.raises(ResourceMonitorUnavailable):
+            manager.decide_degradation_level()
+        assert manager.current_level is L.EMERGENCY
 
 
 # ── C3 / B0-F07: VRAM-level snapshot (flipped from observed to target) ──────
