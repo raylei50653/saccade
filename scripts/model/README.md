@@ -41,6 +41,12 @@ README is the classification index for later cleanup.
 | `export_yolo_backbone.py` | Export YOLO backbone FPN features from base weights |
 | `export_yolo_backbone_ckpt.py` | Export YOLO backbone FPN features from gated-detector checkpoint |
 
+## Model Acquisition
+
+| Script | Role |
+|---|---|
+| `model_fetch.py` | `fetch` one model file from a user-chosen https URL with an expected sha256 (no hash: refused unless `--allow-no-expected-hash`, record `local_only`), publish it atomically with a `.fetch.json` record; `verify` offline. Integrity only, not source authentication (#610, `docs/reference/model_fetch_610.md`) |
+
 ## YOLO / TensorRT Build
 
 | Script | Role |
