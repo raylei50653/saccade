@@ -648,10 +648,19 @@ def test_run8_workbench_worker_failure_releases_everything() -> None:
 
 
 def test_run8_workbench_stop_timeout_keeps_the_batcher() -> None:
+    # After the STOPPING snapshot, release the workers and retry stop() so no
+    # worker thread is still running torch code at interpreter exit (#613: that
+    # aborted the subprocess with SIGABRT).
     out = _run(
         'MODE["process"] = "block"\n'
         'report(lambda: asyncio.run(cancel_after(run8.run_multistream_perception(args("--workbench")), 0.3)))\n'
-        "after_pool()\nGATE.set()",
+        "after_pool()\n"
+        "GATE.set()\n"
+        "POOL.stop()\n"
+        'print(f"@retry_pool_state={POOL.state.value}")\n'
+        'print(f"@retry_batcher_down={FakeBatcher.last.down}")\n'
+        'print(f"@retry_alive_at_shutdown={FakeBatcher.last.alive_at_shutdown}")\n'
+        'print(f"@workers_alive={sum(w.is_alive() for w in POOL._workers)}")',
         prelude=_POOL_SCRIPT,
     )
     assert _pick(
@@ -662,6 +671,10 @@ def test_run8_workbench_stop_timeout_keeps_the_batcher() -> None:
         "batcher_down",
         "telemetry_stopped",
         "released",
+        "retry_pool_state",
+        "retry_batcher_down",
+        "retry_alive_at_shutdown",
+        "workers_alive",
     ) == {
         "outcome": "CancelledError",
         "note": "cleanup pool.stop() also failed",
@@ -669,6 +682,10 @@ def test_run8_workbench_stop_timeout_keeps_the_batcher() -> None:
         "batcher_down": "False",
         "telemetry_stopped": "1",
         "released": "['0', '1']",
+        "retry_pool_state": "stopped",
+        "retry_batcher_down": "True",
+        "retry_alive_at_shutdown": "0",
+        "workers_alive": "0",
     }
 
 
