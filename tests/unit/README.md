@@ -20,6 +20,7 @@
 | `test_license_audit.py` | system | contract | active | The licence audit of the bundled third-party set (#465 PR-C4, #547). |
 | `test_math_model_doc_consistency.py` | eval,tracking | contract | active | Pin the LaTeX math-model document (``docs/latex``) to the code it describes. |
 | `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
+| `test_model_fetch.py` | system | contract | active | Model fetch / offline verify tool (#610 slice 2, scripts/model/model_fetch.py). |
 | `test_native_detector_oracle_pins.py` | system | contract | active | Oracle pins for the native detector (#465 Phase B PR-8, U3b-2). |
 | `test_native_double_buffer_oracle_pins.py` | system | contract | active | Oracle pins for the native double-buffer runtime (#465 Phase B PR-10, U5). |
 | `test_native_head_failure_localization_r2_runner.py` | system | contract | active | The #465 localization r2 runner implements its frozen declaration and nothing else. |
