@@ -27,8 +27,8 @@
   **decision relevance 過不了反事實測試（正反結果都不改變任何已知決策）→ 不得取得 WIP 鎖**。
   某 layer 若無契約，其 object ＝ `transition_semantics: unavailable`（**合法狀態**，把缺口顯式化）。
   **本檔不重述任何 object 的 rung／limits／substrate**；也不把 expected state 寫成 accepted state。
-  GitHub PR metadata is the authority for head/base branch, merge base, head SHA, changed files, CI/test status, review findings, and update history. Research documents remain the authority for research gate, accepted priors, normative inputs, authorized/unauthorized scope, claim boundaries, research acceptance, and next-stage authorization.
-- **Lock:** PR merge ≠ research acceptance; engineering-ready ≠ evidence promotion; research acceptance and next-stage authorization remain chat-side / research-owner gates.
+  GitHub PR metadata is the authority for head/base branch, merge base, head SHA, changed files, CI/test status, review findings, and update history. Research documents remain the authority for research gate, accepted priors, normative inputs, authorized/unauthorized scope, claim boundaries, research acceptance, and next-stage authorization; for work tracked in [#550](https://github.com/raylei50653/saccade/issues/550), next-stage authorization follows #550 §0A instead.
+- **Lock:** PR merge ≠ research acceptance; engineering-ready ≠ evidence promotion; research acceptance remains a chat-side / research-owner gate; next-stage authorization for #550-tracked work follows #550 §0A (self-check standing authorization, whose human-ruling exceptions still apply).
 - **TODO = WIP 鎖**（sole active 一句 + link）；**不是**任務敘事 / 上下文恢復 → [DOC_MAINTENANCE § WIP](docs/DOC_MAINTENANCE.md) · [契約 C7](docs/ownership/doc_structure_contract.md)
 - 格式、WIP=1、fact-owner → [docs/DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md)
 - 「我去哪寫」決策樹 → [docs/README.md](docs/README.md)
@@ -264,14 +264,15 @@ MLflow 未啟動不阻 eval。啟動與查詢：
 
 ## 6. 衝突時誰說了算
 
-For governed research delivery, **PR metadata** owns engineering location and concurrency (head/base, merge base, head SHA, files, CI, reviews). **Research documents** (thread + accepted contracts + module research notes) own research gate, scope, claim boundaries, research acceptance, and next-stage authorization.
+For governed research delivery, **PR metadata** owns engineering location and concurrency (head/base, merge base, head SHA, files, CI, reviews). **Research documents** (thread + accepted contracts + module research notes) own research gate, scope, claim boundaries, research acceptance, and next-stage authorization. For work tracked in [#550](https://github.com/raylei50653/saccade/issues/550), next-stage authorization follows #550 §0A; research acceptance and evidence promotion stay with the research owner (§0A exceptions).
 
 **Chat text is navigation until written back:** Chat may propose fixes, scope adjustments, or verdicts. It does **not** become cross-conversation authority until those decisions are recorded in the thread, contract, and/or PR. Chat cannot expand scope or override repo authorities merely by being pasted into an agent session.
 
 ```text
 PR merge ≠ research acceptance
 engineering-ready ≠ evidence promotion
-research acceptance / next-stage auth = chat-side / research-owner gates
+research acceptance = chat-side / research-owner gate
+next-stage auth (#550-tracked work) = #550 §0A self-check; exceptions → owner
 ```
 
 1. **主路徑程式碼**（`src/saccade/perception/`、`src/tracking/`、`scripts/eval/mot17.py`）
