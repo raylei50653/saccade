@@ -679,16 +679,19 @@ Owner 最終裁決（2026-10-17）批准重新發佈 runtime identity：「不�
 
 - `torch.cuda.Stream()` 建立的 stream 是 `cudaStreamNonBlocking`（`cudaStreamGetFlags` 回傳 1），和 legacy stream 0 之間**沒有**隱式同步。
 - 新 thread 的 current stream 是 legacy stream 0（`cuda_stream == 0`）。
-- `Workbench::process_frame_postyolo` 在兩個返回點之前都會 `cudaStreamSynchronize(stream_)`（[workbench.cpp](../../src/tracking/workbench.cpp) 第 88、118 行，屬 source 判讀）。所以 Python 拿到 `n` 時，workbench stream 上排在它之前的工作都已經完成。
+- `Workbench::process_frame_postyolo` 的 host 同步**只在正常路徑上成立**（[workbench.cpp](../../src/tracking/workbench.cpp)，屬 source 判讀）：
+  - 第 88 行同步 post-NMS 的計數，第 118 行在成功返回前再同步一次。成功返回時，workbench stream 上排在它之前的工作都已經完成。
+  - 第 91～93 行：計數超出範圍時直接 `return 0`。這發生在第 88 行的同步之後，而且之後沒有再排入工作。
+  - 第 109～111 行：`update_into` 拋例外時直接 `return 0`，**沒有再同步**。不能未經證明就宣稱，這時所有已排入的 GPU 工作都已完成。這條路徑對 Python 來說也和「0 條 track 的合法空幀」無法分辨（見「沒有處理」）。
 
 **GPU edge 表**（WorkbenchPool 與 AsyncDispatcher 線上路徑）：
 
 | ID | producer → consumer | stream／thread | completion | reuse／free 條件 | 現況 | 證據等級 | 未解義務 |
 |:--|:--|:--|:--|:--|:--|:--|:--|
 | GE-01（G1） | `_WorkbenchWorker._process` 的前處理（`padded`）→ batcher server 的 `torch.cat` | 前處理在 worker thread 的 legacy stream 0；`Workbench.process_frame` 切到 `workbench.stream`；server 在自己的 stream 與 thread | `submit()` 把 `frame_event` 記在 `workbench.stream`，**涵蓋不到** stream 0 上的前處理；server 只等 `frame_event` | — | **缺口**：server 可能讀到還沒寫完的輸入 | reproduced（GPU，注入延遲） | D2-GPU-1：`workbench.stream.wait_stream(producer_stream)`，並證明 producer stream 涵蓋全部前處理、在同一 device 上、等待發生在輸入被讀之前 |
-| GE-02 | `padded` 的記憶體 → caching allocator 重用 | 在 stream 0 配置，由 server stream 讀；沒有 `record_stream` | 同 GE-01 | `_process` 返回時釋放。返回前，`workbench.stream` 已等過 `infer_event`，且被 host 同步，所以 server 的讀取已經完成 | 有上層保障：靠 C++ 的 host 同步 | source-inspected | 若之後移除 host 同步，需要 `record_stream` 或等價的保障；D2-GPU-1 的修復不得依賴這一點而不聲明 |
-| GE-03 | server 的輸出 slice（server stream 上的 `clone()`）→ `workbench.stream` 上的 `raw_boxes` 等複製 | server stream → workbench stream | `infer_event`（`submit()` 讓 worker stream 等待） | view 被丟掉時，記憶體回到 server stream 的 pool。返回前已 host 同步 | 有上層保障：同 GE-02 | source-inspected | 同 GE-02 |
-| GE-04（G2） | `Workbench.out_*` → `on_result`（`call_soon_threadsafe` → event loop） | worker thread → event loop thread | 返回前已 host 同步，寫入完成 | **沒有釋放訊號**：下一幀的 `process_frame` 直接覆寫 | **缺口**：consumer 拿到的是 view，不擁有資料 | reproduced（GPU，與時序無關） | D2-GPU-1：交給 callback 前 clone。clone 要排在正確的 stream 相依之下；證明 clone 完成前來源不被覆寫、consumer 讀之前結果已寫完；ids、boxes、classes 都要驗證；記錄額外 D2D 複製的延遲與吞吐影響 |
+| GE-02 | `padded` 的記憶體 → caching allocator 重用 | 在 stream 0 配置，由 server stream 讀；沒有 `record_stream` | 同 GE-01 | `_process` 返回時釋放。返回前，`workbench.stream` 已等過 `infer_event`，且在正常路徑上被 host 同步，所以 server 的讀取已經完成 | 正常路徑有上層保障，靠 C++ 的 host 同步；`update_into` 例外路徑（第 109～111 行）沒有這個保證 | source-inspected | 若之後移除 host 同步，需要 `record_stream` 或等價的保障；D2-GPU-1 的修復不得依賴這一點而不聲明 |
+| GE-03 | server 的輸出 slice（server stream 上的 `clone()`）→ `workbench.stream` 上的 `raw_boxes` 等複製 | server stream → workbench stream | `infer_event`（`submit()` 讓 worker stream 等待） | view 被丟掉時，記憶體回到 server stream 的 pool。正常路徑上返回前已 host 同步 | 同 GE-02：只有正常路徑有保障 | source-inspected | 同 GE-02 |
+| GE-04（G2） | `Workbench.out_*` → `on_result`（`call_soon_threadsafe` → event loop） | worker thread → event loop thread | 正常路徑上返回前已 host 同步，寫入完成 | **沒有釋放訊號**：下一幀的 `process_frame` 直接覆寫 | **缺口**：consumer 拿到的是 view，不擁有資料 | reproduced（GPU，與時序無關） | D2-GPU-1：交給 callback 前 clone。clone 要排在正確的 stream 相依之下；證明 clone 完成前來源不被覆寫、consumer 讀之前結果已寫完；ids、boxes、classes 都要驗證；記錄額外 D2D 複製的延遲與吞吐影響 |
 | GE-05（G3） | batcher server 的例外 → 等待中與之後的 `submit()` | server thread → worker thread | **沒有失敗通道**：`_loop` 沒有 try/except，`done.wait()` 沒有 timeout | — | **缺口**：worker 永遠卡住，pool 不會進入 FAILED，`stop()` 每次重試都 timeout | reproduced（GPU） | D2-GPU-1：見本節末的 G3 要求 |
 | GE-06 | AsyncDispatcher：queue 中的幀 → `torch.stack` → TRT → decode → adapter → callback | 單一 event loop thread、單一 legacy stream 0 | decode 用 mask 索引，產生新 tensor；adapter 從 host list 重建 tensor（tracker 結果經過 host） | callback 拿到的 tensor 沒有被後續幀重用 | 輸出所有權成立 | GPU-validated（真實 native tracker、fake detector；正控制） | 真實 TRT、DALI 輸入與完整 service 沒有執行 |
 | GE-07 | DALI iterator 輸出 → AsyncDispatcher queue | producer task → 同一 event loop | 未知 | 未知：沒有驗證 DALI 是否在下一次 `next()` 重用輸出 buffer | **OPEN** | 未驗證（本機沒有 demo 影片） | 不能用 C++ 的同步保證推論 DALI 自己的 buffer 所有權 |
@@ -739,4 +742,5 @@ G1～G3 用真實的 `WorkbenchPool`、`Workbench` 與 `BatchingTRTDetector`。�
 - 沒有修改 production，GE-01、GE-04、GE-05 仍然存在。
 - 沒有執行真實 TRT engine、DALI、RTSP 或完整 online service。
 - GE-07（DALI buffer 所有權）維持 OPEN。
+- `update_into` 例外時，`process_frame_postyolo` 只印 stderr 並回傳 0，Python 端把它當成合法的空幀，不會進入 FAILED。這是 source 判讀，沒有重現，也不在 D2-GPU 的三項缺口內；要不要處理、歸哪個切片，待 owner 決定。
 - NV12 模式（`use_nv12=True`）的前處理同樣在 stream 0 上執行，屬於同一個 GE-01 缺口，但沒有單獨測試；目前沒有任何入口開啟 WorkbenchPool 的 NV12 模式，只有 [extended 測試](../../tests/extended/test_dispatcher.py)會用到。
