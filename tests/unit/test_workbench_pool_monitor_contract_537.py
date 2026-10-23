@@ -32,32 +32,47 @@ def test_stats_report_no_monitor_in_every_pool_state() -> None:
         """
 def show(label, pool):
     stats = pool.get_stats()
-    print(f"@{label}={stats['current_level']}/{stats['resource_monitor_status']}"
-          f"/{stats['resource_monitor_error']!r}")
+    print(f"@{label}={stats['state']}:{stats['current_level']}"
+          f"/{stats['resource_monitor_status']}/{stats['resource_monitor_error']!r}")
 
 async def main():
-    MODE["process"] = "raise"
     pool = make_pool(1)
     show("created", pool)
     await pool.start()
     show("running", pool)
-    pool.put_frame("stream_0", frame(), 0.0)
-    wait_until(lambda: pool.state is d.PoolState.FAILED)
-    show("failed", pool)
+    MODE["shutdown"] = False                         # the batcher is not released
     try:
         pool.stop()
+    except d.WorkbenchPoolStopTimeout:
+        pass
+    show("stopping", pool)
+    MODE["shutdown"] = True
+    pool.stop()                                      # retry once the batcher releases
+    show("stopped", pool)
+
+    MODE["process"] = "raise"
+    failed = make_pool(1)
+    await failed.start()
+    failed.put_frame("stream_0", frame(), 0.0)
+    print(f"@failed_wait={wait_until(lambda: failed.state is d.PoolState.FAILED)}")
+    show("failed", failed)
+    try:
+        failed.stop()
     except d.WorkbenchPoolFailed:
         pass
-    show("stopped", pool)
+    show("failed_stopped", failed)
 asyncio.run(main())
 """
     )
     unknown = "UNKNOWN/not_wired/''"
     assert out == {
-        "created": unknown,
-        "running": unknown,
-        "failed": unknown,
-        "stopped": unknown,
+        "created": f"created:{unknown}",
+        "running": f"running:{unknown}",
+        "stopping": f"stopping:{unknown}",
+        "stopped": f"stopped:{unknown}",
+        "failed_wait": "True",
+        "failed": f"failed:{unknown}",
+        "failed_stopped": f"stopped:{unknown}",
     }
 
 

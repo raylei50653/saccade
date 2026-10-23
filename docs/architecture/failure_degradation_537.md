@@ -978,7 +978,7 @@ dispatcher 的四個隔離 mutation 也都被攔住：移除 preflight（10 fail
 - `run_8stream_perception.py --workbench` 的文字報告加印 `monitor=<status>`。
 - 不改 AsyncDispatcher、hysteresis、快照 v1、`_WorkbenchWorker` 或 batcher；WorkbenchPool 不讀 NVML、不發佈快照。
 
-**驗收與負控制**（host-only）：[test_workbench_pool_monitor_contract_537.py](../../tests/unit/test_workbench_pool_monitor_contract_537.py) 2 個案例：CPU fake 的 pool 在 CREATED、RUNNING、FAILED、STOPPED 都回 `UNKNOWN`／`not_wired`／空錯誤；`--workbench` caller 的單次報告含 `level=UNKNOWN monitor=not_wired`，且不出現 `level=NORMAL`，結束時 pool STOPPED、batcher 已回收、沒有殘留 task。四個隔離 mutation 都被攔住：level 改回 `NORMAL`（2 failed）、移除 `resource_monitor_status`（2）、報告移除 `monitor=`（1）、status 改為 `available`（2）。
+**驗收與負控制**：[test_workbench_pool_monitor_contract_537.py](../../tests/unit/test_workbench_pool_monitor_contract_537.py) 3 個案例。host：CPU fake 的 pool 在 CREATED、RUNNING、STOPPING（batcher 未釋放）、STOPPED、FAILED 及失敗後 STOPPED 都回 `UNKNOWN`／`not_wired`／空錯誤；`--workbench` caller 的單次報告含 `level=UNKNOWN monitor=not_wired`，且不出現 `level=NORMAL`，結束時 pool STOPPED、batcher 已回收、沒有殘留 task。四個隔離 mutation 都被攔住：level 改回 `NORMAL`（2 failed）、移除 `resource_monitor_status`（2）、報告移除 `monitor=`（1）、status 改為 `available`（2）。
 
 **Runtime identity**：`dispatcher.py` 與 `run_8stream_perception.py` 是 `decision_relevant`，依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture 後以 stacked publication 原子落地；座標變化與證據記在 PR。
 
