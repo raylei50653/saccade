@@ -988,7 +988,7 @@ dispatcher 的四個隔離 mutation 也都被攔住：移除 preflight（10 fail
 
 方案依 #550 §0A 的開工條件記錄於 [#537 comment](https://github.com/raylei50653/saccade/issues/537#issuecomment-6363972851)（選 A）。修復前，`decide_degradation_level()` 不檢查 `VRAMStats.usage_percent`：NaN 維持原級、負值降一級、>100 升到 EMERGENCY，三者都被當成一次有效決策（§8 O0、§19.3）。4A 之後 production `get_stats()` 只回傳 0～100 的有限值，所以這條路徑只在 `get_stats()` 被替換時可達（測試替身、子類別、未來的其他 telemetry 來源），目前沒有 production 觸發點。
 
-**實作**：`decide_degradation_level()` 決策前要求 `0 <= usage_percent <= 100`。NaN、±inf、超出範圍或無法比較的值（例如字串、None）都拋 `ResourceMonitorUnavailable`，cause 是 `ValueError`，訊息含 GPU 與原值；`current_level` 不變，也不算一次決策。這是把 4A「無效 sample 也屬 monitor unavailable」（§19.2）套到決策輸入上，dispatcher 走 §20 的既有錯誤通道：monitor 回報 `unavailable`、level 為 UNKNOWN、worker FAILED、不寫新快照。不採夾到 [0, 100]：負值會被當成 0% 而降級，等於把壞資料當成資源充足。
+**實作**：`decide_degradation_level()` 決策前要求 `usage_percent` 是 `numbers.Real`，而且 `0 <= usage_percent <= 100`。非實數型別（字串、None、`Decimal`）在比較前就拒絕，因為它們的比較可能丟出別種例外（`Decimal("NaN")` 會丟 `InvalidOperation`）；範圍比較本身就會拒絕 NaN 與 ±inf。不合法時拋 `ResourceMonitorUnavailable`，cause 是 `ValueError`，訊息含 GPU 與原值；`current_level` 不變，也不算一次決策。這是把 4A「無效 sample 也屬 monitor unavailable」（§19.2）套到決策輸入上，dispatcher 走 §20 的既有錯誤通道：monitor 回報 `unavailable`、level 為 UNKNOWN、worker FAILED、不寫新快照。不採夾到 [0, 100]：負值會被當成 0% 而降級，等於把壞資料當成資源充足。
 
 **不改**：`get_stats()` 的 sample 驗證、門檻、D-537-2 遲滯、R0／F0、快照 v1 與 `dispatcher.py`。dispatcher 的啟動 probe 直接呼叫 `get_stats()`，所以被替換的 `get_stats()` 回傳非法 usage 時，啟動仍會成功，第一次 batch 決策才失敗；production `get_stats()` 不會產生這種值，本節不處理。
 
@@ -996,10 +996,10 @@ dispatcher 的四個隔離 mutation 也都被攔住：移除 preflight（10 fail
 
 | 測試 | 涵蓋 |
 |:--|:--|
-| [test_resource_degradation_hysteresis_537.py](../../tests/unit/test_resource_degradation_hysteresis_537.py) | T7 的三個 O0「觀察」列改為 T8 契約（86 → 122 個案例）：4 個級別 × 9 個非法值（NaN、±inf、-1、-1e-9、100.0001、101、`"50"`、None）都拒絕並保留 level；連續拒絕不推進遲滯，之後的有效 0% 從保留的 EMERGENCY 逐級恢復；整數端點 0／100 有效。浮點端點 0.0／100.0 仍由 T1 表涵蓋 |
-| [test_resource_monitor_dispatcher_contract_537.py](../../tests/unit/test_resource_monitor_dispatcher_contract_537.py) | 新增 1 個案例（13 → 14）：真實 manager 與 fake NVML 先決策出 EMERGENCY，再把 `get_stats()` 換成回傳 -1；worker FAILED、cause 為 `ValueError`、stats 為 UNKNOWN／`unavailable`，快照只寫過第一次的 EMERGENCY，manager 仍是 EMERGENCY |
+| [test_resource_degradation_hysteresis_537.py](../../tests/unit/test_resource_degradation_hysteresis_537.py) | T7 的三個 O0「觀察」列改為 T8 契約（86 → 133 個案例）：4 個級別 × 11 個非法值（NaN、±inf、-1、-1e-9、100.0001、101、`"50"`、None、`Decimal("NaN")`、`Decimal("50")`）都拒絕並保留 level；連續拒絕不推進遲滯，之後的有效 0% 從保留的 EMERGENCY 逐級恢復；其他實數型別（int 0／100、`np.int64`、`np.float64`、`Fraction`）有效。浮點端點 0.0／100.0 仍由 T1 表涵蓋 |
+| [test_resource_monitor_dispatcher_contract_537.py](../../tests/unit/test_resource_monitor_dispatcher_contract_537.py) | 新增 2 個案例（13 → 15）：真實 manager 與 fake NVML 先決策出 EMERGENCY，再把 `get_stats()` 換成回傳 -1 或 `Decimal("NaN")`；worker FAILED、cause 為 `ValueError`、stats 為 UNKNOWN／`unavailable`，快照只寫過第一次的 EMERGENCY，manager 仍是 EMERGENCY |
 
-修復前這兩檔有 38 個案例失敗（98 passed）。五個隔離 mutation 都被攔住：移除驗證（38 failed）、上界改成 `< 100`（14）、移除下界（14）、改拋 `ValueError`（38）、驗證移到改寫 `current_level` 之後（28）。實作原本另加 `math.isfinite`，移除它的 mutation 全部通過：鏈式比較本身就會拒絕 NaN 與 ±inf，所以這是等價 mutant，實作改為只用比較。
+修復前這兩檔有 47 個案例失敗（101 passed）。六個隔離 mutation 都被攔住：移除驗證（47 failed）、上界改成 `< 100`（15）、移除下界（14）、改拋 `ValueError`（47）、驗證移到改寫 `current_level` 之後（36）、移除 `numbers.Real` 檢查（17）。審查過程的兩點修正：第一版另加 `math.isfinite`，移除它的 mutation 全部通過（範圍比較本身就會拒絕 NaN 與 ±inf，是等價 mutant），因此拿掉；Codex r1 指出第一版只 catch `TypeError`／`ValueError`，`Decimal("NaN")` 的 `InvalidOperation` 會漏出去，dispatcher 進入 FAILED 但 stats 仍報 `available`，因此改成先檢查 `numbers.Real`，第一版在現行測試下有 9 個案例失敗。
 
 **Runtime identity**：`resource_manager.py` 是 `decision_relevant`，依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture 後以 stacked publication 原子落地；座標變化與證據記在 PR。
 

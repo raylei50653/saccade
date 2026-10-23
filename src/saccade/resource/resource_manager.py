@@ -1,4 +1,5 @@
 import math
+import numbers
 import os
 import secrets
 import stat
@@ -107,11 +108,10 @@ class ResourceManager:
         usage = stats.usage_percent
         # A replaced get_stats() can bypass sample validation; out-of-domain
         # usage is an unavailable measurement, not a decision (#537 O0).
-        try:
-            if not 0 <= usage <= 100:  # also rejects NaN and infinities
-                raise ValueError("must be between 0 and 100")
-        except (TypeError, ValueError) as e:
-            invalid = e if isinstance(e, ValueError) else ValueError(str(e))
+        # Non-real types (str, None, Decimal) are refused before comparing,
+        # since their comparisons may raise; the range check rejects NaN/inf.
+        if not isinstance(usage, numbers.Real) or not 0 <= usage <= 100:
+            invalid = ValueError("must be a real number between 0 and 100")
             raise ResourceMonitorUnavailable(
                 f"GPU {self.gpu_id}: invalid usage_percent {usage!r}: {invalid}"
             ) from invalid

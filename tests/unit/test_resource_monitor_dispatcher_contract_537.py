@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -320,8 +321,9 @@ async def test_runtime_failure_accounts_for_queue_and_preserves_cause_on_restart
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("usage", [-1.0, Decimal("NaN")], ids=repr)
 async def test_out_of_domain_usage_fails_the_worker_without_publishing(
-    monkeypatch: pytest.MonkeyPatch, nvml: _FakeNVML
+    monkeypatch: pytest.MonkeyPatch, nvml: _FakeNVML, usage: object
 ) -> None:
     """O0: a replaced get_stats() yielding invalid usage takes the 4A path."""
     manager = rm.ResourceManager()
@@ -334,7 +336,7 @@ async def test_out_of_domain_usage_fails_the_worker_without_publishing(
         monkeypatch.setattr(
             manager,
             "get_stats",
-            lambda: dataclasses.replace(valid(), usage_percent=-1.0),
+            lambda: dataclasses.replace(valid(), usage_percent=usage),
         )
         task = dispatcher._worker_task
         await _frame(dispatcher)

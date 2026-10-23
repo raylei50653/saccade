@@ -28,8 +28,11 @@ level untouched (failure_degradation_537.md §22).
 from __future__ import annotations
 
 import itertools
+from decimal import Decimal
+from fractions import Fraction
 from unittest import mock
 
+import numpy as np
 import pynvml
 import pytest
 
@@ -181,7 +184,8 @@ def test_t7_initial_level_is_normal() -> None:
 
 
 # ── T8: out-of-domain usage is refused (O0) ─────────────────────────────────
-INVALID = [float("nan"), float("inf"), float("-inf"), -1.0, -1e-9, 100.0001, 101.0, "50", None]  # fmt: skip
+# Decimal is not numbers.Real; Decimal("NaN") raises InvalidOperation if compared.
+INVALID = [float("nan"), float("inf"), float("-inf"), -1.0, -1e-9, 100.0001, 101.0, "50", None, Decimal("NaN"), Decimal("50")]  # fmt: skip
 
 
 @pytest.mark.parametrize("usage", INVALID, ids=repr)
@@ -207,6 +211,10 @@ def test_t8_refusals_do_not_advance_hysteresis() -> None:
     assert manager.decide_degradation_level() is R
 
 
-@pytest.mark.parametrize(("usage", "expected"), [(0, F), (100, E)])
-def test_t8_integer_endpoints_are_in_domain(usage: int, expected: L) -> None:
-    assert _decide(E, usage) is expected
+@pytest.mark.parametrize(
+    ("usage", "expected"),
+    [(0, F), (100, E), (np.int64(0), F), (np.float64(100.0), E), (Fraction(181, 2), F)],
+    ids=repr,
+)  # fmt: skip
+def test_t8_other_real_types_are_in_domain(usage: object, expected: L) -> None:
+    assert _decide(E, usage) is expected  # type: ignore[arg-type]
