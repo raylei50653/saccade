@@ -190,12 +190,16 @@ def redacted_url(url: str) -> str:
     """``url`` for the report, without its credentials, query or fragment. The
     host and port are kept as written -- an IPv6 host keeps its brackets and an
     invalid port is shown, not parsed. Only a plain result is shown: a URL that
-    cannot be split, or whose remaining text still is not plain (userinfo the
-    split did not separate, non-ASCII), is replaced. The report never fails on
-    REDIS_URL and never prints a password from it."""
+    cannot be split, that has an '@' outside its netloc (userinfo the split did
+    not separate -- a '?' or '#' in a password moves '@host' into the discarded
+    query or fragment), or whose remaining text still is not plain (non-ASCII)
+    is replaced. The report never fails on REDIS_URL and never prints a
+    password from it."""
     try:
         parts = urlsplit(url)
     except ValueError:
+        return UNPARSEABLE_URL
+    if url.count("@") != parts.netloc.count("@"):
         return UNPARSEABLE_URL
     if parts.scheme and url.startswith(f"{parts.scheme}://"):
         shown = f"{parts.scheme}://{parts.netloc.rpartition('@')[2]}{parts.path}"

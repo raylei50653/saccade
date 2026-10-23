@@ -328,6 +328,10 @@ async def test_report_names_sources_and_unknowns() -> None:
         ("redis://user:s3cret\uff20cache.local:6379/0", "<unparseable URL>"),
         ("redis://u%3As3cret@h/0", "redis://h/0"),
         ("redis://h\u0301/0", "<unparseable URL>"),
+        # A '?' or '#' in a password moves '@host' out of the netloc (Codex r4).
+        ("redis://user:s3cret?part@cache.local:6379/0", "<unparseable URL>"),
+        ("redis://user:s3cret#part@cache.local:6379/0", "<unparseable URL>"),
+        ("redis://h/0?next=a@b", "<unparseable URL>"),
     ],
 )
 def test_redacted_url_never_fails_or_leaks(url: str, shown: str) -> None:
@@ -359,6 +363,8 @@ _SECRET_URLS = [
     "unix:///tmp/redis.sock?password=s3cret",
     "redis://h/0#s3cret",
     "redis://u%3As3cret@h/0",
+    "redis://user:s3cret?part@cache.local:6379/0",
+    "redis://user:s3cret#part@cache.local:6379/0",
 ]
 
 
