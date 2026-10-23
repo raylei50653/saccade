@@ -310,7 +310,7 @@ async def test_report_names_sources_and_unknowns() -> None:
         ("rediss://u:s3cret@h/2", "rediss://h/2"),
         ("redis://user:s3cret@[::1]:6379/0", "redis://[::1]:6379/0"),
         ("redis://[::1]/0", "redis://[::1]/0"),
-        ("unix:///tmp/redis.sock?db=0&password=s3cret", "unix:///tmp/redis.sock"),
+        ("unix:///tmp/redis.sock?db=0&password=s3cret", "<unparseable URL>"),
         ("redis+unix://u:s3cret@/tmp/r.sock", "redis+unix:///tmp/r.sock"),
         ("redis://u:s3cret@h:notaport/0", "redis://h:notaport/0"),
         ("redis://u:s3cret@h:65536/0", "redis://h:65536/0"),
@@ -321,7 +321,7 @@ async def test_report_names_sources_and_unknowns() -> None:
         ("//user:s3cret@h:6379/0", "<unparseable URL>"),
         ("localhost:6379?password=s3cret", "<unparseable URL>"),
         ("localhost:6379", "localhost:6379"),
-        ("redis://h/0#s3cret", "redis://h/0"),
+        ("redis://h/0#s3cret", "<unparseable URL>"),
         # Userinfo the split does not separate, and look-alikes (Codex r3).
         ("redis://user:s3cret/part@cache.local:6379/0", "<unparseable URL>"),
         ("redis:///user:s3cret@cache.local:6379/0", "<unparseable URL>"),
@@ -332,6 +332,10 @@ async def test_report_names_sources_and_unknowns() -> None:
         ("redis://user:s3cret?part@cache.local:6379/0", "<unparseable URL>"),
         ("redis://user:s3cret#part@cache.local:6379/0", "<unparseable URL>"),
         ("redis://h/0?next=a@b", "<unparseable URL>"),
+        # ... with a look-alike '@': nothing is cut before the check (Codex r5).
+        ("redis://user:s3cret?part\uff20cache.local:6379/0", "<unparseable URL>"),
+        ("redis://user:s3cret#part\uff20cache.local:6379/0", "<unparseable URL>"),
+        ("REDIS://u:s3cret@h/0", "<unparseable URL>"),
     ],
 )
 def test_redacted_url_never_fails_or_leaks(url: str, shown: str) -> None:
@@ -365,6 +369,8 @@ _SECRET_URLS = [
     "redis://u%3As3cret@h/0",
     "redis://user:s3cret?part@cache.local:6379/0",
     "redis://user:s3cret#part@cache.local:6379/0",
+    "redis://user:s3cret?part\uff20cache.local:6379/0",
+    "redis://user:s3cret#part\uff20cache.local:6379/0",
 ]
 
 

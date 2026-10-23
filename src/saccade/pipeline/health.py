@@ -187,22 +187,22 @@ def url_may_carry_secrets(url: str) -> bool:
 
 
 def redacted_url(url: str) -> str:
-    """``url`` for the report, without its credentials, query or fragment. The
-    host and port are kept as written -- an IPv6 host keeps its brackets and an
-    invalid port is shown, not parsed. Only a plain result is shown: a URL that
-    cannot be split, that has an '@' outside its netloc (userinfo the split did
-    not separate -- a '?' or '#' in a password moves '@host' into the discarded
-    query or fragment), or whose remaining text still is not plain (non-ASCII)
-    is replaced. The report never fails on REDIS_URL and never prints a
-    password from it."""
+    """``url`` for the report, without its credentials. Only the netloc's
+    userinfo is cut; everything else stays as written (an IPv6 host keeps its
+    brackets, an invalid port is shown, not parsed) and the whole rest must be
+    plain, or the URL is replaced. Nothing is discarded before that check, so
+    a URL with a query or fragment, userinfo the split did not separate (a '?'
+    or '#' in a password moves '@host' out of the netloc), escapes or
+    look-alike characters is never shown. The report never fails on REDIS_URL
+    and never prints a password from it."""
     try:
         parts = urlsplit(url)
     except ValueError:
         return UNPARSEABLE_URL
-    if url.count("@") != parts.netloc.count("@"):
-        return UNPARSEABLE_URL
-    if parts.scheme and url.startswith(f"{parts.scheme}://"):
-        shown = f"{parts.scheme}://{parts.netloc.rpartition('@')[2]}{parts.path}"
+    prefix = f"{parts.scheme}://"
+    if parts.scheme and url.startswith(prefix):
+        rest = url[len(prefix) + len(parts.netloc) :]  # path, query, fragment
+        shown = prefix + parts.netloc.rpartition("@")[2] + rest
     else:
         shown = url
     return UNPARSEABLE_URL if url_may_carry_secrets(shown) else shown
