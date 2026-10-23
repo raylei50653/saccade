@@ -35,6 +35,7 @@
 | `test_orchestrator_vram_policy_537.py` | cognition,resource | behavior | active | #537 B0-F07: orchestrator consumer policy for VRAM-level snapshots. |
 | `test_package_signature.py` | system | contract | active | The minisign signature of the package digest (#465 PR-C4). |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
+| `test_pipeline_health_contract_537.py` | pipeline,resource | contract | active | #537 health CLI (REQ-535-07-03): what could not be observed is not healthy. |
 | `test_post_detector_host_oracle_pins.py` | system | contract | active | Oracle pins for the native post-detector replay host (#465 Phase B PR-5, U3a). |
 | `test_post_detector_replay_dump_verify.py` | system | contract | active | ``dump_post_detector_replay.py --verify`` on synthetic dumps (#465 PR-6). |
 | `test_reconnect_rate.py` | eval | behavior | active | Unit tests for B2 reconnect_rate summarization / export. |

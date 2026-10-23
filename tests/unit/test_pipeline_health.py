@@ -53,5 +53,5 @@ async def test_check_redis_closes_connection_when_xlen_fails() -> None:
 
     assert status.ok is False
     assert "xlen failed" in status.detail
-    assert depth == 0
+    assert depth is None  # not read: not an empty queue (#537 health CLI)
     client.aclose.assert_awaited_once()

@@ -90,9 +90,10 @@ F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義�
 | C2 其他參數 | 重啟初值與決策頻率已裁決（R0、F0，見 §8）；非法 usage（NaN、負值、>100）已改為明確拒絕（O0，見 §22） | D-537-2 未涵蓋；O0 依 #550 §0A 方案紀錄 |
 | R-1（C0-11） | 呼叫契約已由 R-1 修復（§10）；worker task 異常終止後的錯誤傳遞、health、stop 與 shutdown 語義依 §10 的切片順序處理 | #537 C0-11；#538 D2-AD、D2-WB-0／1、D2-GPU |
 | C0-10 | 轉換表、失敗分類推導與合取判讀已寫定並釘住（§23），不改 shipping 行為 | REQ-535-01-01；證據交 #541 |
-| health CLI、orchestrator 錯誤後的 ACK | 報告 unknown 的方式；ACK 語義 | REQ-535-07-03；REQ-535-06-01（#538） |
+| health CLI | 報告 unknown 的方式已改為三態且標示來源（§24）；readiness／exit code 政策仍未選 | REQ-535-07-03 |
+| orchestrator 錯誤後的 ACK | ACK 語義 | REQ-535-06-01（#538） |
 
-F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 的「未接監控」回報見 §21，O0 的非法 usage 拒絕見 §22，C0-10 的 run journal 轉換語義見 §23，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
+F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 的「未接監控」回報見 §21，O0 的非法 usage 拒絕見 §22，C0-10 的 run journal 轉換語義見 §23，health CLI 的三態報告見 §24，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
 
 ## 7. B0-F07 修復（C0-06／07／08 收斂）
 
@@ -932,7 +933,7 @@ flowchart LR
 | C0-09 | WorkbenchPool 沒有 resource manager／writer，stats 的固定 NORMAL 不構成監控證據。另提「明列未接監控」的回報切片（已落地，見 §21）；不在此接上降級 controller | raylei50653；#537／REQ-535-07-02；`--workbench` 仍不支援（#538） |
 | O0 | 直接注入非法 usage 的決策語義仍待裁決；4A 僅驗證 NVML 原始 sample，不放寬 C2 契約（已收斂為明確拒絕，見 §22） | raylei50653；#537 |
 | freshness／ACK／ownership | T 預設、單一 writer 強制、storage 失敗仍 ACK 與 PEL 回收仍交 #538；4A 不替這些項目結案 | raylei50653；#538／REQ-535-06-01、07-01 |
-| health CLI／telemetry | 另有直接 NVML／nvidia-smi probe，不是此 ResourceManager consumer；4A 不能推廣成全 profile 的 healthy 保證 | raylei50653；#537／REQ-535-07-03 |
+| health CLI／telemetry | 另有直接 NVML／nvidia-smi probe，不是此 ResourceManager consumer；4A 不能推廣成全 profile 的 healthy 保證（health CLI 的 unknown 回報已收斂，見 §24；telemetry 未處理） | raylei50653；#537／REQ-535-07-03 |
 | C0-10 | shipping 的 run-state／completion 已有 CC-536-01-01 實作；C0 尚未重查轉換。另以既有契約檢查完成／部分完成／失敗的狀態與診斷，證據交 #541（已重查，見 §23） | raylei50653；#537／#536／#541；REQ-535-01-01 |
 
 #537 保持 OPEN；本節不提供 merge／部署授權。
@@ -1070,3 +1071,58 @@ journal 不加分類欄位；需要的分類都能從既有欄位推出。`state
 - reader 忽略 exit code：1 failed，在新的 reader 測試。
 
 **邊界**：真 binary 在 teardown 時 abort 的頻率與時點沒有量測，只釘住 protocol 層的順序；§23.1 兩個只讀過 source 的邊界沒有重現。斷電 durability、網路檔案系統或 WSL 掛載的 Windows 磁碟上的 flock／rename，以及 F3 的 127 落在哪個時點，仍未驗證。沒有 installed／package 驗證，V5、installed、equivalence 的狀態不變。requirement↔check 對應交 #541。C0-01／02、health CLI 與 #538 的其餘工作不變。
+
+## 24. health CLI：取不到的不算健康（REQ-535-07-03）
+
+方案依 #550 §0A 的開工條件記錄於 [#537 comment](https://github.com/raylei50653/saccade/issues/537#issuecomment-6367964691)（選 A）。對象是 [health.py](../../src/saccade/pipeline/health.py)：`saccade_ctl.sh health` 會執行它，orchestrator 啟動時也會在 process 內執行一次並印出報告（[總覽](system_overview_536.md) SN-ON8、SE-48）。它直接探測 `systemctl --user`、NVML 與 Redis，不是 §20 `ResourceManager` 的 consumer。REQ-535-07-03 仍是 candidate，本節不批准它。
+
+**修復前**（`main@5aa63ee5`，本機執行加上 mock 重現）：
+- NVML 失敗時 `check_vram()` 回 `None`，`overall_ok` 把 `None` 當成通過；mock `nvmlInit` 失敗、其餘檢查正常時，報告是 `Saccade Status — OK`。
+- Redis 連不上時 queue depth 回 0，報告印 `L3 Queue Depth: 0 items`。
+- 不存在的 user unit（`LoadState=not-found`）顯示成 `inactive/failed`。setup_services 安裝的是 system units，ctl 與 health 查的卻是 `--user`（[ledger](capability_requirements_535.md) 部署段）。systemctl 本身不存在或逾時時，則把例外字串當成 failed。
+- Loop Latency 量的是 health process 自己的 event loop；VRAM Fragmentation 讀的是 health process 自己的 torch allocator，本機印出 0.0%。報告沒有標示這兩項的 scope。
+- 報告為 DEGRADED 時 exit 仍是 0。
+
+**實作**：
+- 每項檢查有三種狀態：`ok`、`degraded`（觀察到但不健康）、`unknown`（無法觀察）。
+  - **systemd**：改用 `systemctl --user show -p LoadState,ActiveState`。`loaded`＋`active` 是 ok；其他已知狀態（`loaded/inactive`、`loaded/failed`、`loaded/activating`、`masked/…`）是 degraded。`not-found`（這個 user scope 沒有該 unit，服務可能以 system unit 執行）、systemctl 不存在、逾時、非零 exit 或輸出缺欄位，都是 unknown。
+  - **VRAM**：NVML GPU 0 的整張卡用量（所有 process）。取不到時是 unknown，並保留錯誤類型與訊息；達到 `VRAM_WARN_PCT`（含等號）時是 degraded。只有 `nvmlInit` 成功後才呼叫 `nvmlShutdown`，查詢失敗也會呼叫。
+  - **Redis**：連不上是 degraded，queue depth 是 `None`，報告印 unknown，不印 0。
+- **整體狀態**：任一項 degraded 為 `DEGRADED`；否則任一項 unknown 為 `UNKNOWN`；全部 ok 才是 `OK`。`overall_ok` 只在 `OK` 時為真。
+- **報告標示來源**：`systemctl --user`、`NVML GPU 0, all processes`、`REDIS_URL`（去掉帳號密碼）。stress metrics 標為「不計入狀態」：Loop Latency 與 Fragmentation 註明是本 process 的數值；沒有 CUDA 或本 process 沒有配置時，Fragmentation 印 n/a，不印 0。
+
+**不改**：exit code（維持 0；改 exit code 等於選定 readiness policy，REQ 未選，`saccade_ctl.sh` 也有 `set -e`）、systemd unit 清單（仍不含 ctl 有的 `yolo-api`）、user／system scope 的部署落差（只在報告標示）、`VRAM_WARN_PCT`、orchestrator（SE-48 仍只印報告、不擋啟動），也不新增 JSON 輸出。
+
+**驗收與負控制**（host-only）：
+
+| 測試 | 涵蓋 |
+|:--|:--|
+| [test_pipeline_health_contract_537.py](../../tests/unit/test_pipeline_health_contract_537.py) | 32 個案例：<br>• 整體狀態的優先序（8 組，含 NVML 缺失、其餘 ok 時為 UNKNOWN）<br>• systemd 的 9 種輸出（含屬性順序顛倒、缺欄位）、3 種例外與非零 exit<br>• NVML 的 init／查詢失敗與 shutdown、device 0、門檻含等號<br>• Redis 失敗時 depth 為 `None`、Fragmentation 不回 0<br>• 端到端：NVML 失敗而其餘正常時報告為 UNKNOWN；報告的來源標示、URL 去掉帳密、不出現 `0 items`、三種標記 |
+| [test_pipeline_health.py](../../tests/unit/test_pipeline_health.py) | 既有的「xlen 失敗時 depth == 0」改為 `None` |
+
+修復前的實作只補上三個常數名稱讓測試能 import，結果是 33 failed／2 passed；其中多數失敗來自介面改變（`ServiceStatus` 改用 `status` 欄位、`check_vram()` 改回傳 tuple），行為上的重現以上面「修復前」的直接執行為準。
+
+九個隔離 mutation 都被攔住，只在獨立的來源副本上執行，執行前後共享的 `health.py` SHA-256 相同：
+
+| mutation | failed |
+|:--|:--|
+| VRAM `None` 又算 ok | 3 |
+| Redis 失敗回 depth 0 | 2 |
+| `not-found` 當成 degraded | 1 |
+| `not-found` 當成 ok | 1 |
+| UNKNOWN 優先於 DEGRADED | 2 |
+| systemctl 例外當成 degraded | 3 |
+| 報告不去掉 URL 帳密 | 1 |
+| 沒有配置時 Fragmentation 回 0 | 1 |
+| 查詢失敗時不 shutdown | 2 |
+
+本機真實執行（Redis 未啟動、沒有安裝 user units）的報告是 `DEGRADED`：三個 unit 為 `? unknown: no such user unit`，Redis 為 degraded，queue depth 為 unknown，Fragmentation 為 n/a，exit 0。
+
+**Runtime identity**：`health.py` 是 `decision_relevant`，依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture 後以 stacked publication 原子落地；座標變化與證據記在 PR。
+
+**邊界**：
+- 沒有在真實部署上驗證：system 或 user units 實際執行中、Redis 有資料時都沒有跑過。
+- 沒有 orchestrator 的端到端驗證；多 GPU 只看 device 0。
+- 報告是給人讀的文字，不是相容 API；exit code 不代表 readiness。
+- 不取得 online-service qualification、不部署。
+- C0-01／02、WorkbenchPool 是否支援資源降級，以及 #538 的其餘工作都不變。
