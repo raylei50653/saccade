@@ -1359,6 +1359,30 @@ def test_corrupt_report_run_is_unresolved(
     diagnostic: str,
 ) -> None:
     """The report's bytes can match its journal and still be invalid evidence."""
+    report, result = _judge_native_from(tmp_path, monkeypatch, payload, "exit=0")
+    assert result["verdict"] == "UNRESOLVED"
+    assert any(str(report) in p and diagnostic in p for p in result["problems"])
+
+
+def test_complete_journal_with_nonzero_exit_is_unresolved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#537 C0-10 (failure_degradation_537.md §23): the journal is committed
+    before the runtime's teardown, so a complete journal can come with an
+    abnormal end. Success needs both: exit 0 and this run's complete journal."""
+    _, result = _judge_native_from(
+        tmp_path, monkeypatch, _invalid_report_bytes(("sequences",), []), "exit=134"
+    )
+    assert result["verdict"] == "UNRESOLVED"
+    assert "saccade_track exited 1" in result["problems"]
+    assert not any("journal state" in p for p in result["problems"])
+
+
+def _judge_native_from(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: bytes, log_tail: str
+) -> tuple[Path, dict[str, Any]]:
+    """run_parity on a synthetic --native-from run: one sequence, a complete
+    journal binding the report ``payload``, the log ending ``log_tail``."""
     native, rows, output = (
         tmp_path / "native_run",
         tmp_path / "oracle_rows",
@@ -1390,7 +1414,7 @@ def test_corrupt_report_run_is_unresolved(
     }
     (out / T.JOURNAL_NAME).write_text(json.dumps(journal))
     (native / "saccade_track.log").write_text(
-        f"saccade_track_measurement: run_id {RUN_ID}\nexit=0\n"
+        f"saccade_track_measurement: run_id {RUN_ID}\n{log_tail}\n"
     )
     # Supply only the CPU evidence this malformed-report path consumes.
     _, att, lineage = _good_report()
@@ -1421,9 +1445,7 @@ def test_corrupt_report_run_is_unresolved(
         track_library_path=None,
     )
     assert T.run_parity(args) == 2
-    result = json.loads((output / "report.json").read_text())
-    assert result["verdict"] == "UNRESOLVED"
-    assert any(str(report) in p and diagnostic in p for p in result["problems"])
+    return report, json.loads((output / "report.json").read_text())
 
 
 def test_sequence_stats_nested_shapes_are_checked_before_comparison() -> None:
@@ -1495,3 +1517,14 @@ def test_reader_on_the_writer_s_files(tmp_path: Path) -> None:
     committed, problems = judge("lock_busy", run_id_file="holder.run_id")
     assert committed == ["SEQ-A"] and problems
     assert judge("collisions")[1]
+    # #537 C0-10 (failure_degradation_537.md §23).
+    committed, problems = judge("gate_a_refused")
+    assert committed == [] and any("state 'failed'" in p for p in problems)
+    committed, problems = judge("identity_below_required")
+    assert committed == [] and any("state 'failed'" in p for p in problems)
+    if (keep / "failure_journal_unwritable").is_dir():  # skipped as root
+        committed, problems = judge("failure_journal_unwritable")
+        assert committed == ["SEQ-A"] and any("state 'running'" in p for p in problems)
+    # The journal alone is complete; run_parity also requires exit 0
+    # (test_complete_journal_with_nonzero_exit_is_unresolved).
+    assert judge("aborted_after_commit") == (seqs, [])
