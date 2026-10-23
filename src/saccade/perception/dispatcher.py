@@ -315,6 +315,9 @@ class WorkbenchPool:
       - True cross-thread parallelism (no GIL serialization in hot path)
       - Per-stream isolation (tracker state, GPU scratch, CUDA stream)
       - BatchingTRTDetector handles YOLO batching with CUDA event handshake
+
+    No resource monitoring is wired: stats report ``current_level="UNKNOWN"``
+    and ``resource_monitor_status="not_wired"`` (#537 C0-09).
     """
 
     def __init__(
@@ -668,7 +671,11 @@ class WorkbenchPool:
             "late_callbacks": self._late_callbacks,
             "discarded_on_stop": self._discarded_on_stop,
             "stop_timeouts": self._stop_timeouts,
-            "current_level": "NORMAL",
+            # C0-09: no resource manager or VRAM writer is wired to this path,
+            # so the level is unknown rather than a healthy-looking NORMAL.
+            "current_level": "UNKNOWN",
+            "resource_monitor_status": "not_wired",
+            "resource_monitor_error": "",
             "active_streams": self.n_streams,
             "queue_depth": sum(q.qsize() for q in self._queues),
             "drops": drops,

@@ -372,6 +372,7 @@ async def _run_workbench(
             "📈 WorkbenchPool Stats: "
             f"state={stats['state']} "
             f"level={stats['current_level']} "
+            f"monitor={stats['resource_monitor_status']} "
             f"active={stats['active_streams']} "
             f"queue={stats['queue_depth']} "
             f"drops={stats['drops']} "
