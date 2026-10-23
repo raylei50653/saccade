@@ -173,11 +173,17 @@ def check_vram() -> Tuple[Optional[VramStatus], str]:
 
 
 def redacted_url(url: str) -> str:
-    """``url`` without its credentials, for the report."""
-    parts = urlsplit(url)
-    host = parts.hostname or ""
-    port = f":{parts.port}" if parts.port else ""
-    return f"{parts.scheme}://{host}{port}{parts.path}"
+    """``url`` without its credentials or query (which can carry a password),
+    for the report. The host and port are kept as written -- an IPv6 host keeps
+    its brackets and an invalid port is shown, not parsed -- and a URL that
+    cannot be split is not shown at all: the report never fails on it."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "<unparseable URL>"
+    netloc = parts.netloc.rpartition("@")[2]
+    prefix = f"{parts.scheme}://" if parts.scheme else ""
+    return f"{prefix}{netloc}{parts.path}"
 
 
 async def check_redis() -> Tuple[ServiceStatus, Optional[int]]:

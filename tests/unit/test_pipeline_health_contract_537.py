@@ -191,7 +191,7 @@ def test_nvml_query_failure_is_unknown_and_shuts_down(failing: str) -> None:
 
 def test_nvml_reading_of_device_zero() -> None:
     nvml = _nvml()
-    with patch.object(H, "pynvml", nvml):
+    with patch.object(H, "pynvml", nvml), patch.object(H, "VRAM_WARN_PCT", 85.0):
         vram, error = H.check_vram()
     assert error == ""
     assert vram == H.VramStatus(used_gb=3.0, total_gb=12.0, pct=25.0, warn=False)
@@ -199,13 +199,14 @@ def test_nvml_reading_of_device_zero() -> None:
     nvml.nvmlShutdown.assert_called_once()
 
 
-def test_vram_warn_threshold_is_inclusive() -> None:
-    at = SimpleNamespace(used=85, total=100)
-    with patch.object(
-        H, "pynvml", _nvml(nvmlDeviceGetMemoryInfo=MagicMock(return_value=at))
-    ):
+@pytest.mark.parametrize(("used", "warn"), [(89, False), (90, True), (91, True)])
+def test_vram_warn_threshold_is_inclusive(used: int, warn: bool) -> None:
+    # VRAM_WARN_PCT comes from the environment; pin it.
+    at = SimpleNamespace(used=used, total=100)
+    nvml = _nvml(nvmlDeviceGetMemoryInfo=MagicMock(return_value=at))
+    with patch.object(H, "pynvml", nvml), patch.object(H, "VRAM_WARN_PCT", 90.0):
         vram, _ = H.check_vram()
-    assert vram is not None and vram.warn
+    assert vram is not None and vram.warn is warn
 
 
 # ── Redis and stress metrics ──────────────────────────────────────────────────
@@ -292,6 +293,38 @@ async def test_report_names_sources_and_unknowns() -> None:
     assert "Loop Latency (this process)" in text
     assert "VRAM Fragmentation (this process): n/a" in text
     assert "Stress Metrics (not part of the status)" in text
+
+
+@pytest.mark.parametrize(
+    ("url", "shown"),
+    [
+        ("redis://localhost:6379/0", "redis://localhost:6379/0"),
+        ("redis://user:s3cret@cache.local:6380/2", "redis://cache.local:6380/2"),
+        ("redis://:s3cret@h/1", "redis://h/1"),
+        ("rediss://u:s3cret@h/2", "rediss://h/2"),
+        ("redis://user:s3cret@[::1]:6379/0", "redis://[::1]:6379/0"),
+        ("redis://[::1]/0", "redis://[::1]/0"),
+        ("unix:///tmp/redis.sock?db=0&password=s3cret", "unix:///tmp/redis.sock"),
+        ("redis+unix://u:s3cret@/tmp/r.sock", "redis+unix:///tmp/r.sock"),
+        ("redis://u:s3cret@h:notaport/0", "redis://h:notaport/0"),
+        ("redis://u:s3cret@h:65536/0", "redis://h:65536/0"),
+        ("redis://u:s3cret@[::1/0", "<unparseable URL>"),
+    ],
+)
+def test_redacted_url_never_fails_or_leaks(url: str, shown: str) -> None:
+    assert H.redacted_url(url) == shown
+    assert "s3cret" not in H.redacted_url(url)
+
+
+@pytest.mark.parametrize(
+    "url", ["redis://u:s3cret@cache:bad/0", "redis://cache:65536/0"]
+)
+def test_report_renders_with_an_invalid_redis_url(url: str) -> None:
+    """Codex r1: the report used to raise on an invalid port while redacting."""
+    with patch.object(H, "REDIS_URL", url):
+        text = H.render(_report(redis=DEGRADED))
+    assert "Saccade Status — DEGRADED" in text
+    assert "Services (REDIS_URL redis://cache:" in text and "s3cret" not in text
 
 
 def test_report_marks_each_state() -> None:
