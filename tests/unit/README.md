@@ -20,6 +20,7 @@
 | `test_license_audit.py` | system | contract | active | The licence audit of the bundled third-party set (#465 PR-C4, #547). |
 | `test_math_model_doc_consistency.py` | eval,tracking | contract | active | Pin the LaTeX math-model document (``docs/latex``) to the code it describes. |
 | `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
+| `test_model_fetch.py` | system | contract | active | Model fetch / offline verify tool (#610 slice 2, scripts/model/model_fetch.py). |
 | `test_native_detector_oracle_pins.py` | system | contract | active | Oracle pins for the native detector (#465 Phase B PR-8, U3b-2). |
 | `test_native_double_buffer_oracle_pins.py` | system | contract | active | Oracle pins for the native double-buffer runtime (#465 Phase B PR-10, U5). |
 | `test_native_head_failure_localization_r2_runner.py` | system | contract | active | The #465 localization r2 runner implements its frozen declaration and nothing else. |
@@ -64,6 +65,7 @@
 | `test_tracker_block_divergence_465_r2_runner.py` | system | contract | active | The tracker block-divergence r2 runner implements its exploratory declaration. |
 | `test_tracker_block_divergence_465_runner.py` | system | contract | active | The tracker block-divergence runner implements its exploratory declaration. |
 | `test_vram_level_snapshot_contract_537.py` | resource | contract | active | #537 B0-F07: VRAM-level snapshot contract (rename-published record, stateless reader). |
+| `test_workbench_pool_gpu_contract_538.py` | perception | contract | active | #538 D2-GPU-1: CUDA ordering, output ownership and batcher failure contracts. |
 | `test_workbench_pool_lifecycle_contract_538.py` | perception | contract | active | #538 D2-WB-1: WorkbenchPool bounded stop, worker failure and safe release. |
 | `test_workbench_pool_lifecycle_observed_538.py` | perception | diagnostic | active | #538 D2-WB-0: the WorkbenchPool normal path, plus the harness that the contract tests share. |
 

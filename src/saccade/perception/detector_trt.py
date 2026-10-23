@@ -2,6 +2,7 @@ import os
 import torch
 import tensorrt as trt
 import threading
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from saccade.perception.tracking import GPUByteTracker  # noqa: E402
@@ -590,6 +591,20 @@ class ConcurrentDetectorProxy:
 # ============================================================================
 
 
+class BatcherState(Enum):
+    RUNNING = "running"
+    FAILED = "failed"  # the server raised; ``failure`` holds the error
+    SHUT_DOWN = "shut_down"
+
+
+class BatchingDetectorFailed(RuntimeError):
+    """The batch server failed; ``__cause__`` is the original error."""
+
+
+class BatchingDetectorShutDown(RuntimeError):
+    """The batcher was shut down before this submission ran."""
+
+
 class BatchingTRTDetector:
     """Fuses per-sequence detect_raw() calls into one batch-N TRT inference.
 
@@ -635,6 +650,11 @@ class BatchingTRTDetector:
         ] = []
         self._cv = threading.Condition()
         self._shutdown = False
+        # #538 D2-GPU G3: the server's terminal state. Set under ``_cv`` together
+        # with draining ``_pending``, so a submit either queues before the close
+        # and is woken by it, or sees the close and raises at once.
+        self._state = BatcherState.RUNNING
+        self._failure: Optional[BaseException] = None
 
         self._server = threading.Thread(
             target=self._loop, name="BatchTRT-server", daemon=True
@@ -645,6 +665,23 @@ class BatchingTRTDetector:
         )
 
     # ── public ────────────────────────────────────────────────────────────────
+
+    @property
+    def state(self) -> BatcherState:
+        return self._state
+
+    @property
+    def failure(self) -> Optional[BaseException]:
+        return self._failure
+
+    def _closed_error(self) -> RuntimeError:
+        if self._failure is not None:
+            err = BatchingDetectorFailed(
+                f"BatchingTRTDetector server failed: {self._failure!r}"
+            )
+            err.__cause__ = self._failure
+            return err
+        return BatchingDetectorShutDown("BatchingTRTDetector was shut down")
 
     def make_proxy(self) -> "BatchedDetectorProxy":
         """Return a per-sequence proxy with its own tracker."""
@@ -657,17 +694,24 @@ class BatchingTRTDetector:
         the batch inference. The returned tensor is a view into a server-owned
         clone; ``worker_stream`` is made to wait on the inference event so any
         kernels launched on it afterwards safely see the data.
+
+        Raises ``BatchingDetectorFailed`` (``__cause__`` is the server's error)
+        or ``BatchingDetectorShutDown`` instead of waiting once the server ended.
         """
         frame_event = torch.cuda.Event()
         frame_event.record(worker_stream)
         holder: List[Optional[Tuple[torch.Tensor, torch.cuda.Event]]] = [None]
         done = threading.Event()
         with self._cv:
+            if self._state is not BatcherState.RUNNING:
+                raise self._closed_error()
             self._pending.append((frame, frame_event, holder, done))
             if len(self._pending) >= self._batch_size:
                 self._cv.notify()
         done.wait()
-        slice_tensor, infer_event = holder[0]  # type: ignore[misc]
+        if holder[0] is None:  # woken by _close() without a result
+            raise self._closed_error()
+        slice_tensor, infer_event = holder[0]
         worker_stream.wait_event(infer_event)
         return slice_tensor
 
@@ -682,33 +726,64 @@ class BatchingTRTDetector:
     # ── server loop ───────────────────────────────────────────────────────────
 
     def _loop(self) -> None:
-        while not self._shutdown:
-            with self._cv:
-                self._cv.wait_for(
-                    lambda: len(self._pending) >= self._batch_size or self._shutdown,
-                    timeout=self._drain_s,
-                )
-                if not self._pending:
-                    continue
-                # Drain: take up to batch_size items regardless of fill level
-                batch = self._pending[: self._batch_size]
-                self._pending = self._pending[self._batch_size :]
+        batch: List[Tuple[torch.Tensor, torch.cuda.Event, List, threading.Event]] = []
+        try:
+            while not self._shutdown:
+                with self._cv:
+                    self._cv.wait_for(
+                        lambda: (
+                            len(self._pending) >= self._batch_size or self._shutdown
+                        ),
+                        timeout=self._drain_s,
+                    )
+                    if not self._pending:
+                        continue
+                    # Drain: take up to batch_size items regardless of fill level
+                    batch = self._pending[: self._batch_size]
+                    self._pending = self._pending[self._batch_size :]
 
-            # All GPU work runs on the server stream. Wait on each worker's
-            # frame_event so their preproc writes are visible before we read
-            # the input tensors. Record infer_event after clone so workers can
-            # chain their own postprocess kernels via wait_event.
-            with torch.cuda.stream(self._server_stream):
-                for _, frame_event, _, _ in batch:
-                    self._server_stream.wait_event(frame_event)
-                frames = torch.cat([item[0] for item in batch], dim=0)  # [B,C,H,W]
-                raw_outputs = self._base.infer_raw_batch(frames)  # [B,300,6]
-                output = raw_outputs[self._base.output_name].clone()  # own the buffer
-                infer_event = torch.cuda.Event()
-                infer_event.record(self._server_stream)
+                # All GPU work runs on the server stream. Wait on each worker's
+                # frame_event so their preproc writes are visible before we read
+                # the input tensors. Record infer_event after clone so workers can
+                # chain their own postprocess kernels via wait_event.
+                with torch.cuda.stream(self._server_stream):
+                    for _, frame_event, _, _ in batch:
+                        self._server_stream.wait_event(frame_event)
+                    frames = torch.cat([item[0] for item in batch], dim=0)  # [B,C,H,W]
+                    raw_outputs = self._base.infer_raw_batch(frames)  # [B,300,6]
+                    # own the buffer
+                    output = raw_outputs[self._base.output_name].clone()
+                    infer_event = torch.cuda.Event()
+                    infer_event.record(self._server_stream)
 
-            for i, (_, _, holder, done) in enumerate(batch):
-                holder[0] = (output[i : i + 1], infer_event)  # [1,300,6]
+                for i, (_, _, holder, done) in enumerate(batch):
+                    holder[0] = (output[i : i + 1], infer_event)  # [1,300,6]
+                    done.set()
+                batch = []
+        except Exception as e:
+            # #538 D2-GPU G3: any server error is terminal. Fail the batch in
+            # flight and every pending submit instead of leaving them waiting.
+            print(f"❌ [BatchingTRTDetector] server failed: {e!r}")
+            self._close(batch, e)
+            return
+        self._close([], None)
+
+    def _close(
+        self,
+        in_flight: List[Tuple[torch.Tensor, torch.cuda.Event, List, threading.Event]],
+        failure: Optional[BaseException],
+    ) -> None:
+        """Enter FAILED or SHUT_DOWN and wake every waiter without a result."""
+        with self._cv:
+            if failure is not None:
+                self._failure = failure
+                self._state = BatcherState.FAILED
+            else:
+                self._state = BatcherState.SHUT_DOWN
+            waiters = in_flight + self._pending
+            self._pending = []
+        for _, _, holder, done in waiters:
+            if holder[0] is None:
                 done.set()
 
 
