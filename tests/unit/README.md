@@ -70,5 +70,6 @@
 | `test_workbench_pool_gpu_contract_538.py` | perception | contract | active | #538 D2-GPU-1: CUDA ordering, output ownership and batcher failure contracts. |
 | `test_workbench_pool_lifecycle_contract_538.py` | perception | contract | active | #538 D2-WB-1: WorkbenchPool bounded stop, worker failure and safe release. |
 | `test_workbench_pool_lifecycle_observed_538.py` | perception | diagnostic | active | #538 D2-WB-0: the WorkbenchPool normal path, plus the harness that the contract tests share. |
+| `test_workbench_pool_monitor_contract_537.py` | perception,resource | contract | active | #537 C0-09: WorkbenchPool stats say that no resource monitor is wired. |
 
 <!-- END generated test index -->

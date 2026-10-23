@@ -8,8 +8,10 @@ target is a stats shape that states the gap: ``current_level="UNKNOWN"`` and
 ``--workbench`` text report keeps the monitor status. Wiring a degradation
 controller is out of scope.
 
-Same harnesses as the D2-WB and caller lifecycle tests: a fresh interpreter
-with CPU fakes, so there is no GPU, NVML or RTSP.
+The host cases reuse the D2-WB and caller lifecycle harnesses: a fresh
+interpreter with CPU fakes, so there is no GPU, NVML or RTSP. The ``gpu`` case
+reuses the D2-GPU-1 harness: the real WorkbenchPool, Workbench and
+BatchingTRTDetector on CUDA, with only the TRT engine faked.
 """
 
 # scope: perception, resource
@@ -18,7 +20,10 @@ with CPU fakes, so there is no GPU, NVML or RTSP.
 
 from __future__ import annotations
 
+import pytest
+
 from tests.unit import test_caller_lifecycle_538 as caller
+from tests.unit import test_workbench_pool_gpu_contract_538 as gpu
 from tests.unit.test_workbench_pool_lifecycle_observed_538 import _run
 
 
@@ -85,3 +90,32 @@ after_pool()
         "pool_state": "stopped",
         "batcher_down": "True",
     }
+
+
+@pytest.mark.gpu
+def test_real_pool_on_cuda_reports_no_monitor_while_delivering() -> None:
+    gpu._need_native()
+    out = gpu._run(
+        """
+def show(label, pool):
+    stats = pool.get_stats()
+    print(f"@{label}={stats['current_level']}/{stats['resource_monitor_status']}")
+
+async def main():
+    pool = make_pool()
+    await pool.start()
+    PLAN["boxes"] = [track_boxes(k) for k in range(3)]
+    await feed(pool, [frame(10)] * 3)
+    print(f"@delivered={len(RESULTS)}")
+    show("running", pool)
+    pool.stop()
+    show("stopped", pool)
+asyncio.run(main())
+done()
+"""
+    )
+    assert out["delivered"] == "3", out
+    assert (out["running"], out["stopped"]) == (
+        "UNKNOWN/not_wired",
+        "UNKNOWN/not_wired",
+    ), out
