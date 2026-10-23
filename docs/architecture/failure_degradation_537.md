@@ -36,7 +36,7 @@
 | C0-07 | online-service／SE-24 | segment 內的 byte 超出 0～3 | `read()` 拋 `ValueError`。這個呼叫位於 orchestrator `handle_cognitive_event` 內，對事件處理的影響未追 | 例外 | reproduced（reader）；consumer 影響未驗證 | REQ-535-07-01；**已由 F07 修復，見 §7** |
 | C0-08 | online-service／SE-23、SE-24（**B0-F07**） | 前次崩潰留下 segment，而且 reader 比 writer 先附掛 | writer unlink 並重建後，舊 reader 一直讀到舊值（測試中為 EMERGENCY）；新建立的 reader 讀得到新值；writer 關閉後，舊 reader 仍讀到最後的值。`main.py --mode full` 把 `PipelineOrchestrator()` 當 `gather()` 的參數，依 source 判讀 reader 會比 `dispatcher.start()` 先建立。卡在 EMERGENCY 時，`handle_cognitive_event()` 對非 anomaly 事件不寫入 ChromaDB 就返回，`process_event_batch()` 仍 ACK 整批，這些事件不會重送 | 無；level 看起來有效 | SHM 行為 reproduced；`main.py` 建構順序為 source-inspected（AST 測試靜態釘住，沒有執行 `run_full()`）；「orchestrator 持續丟棄非 anomaly 事件且仍 ACK」為 source-inspected（`src/saccade/cognition/orchestrator.py` 的 `handle_cognitive_event()`／`process_event_batch()`，沒有端到端測試） | REQ-535-07-01；#538 判準；D-537-3；**已由 F07 修復，見 §7** |
 | C0-09 | online-service／SN-ON3 | WorkbenchPool 路徑 | `get_stats()` 固定回 `current_level: "NORMAL"`，這條路徑沒有接 resource manager | stats 看起來健康 | source-inspected | REQ-535-07-02 |
-| C0-10 | shipping／SN-SH2、SN-SH4 | run 中途失敗 | 狀態值與 completion journal 由 CC-536-01-01 定義並已實作（source-level）；轉換語義歸 #537，C0 沒有重查 | journal `state`、exit code | 引用原卡 | REQ-535-01-01 |
+| C0-10 | shipping／SN-SH2、SN-SH4 | run 中途失敗 | 狀態值與 completion journal 由 CC-536-01-01 定義並已實作（source-level）；轉換語義歸 #537，C0 沒有重查 | journal `state`、exit code | 引用原卡 | REQ-535-01-01；**轉換語義已重查，見 §23** |
 | C0-11 | online-service／SN-ON3 | native 擴充存在，batch 有 detection（任何 level） | dispatcher 對 tracker 的兩種呼叫都不被支援：level ≥ FAST_PATH 時 `set_degradation_params` 拋 `AttributeError`；低於 FAST_PATH 時 `update(..., frame_tensor=, stream_id=)` 拋 `TypeError`。worker task 隨即結束 | 沒有任何地方記錄；`stop()` 時才把例外拋出 | reproduced（strict fake；native binding 以 gpu 標記測試） | REQ-535-05-\*、07-02；#538 D2；**後補列，見 §9；已由 R-1 修復，見 §10** |
 
 ## 3. 降級轉換表：現況與已採納目標
@@ -89,9 +89,10 @@ F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義�
 | C0-09 | stats 已改為明列「未接監控」（§21）；WorkbenchPool 是否支援 resource degradation 仍未裁決 | REQ-535-07-02 |
 | C2 其他參數 | 重啟初值與決策頻率已裁決（R0、F0，見 §8）；非法 usage（NaN、負值、>100）已改為明確拒絕（O0，見 §22） | D-537-2 未涵蓋；O0 依 #550 §0A 方案紀錄 |
 | R-1（C0-11） | 呼叫契約已由 R-1 修復（§10）；worker task 異常終止後的錯誤傳遞、health、stop 與 shutdown 語義依 §10 的切片順序處理 | #537 C0-11；#538 D2-AD、D2-WB-0／1、D2-GPU |
+| C0-10 | 轉換表、失敗分類推導與合取判讀已寫定並釘住（§23），不改 shipping 行為 | REQ-535-01-01；證據交 #541 |
 | health CLI、orchestrator 錯誤後的 ACK | 報告 unknown 的方式；ACK 語義 | REQ-535-07-03；REQ-535-06-01（#538） |
 
-F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 的「未接監控」回報見 §21，O0 的非法 usage 拒絕見 §22，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
+F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 的「未接監控」回報見 §21，O0 的非法 usage 拒絕見 §22，C0-10 的 run journal 轉換語義見 §23，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
 
 ## 7. B0-F07 修復（C0-06／07／08 收斂）
 
@@ -932,7 +933,7 @@ flowchart LR
 | O0 | 直接注入非法 usage 的決策語義仍待裁決；4A 僅驗證 NVML 原始 sample，不放寬 C2 契約（已收斂為明確拒絕，見 §22） | raylei50653；#537 |
 | freshness／ACK／ownership | T 預設、單一 writer 強制、storage 失敗仍 ACK 與 PEL 回收仍交 #538；4A 不替這些項目結案 | raylei50653；#538／REQ-535-06-01、07-01 |
 | health CLI／telemetry | 另有直接 NVML／nvidia-smi probe，不是此 ResourceManager consumer；4A 不能推廣成全 profile 的 healthy 保證 | raylei50653；#537／REQ-535-07-03 |
-| C0-10 | shipping 的 run-state／completion 已有 CC-536-01-01 實作；C0 尚未重查轉換。另以既有契約檢查完成／部分完成／失敗的狀態與診斷，證據交 #541 | raylei50653；#537／#536／#541；REQ-535-01-01 |
+| C0-10 | shipping 的 run-state／completion 已有 CC-536-01-01 實作；C0 尚未重查轉換。另以既有契約檢查完成／部分完成／失敗的狀態與診斷，證據交 #541（已重查，見 §23） | raylei50653；#537／#536／#541；REQ-535-01-01 |
 
 #537 保持 OPEN；本節不提供 merge／部署授權。
 
@@ -1004,3 +1005,68 @@ dispatcher 的四個隔離 mutation 也都被攔住：移除 preflight（10 fail
 **Runtime identity**：`resource_manager.py` 是 `decision_relevant`，依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture 後以 stacked publication 原子落地；座標變化與證據記在 PR。
 
 **邊界**：沒有真實 GPU 的非法 sample（production 無觸發點），不跑完整 online service，不取得 online-service qualification、不部署。C0-01／02、C0-10、health CLI 與 #538 的其餘工作不變。
+
+## 23. C0-10：shipping run journal 的轉換語義
+
+方案依 #550 §0A 的開工條件記錄於 [#537 comment](https://github.com/raylei50653/saccade/issues/537#issuecomment-6366371335)（選 A）。[CC-536-01-01](ship_export_contracts_536.md#cc-536-01-01) 定義了 journal 的 state 值（`running`／`failed`／`complete`），並把「state 之間怎麼轉換、失敗怎麼分類」交給 #537；C0 當時沒有重查（§2 C0-10）。本節在 `main@1f18cf76` 重新讀過 `run_completion.cpp`、`preflight.cpp`、`track_driver.hpp` 與 `saccade_track.cpp`，把轉換、分類與判讀規則寫下來，並用測試釘住。**本節只重查與釘住**：不改 `shipping/**`、journal／report format、exit code、lock、作廢範圍或 reader 邏輯，所以不移動 runtime coordinate，也不影響 package pin。轉換語義以本節為準，卡上只放連結。
+
+### 23.1 轉換表
+
+同一個 run_id 的 journal 只有 `running` 一個中間狀態；`failed` 與 `complete` 是終態。下一次 run 以新的 run_id 取代整份 journal。「已提交」是指 journal 記為 `written`、且 sha256 等於檔案的 sequence（CC-536-01-01 的 caller 規則）。
+
+| 事件 | 本輪 journal：state／`identity.level`／`load_verification`／`failure.sequence`／已提交 | exit | 證據 |
+|:--|:--|:--|:--|
+| 參數被拒、sequence 重複、輸出路徑碰撞 | 沒有本輪 journal；`<out>` 內的舊 journal 不動。碰撞在建立 `<out>` 之前就拒絕 | 2 | `collisions`（碰撞）；[schedule CLI](../../tests/unit/test_saccade_track_schedule_cli.py)、[completion CLI](../../tests/unit/test_saccade_track_completion_cli.py)（本機） |
+| `<out>` 的 lock 被持有 | 沒有本輪 journal；journal 仍是持有者的，沒有任何 byte、名稱或 mtime 改變 | 2 | `lock_busy` |
+| 作廢舊產物失敗（例如 `--report` 是目錄） | `failed`／null／null／null／無 | 2 | `collisions`（目錄） |
+| Gate A 拒絕（尚未呼叫 CUDA） | `failed`／null／null／null／無；先前同名產物已作廢 | 2 | `gate_a_refused`（新增） |
+| level 低於 `--require-identity` | `failed`／封存的 level（低於 `identity.required`）／null／null／無 | 2 | `identity_below_required`（新增） |
+| Gate B 偵測器載入失敗（`DetectorLoadError`） | `failed`／level／`failed`／null／無 | 2 | `load_verification_failed` |
+| Gate B 其他錯誤（runtime 建構、GPU 初始化） | `failed`／level／null／null／無 | 2 | `load_failure` |
+| 第 k 個 sequence 失敗 | `failed`／level／`verified`／k／前 k−1 個 | 2 | `failed_rerun` |
+| report 產生或發布失敗 | `failed`／level／`verified`／null／全部 | 2 | `report_failure` |
+| 被捕捉的錯誤，但 journal 寫不進去 | 停在最後寫成功的版本（測試中是 `running`、`failure` 為 null、前 k−1 個已提交）；`fail()` 是 best effort | 2 | `failure_journal_unwritable`（新增；root 下略過） |
+| commit 之前被 kill、abort，或 auditor exit 127（F3） | `running`；已提交的只有最後一次 journal 更新時記為 `written` 的 sequence。rename 之後、journal 更新之前中斷的 txt 是本輪完整輸出，但仍是 `pending` | signal／127 | `killed_*`、`killed_during_load` |
+| commit 之後 abort（runtime teardown） | `complete`／level／`verified`／null／全部 | signal 或非零 | `aborted_after_commit`（新增，protocol 層） |
+| 正常結束 | `complete`／level／`verified`／null／全部 | 0 | `fresh` |
+
+**commit 在 teardown 之前**：`complete` 是 `RunCompletion::run()` 的最後一次寫入。`saccade_track` 的 `run()` 在它回傳後才解構 runtime（CUDA stream、nvJPEG、TRT、torch），process 結束時還有 static 與 driver 的 teardown；這段若 abort 或被 kill，結果就是 `complete` 加上非零 exit。真 binary 的這個時點是 source-inspected；protocol 測試只釘住順序：`run()` 回傳後 SIGABRT，journal 仍是 `complete`。
+
+**只讀過 source 的兩個邊界**（沒有重現，需要只出現一次的寫入失敗）：
+- `complete` 的 rename 成功、目錄 fsync 失敗時，例外會讓 `fail()` 把它改寫成 `failed`，exit 2。
+- 第 k 個 sequence 的 txt 已 rename、journal 更新失敗，之後 `fail()` 寫成功時，同一份 journal 會同時把 k 記為 `written`（帶 sha256）和 `failure.sequence`＝k。依 caller 規則，hash 相符的 `written` 仍算已提交；`failure.sequence` 指的是失敗發生在哪個 sequence 的步驟裡，不代表那個 sequence 沒有輸出。
+
+### 23.2 失敗分類（從 journal 推導）
+
+journal 不加分類欄位；需要的分類都能從既有欄位推出。`state=failed` 時依序判斷：
+
+1. `load_verification.status == "failed"` → Gate B 偵測器載入失敗。
+2. `failure.sequence` 不是 null → 失敗在該 sequence 的計算或提交（見 §23.1 的邊界）。
+3. `load_verification` 是 `verified`、`failure.sequence` 是 null → 所有 sequence 之後：report 或 commit 寫入失敗。
+4. `load_verification` 是 null、`identity.level` 不是 null → level 低於 `identity.required` 時是 `--require-identity` 拒絕；否則是 Gate B 的其他錯誤（runtime 建構、GPU 初始化，或寫入載入紀錄失敗）。
+5. `load_verification` 與 `identity.level` 都是 null → Gate A 拒絕或作廢舊產物失敗，兩者都沒有呼叫 CUDA，由 `failure.message` 區分。
+
+`state=running`：`<out>/saccade_track.lock` 仍被持有，表示 run 還在執行（caller 可以用非阻塞的 `flock` 探測，探測本身不建立任何檔案）；lock 已釋放，表示 run 中斷了（kill、abort、127，或 `failed` 紀錄寫不進去），exit code 是唯一的補充線索。沒有本輪 run_id 的 journal：在取得 `<out>` 之前就被拒（參數、碰撞、lock 衝突），exit 2。
+
+### 23.3 Caller 判讀：合取
+
+- **完整成功**：exit 0，**而且** journal 的 run_id 是這次 invocation、state 是 `complete`。exit 0 一定伴隨 `complete`（`run_sequences` 只在 `completion.run()` 之後回傳 0），反方向不成立（§23.1）。這是 CC-536-01-01 第 5 項「非零代表本輪未完成」與卡上 journal 判讀規則的合取，比只看 journal 嚴格；[native_track_parity](../../scripts/eval/diagnostics/native_track_parity.py) 早就同時要求 log 以 `exit=0` 結尾與 `journal_problems()` 為空。
+- **`complete` 加非零 exit**：輸出都已提交（hash 可驗），但 process 沒有正常結束；保守的 caller 判為未完成，輸出只能當診斷。
+- **部分完成**：`failed` 或 `running`，且至少一個 sequence 已提交。
+- **沒有輸出**：`failed`／`running` 且沒有已提交的 sequence，或沒有本輪 run_id 的 journal。
+
+### 23.4 驗收與負控制
+
+| 測試 | 涵蓋 |
+|:--|:--|
+| [completion 協定測試](../../tests/native/test_shipping_run_completion.cpp)（`shipping-config-loader` ctest，CI） | 新增 4 個案例（329 → 407 checks）：`gate_a_refused`（先有一次完整 run，再以缺少的 sequence 目錄讓真實 Gate A 拒絕）、`identity_below_required`、`failure_journal_unwritable`（第二個 sequence 丟例外前先把 `<out>` 改成唯讀）、`aborted_after_commit`（`run()` 回傳後 SIGABRT，關閉 core dump）。§23.1 其他列對應既有案例 |
+| [reader 測試](../../tests/unit/test_native_track_parity.py) | 新增 `test_complete_journal_with_nonzero_exit_is_unresolved`（CI）：`complete` journal 加上以 `exit=134` 結尾的 log，判 `UNRESOLVED`，problem 是 exit code 而不是 journal state；`test_reader_on_the_writer_s_files`（本機，需要 build 好的協定測試）判讀四個新案例留下的檔案，`aborted_after_commit` 的 journal 本身判讀為完整 |
+
+五個隔離 mutation 都被攔住，只在獨立的來源副本上執行，執行前後共享的 `run_completion.cpp`、`preflight.cpp` SHA-256 相同：
+- `complete` 延到 `RunCompletion` 解構時才寫：18 failed；只跑 `aborted_after_commit` 時 3 failed（未 mutate 時 0）。
+- 拿掉 `--require-identity` 檢查：7 failed，全部在 `identity_below_required`。
+- `fail()` 寫不進 journal 時改成 abort：1 failed，在 `failure_journal_unwritable`。
+- `fail()` 只在 sequence 階段標 `failed`：6 failed，包括 `gate_a_refused`、`identity_below_required`，以及既有的載入、report、碰撞案例。
+- reader 忽略 exit code：1 failed，在新的 reader 測試。
+
+**邊界**：真 binary 在 teardown 時 abort 的頻率與時點沒有量測，只釘住 protocol 層的順序；§23.1 兩個只讀過 source 的邊界沒有重現。斷電 durability、網路檔案系統或 WSL 掛載的 Windows 磁碟上的 flock／rename，以及 F3 的 127 落在哪個時點，仍未驗證。沒有 installed／package 驗證，V5、installed、equivalence 的狀態不變。requirement↔check 對應交 #541。C0-01／02、health CLI 與 #538 的其餘工作不變。

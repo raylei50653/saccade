@@ -41,6 +41,14 @@
 //   * collisions:     --report on the journal, the lock or a txt is refused
 //                     before <out> is created; a directory at --report fails
 //                     the run and is not removed;
+//   * transitions (#537 C0-10, docs/architecture/failure_degradation_537.md
+//                     §23): a Gate A refusal after a complete run (failed,
+//                     level null, nothing of either run left); a level below
+//                     --require-identity (failed with the sealed level); a
+//                     caught error when <out> has become unwritable (the
+//                     journal stays as last written: running, exit 2); an
+//                     abort after the commit point, as a runtime teardown
+//                     would end (journal complete, the exit a signal).
 //   * load_verification (#549 S2-1): every child records Gate B's result after
 //                     Gate A as saccade_track's load_runtime does -- verified
 //                     (hashed_before_load) in every completed run; a caught
@@ -60,6 +68,7 @@
 
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -172,6 +181,10 @@ struct Child {
     // Gate B, as track::load_runtime records it.
     enum class Load { Verified, Failed, Killed } load = Load::Verified;
     bool report_failure = false;
+    bool refuse_gate_a = false;          // a missing sequence directory: Gate A refuses
+    sh::IdentityLevel required = sh::IdentityLevel::None;  // --require-identity
+    bool unwritable_out_on_throw = false;  // throw_at first makes <out> read-only
+    bool abort_after_commit = false;     // SIGABRT once run() returned (teardown)
     int kill_in = -1;        // SIGKILL inside sequence i (after half its trace)
     int block_in = -1;       // sequence i: touch `ready`, then wait to be killed
     const char* fault = nullptr;
@@ -204,7 +217,10 @@ struct Status {
         if (!c.run_id_file.empty()) write_file(c.run_id_file, id);
         completion.emplace(id, "fake_track", sh::RunOutputs{c.p.out, c.p.report, c.p.trace, kSeqs});
         // Exercise real CUDA-free Gate A, rather than forging a success identity.
-        sh::run_preflight(c.gate_a, *completion);
+        sh::PreflightInputs gate_a = c.gate_a;
+        if (c.refuse_gate_a) gate_a.sequences.back() += "_missing";
+        gate_a.required = c.required;
+        sh::run_preflight(gate_a, *completion);
         write_file(c.identity_dir / (id + ".json"), sh::dump_python_json(completion->identity()));
         if (c.load_failure) throw std::runtime_error("injected model load failure after Gate A");
         switch (c.load) {
@@ -231,6 +247,10 @@ struct Status {
                     for (;;) ::pause();
                 }
                 if (static_cast<int>(i) == c.throw_at) {
+                    if (c.unwritable_out_on_throw) {
+                        fs::permissions(c.p.out, fs::perms::owner_write | fs::perms::group_write |
+                                                     fs::perms::others_write, fs::perm_options::remove);
+                    }
                     throw std::runtime_error("injected failure in " + kSeqs[i]);
                 }
                 return mot_text(c.gen, i);
@@ -245,6 +265,11 @@ struct Status {
                 report.set("gen", JsonValue::make_int(c.gen));
                 return sh::dump_python_json(report) + "\n";
             });
+        if (c.abort_after_commit) {
+            const struct rlimit no_core {0, 0};
+            ::setrlimit(RLIMIT_CORE, &no_core);
+            ::raise(SIGABRT);
+        }
     } catch (const std::exception& e) {
         std::fprintf(stderr, "fake_track: %s\n", e.what());
         if (completion) completion->fail(e.what());
@@ -845,6 +870,99 @@ void case_collisions(const fs::path& base) {
     CHECK(str(*j.find("failure"), "message").find("is a directory") != std::string::npos);
 }
 
+// #537 C0-10 (failure_degradation_537.md §23): the journal of each way a
+// run ends, beyond the cases above.
+
+// Gate A refuses (no CUDA has run): failed, level null, no load claim, no
+// sequence; the earlier complete run's outputs are already gone.
+void case_gate_a_refused(const fs::path& base) {
+    Case c = make_case(base, "gate_a_refused");
+    CHECK(run_child(child_of(c, 1)).code == 0);
+    const std::string first = last_run_id(c);
+    Child ch = child_of(c, 2);
+    ch.refuse_gate_a = true;
+    const Status s = run_child(ch);
+    CHECK(s.exited && s.code == 2);
+    const std::string id = last_run_id(c);
+    const JsonValue j = journal(c.p);
+    CHECK(str(j, "run_id") == id && id != first);
+    CHECK(str(j, "state") == "failed");
+    CHECK(is_null(*j.find("identity"), "level"));
+    CHECK(str(*j.find("identity"), "required") == "none");
+    CHECK(is_null(j, "load_verification"));
+    CHECK(is_null(*j.find("failure"), "sequence"));
+    CHECK(str(*j.find("failure"), "message").find("_missing") != std::string::npos);
+    for (std::size_t i = 0; i < kSeqs.size(); ++i) {
+        CHECK(str(seq_entry(j, i), "state") == "pending");
+        CHECK(!fs::exists(c.p.out / (kSeqs[i] + ".txt")));
+    }
+    CHECK(!fs::exists(c.p.report));
+    CHECK(committed(c.p, id).empty());
+    CHECK(committed(c.p, first).empty());
+    CHECK(!complete(c.p, id));
+}
+
+// Gate A passes its checks but the level is below --require-identity: the
+// sealed level stays in the journal, below `required`; no load claim.
+void case_identity_below_required(const fs::path& base) {
+    Case c = make_case(base, "identity_below_required");
+    Child ch = child_of(c, 1);
+    ch.required = sh::IdentityLevel::ExpectedSourceVerified;
+    const Status s = run_child(ch);
+    CHECK(s.exited && s.code == 2);
+    const std::string id = last_run_id(c);
+    const JsonValue j = journal(c.p);
+    CHECK(str(j, "state") == "failed");
+    CHECK(str(*j.find("identity"), "level") == "checksum_matched");
+    CHECK(str(*j.find("identity"), "required") == "expected_source_verified");
+    CHECK(is_null(j, "load_verification"));
+    CHECK(is_null(*j.find("failure"), "sequence"));
+    CHECK(str(*j.find("failure"), "message").find("below --require-identity") != std::string::npos);
+    CHECK(committed(c.p, id).empty());
+    CHECK(!complete(c.p, id));
+}
+
+// A caught error whose failed record cannot be written (fail() is best
+// effort): exit 2, and the journal is the last one written -- running, the
+// first sequence written, no failure.
+void case_failure_journal_unwritable(const fs::path& base) {
+    if (::geteuid() == 0) {
+        std::fprintf(stderr, "failure_journal_unwritable: skipped as root (permissions do not apply)\n");
+        return;
+    }
+    Case c = make_case(base, "failure_journal_unwritable");
+    Child ch = child_of(c, 1);
+    ch.throw_at = 1;
+    ch.unwritable_out_on_throw = true;
+    const Status s = run_child(ch);
+    fs::permissions(c.p.out, fs::perms::owner_write, fs::perm_options::add);
+    CHECK(s.exited && s.code == 2);
+    const std::string id = last_run_id(c);
+    const JsonValue j = journal(c.p);
+    CHECK(str(j, "run_id") == id);
+    CHECK(str(j, "state") == "running");
+    CHECK(is_null(j, "failure"));
+    check_preserved_identity(c, id);
+    check_load_verified(j);
+    CHECK(str(seq_entry(j, 0), "state") == "written");
+    CHECK(str(seq_entry(j, 1), "state") == "pending");
+    CHECK(committed(c.p, id) == std::vector<std::string>{kSeqs[0]});
+    CHECK(!complete(c.p, id));
+}
+
+// The commit point comes before the runtime's teardown: an abort there
+// leaves a complete journal and a signal exit. The journal alone says
+// complete; the caller rule also requires exit 0 (§23).
+void case_aborted_after_commit(const fs::path& base) {
+    Case c = make_case(base, "aborted_after_commit");
+    Child ch = child_of(c, 1);
+    ch.abort_after_commit = true;
+    const Status s = run_child(ch);
+    CHECK(!s.exited && s.signal == SIGABRT);
+    check_fully_committed(c, 1);
+    CHECK(temp_files(c.dir).empty());
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -884,6 +1002,10 @@ int main(int argc, char** argv) {
         case_killed_after_report(base);
         case_lock_busy(base);
         case_collisions(base);
+        case_gate_a_refused(base);
+        case_identity_below_required(base);
+        case_failure_journal_unwritable(base);
+        case_aborted_after_commit(base);
         if (keep.empty()) fs::remove_all(base);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "error: %s\n", e.what());
