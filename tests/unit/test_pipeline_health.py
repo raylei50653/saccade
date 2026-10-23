@@ -13,6 +13,13 @@ import pytest
 from saccade.pipeline.health import check_redis
 
 
+@pytest.fixture(autouse=True)
+def _plain_redis_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """REDIS_URL comes from the environment; a credential-bearing one hides
+    the error message these tests read (#537 health CLI)."""
+    monkeypatch.setattr("saccade.pipeline.health.REDIS_URL", "redis://localhost:6379/0")
+
+
 @pytest.mark.asyncio
 async def test_check_redis_measures_stream_depth() -> None:
     client = MagicMock()
@@ -53,5 +60,5 @@ async def test_check_redis_closes_connection_when_xlen_fails() -> None:
 
     assert status.ok is False
     assert "xlen failed" in status.detail
-    assert depth == 0
+    assert depth is None  # not read: not an empty queue (#537 health CLI)
     client.aclose.assert_awaited_once()
