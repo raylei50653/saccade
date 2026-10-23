@@ -84,6 +84,17 @@ def _percentile(values: list[float] | list[int], q: float) -> float:
     return float(np.percentile(np.array(values, dtype=np.float64), q))
 
 
+def _own_result(result: Any) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Copies of a Workbench result that the consumer owns (#538 D2-GPU G2).
+
+    Workbench returns views of buffers that its next frame overwrites. The
+    copies are queued on the calling thread's current stream, which
+    ``Workbench.process_frame`` made wait for its work; a consumer on that
+    stream (the legacy default stream, for the event loop) reads them in order.
+    """
+    return result.ids.clone(), result.boxes.clone(), result.classes.clone()
+
+
 class _WorkbenchWorker(threading.Thread):
     """Per-thread worker that pulls from a per-stream queue and processes with Workbench."""
 
@@ -226,6 +237,14 @@ class _WorkbenchWorker(threading.Thread):
         if self.telemetry is not None:
             self.telemetry.observe("workbench_preprocess", preproc_ms)
 
+        # #538 D2-GPU G1: preprocessing (the RGB ops or the NV12 kernel) ran on
+        # this thread's current stream, but Workbench reads `padded` on its own
+        # non-blocking stream. Order that stream after ours. The same wait orders
+        # this frame's writes to Workbench.out_* after the previous frame's
+        # result copies (G2), which were queued on our stream.
+        if padded.is_cuda:
+            self.workbench.stream.wait_stream(torch.cuda.current_stream(padded.device))
+
         # Process frame through Workbench
         process_start = time.perf_counter()
         result = self.workbench.process_frame(
@@ -245,12 +264,13 @@ class _WorkbenchWorker(threading.Thread):
             self.telemetry.observe("workbench_worker", elapsed_ms)
 
         # Emit result via callback (runs in caller's thread)
+        ids, boxes, classes = _own_result(result)
         self.on_result(
             self.stream_id,
             item.timestamp,
-            result.ids,
-            result.boxes,
-            result.classes,
+            ids,
+            boxes,
+            classes,
             None,  # keypoints not available in workbench path
         )
 
