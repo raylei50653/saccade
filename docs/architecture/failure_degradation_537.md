@@ -31,7 +31,7 @@
 | C0-02 | public-library、eval／SN-PL2 | native 擴充缺失，沒有 CUDA | `update()` 在進入 stub 前就拋 `RuntimeError`；訊息依 driver 環境而不同（例如 `No CUDA GPUs are available` 或 `Found no NVIDIA driver ...`），測試只釘住例外型別 | 例外 | reproduced | REQ-535-02-01 |
 | C0-03 | online-service／SN-ON3（B0-F02） | native 擴充缺失 | `AsyncDispatcher` 直接 import 失敗後，名稱綁成 `typing.Any`；`get_tracker()` 拋 `TypeError: Any cannot be instantiated`。`_process_batch` 只在 batch 有 detection 時才建 tracker，所以空幀 batch 不會觸發這個錯誤 | 例外，出現時間依輸入而定 | reproduced（`get_tracker`）；觸發時間為 source-inspected | REQ-535-02-04；**已由 R-1 修復，見 §10** |
 | C0-04 | online-service／SN-ON7 | VRAM usage 接近門檻 | 轉換表見 §3：FAST_PATH 實質上沒有遲滯，EMERGENCY 的轉換不單調，在 91～92 會一次跳兩級 | dispatcher `get_stats()["current_level"]`；轉換時 stdout 有一行 print | reproduced | REQ-535-07-02；D-537-2 |
-| C0-05 | online-service／SN-ON7 | NVML init 失敗 | `get_stats()` 全部回 0。目前若為 EMERGENCY，連續 3 次決策會依序降為 FAST_PATH → REDUCED → NORMAL | 只有 init 時一行 print「Degradation disabled」；level 顯示 NORMAL | reproduced | REQ-535-07-01 |
+| C0-05 | online-service／SN-ON7 | NVML init 失敗 | `get_stats()` 全部回 0。目前若為 EMERGENCY，連續 3 次決策會依序降為 FAST_PATH → REDUCED → NORMAL | 只有 init 時一行 print「Degradation disabled」；level 顯示 NORMAL | reproduced | REQ-535-07-01；**後續 4A 修復與證據見 §20** |
 | C0-06 | online-service／SE-23、SE-24 | 沒有 writer（SHM segment 不存在） | `VRAMLevelReader.read()` 回 NORMAL；writer 之後才建立時，reader 能重新附掛 | 無 | reproduced | REQ-535-07-01；**已由 F07 修復，見 §7** |
 | C0-07 | online-service／SE-24 | segment 內的 byte 超出 0～3 | `read()` 拋 `ValueError`。這個呼叫位於 orchestrator `handle_cognitive_event` 內，對事件處理的影響未追 | 例外 | reproduced（reader）；consumer 影響未驗證 | REQ-535-07-01；**已由 F07 修復，見 §7** |
 | C0-08 | online-service／SE-23、SE-24（**B0-F07**） | 前次崩潰留下 segment，而且 reader 比 writer 先附掛 | writer unlink 並重建後，舊 reader 一直讀到舊值（測試中為 EMERGENCY）；新建立的 reader 讀得到新值；writer 關閉後，舊 reader 仍讀到最後的值。`main.py --mode full` 把 `PipelineOrchestrator()` 當 `gather()` 的參數，依 source 判讀 reader 會比 `dispatcher.start()` 先建立。卡在 EMERGENCY 時，`handle_cognitive_event()` 對非 anomaly 事件不寫入 ChromaDB 就返回，`process_event_batch()` 仍 ACK 整批，這些事件不會重送 | 無；level 看起來有效 | SHM 行為 reproduced；`main.py` 建構順序為 source-inspected（AST 測試靜態釘住，沒有執行 `run_full()`）；「orchestrator 持續丟棄非 anomaly 事件且仍 ACK」為 source-inspected（`src/saccade/cognition/orchestrator.py` 的 `handle_cognitive_event()`／`process_event_batch()`，沒有端到端測試） | REQ-535-07-01；#538 判準；D-537-3；**已由 F07 修復，見 §7** |
@@ -66,6 +66,7 @@ C0 測試釘住的是「現況」欄。「目標」欄只是記錄已採納的�
 - **D-537-1**：C0 為一條 Draft PR，只含文件矩陣和無 GPU 特徵測試，只固定現況與失敗證據，**不混入修復**；不改 runtime 行為；沒有 merge 授權。
 - **D-537-2**：C2 的目標語義採 [degradation 文件 §5](../modules/resource/architecture_degradation.md)，內容如 §3。
 - **D-537-3**：第一個修復目標是 B0-F07（C0-08），另開小 PR。具體方案要先給 owner 核准；freshness／restart 判準歸 #538，#537 只選 consumer policy。
+- **D-537-4A**：owner 在 2026-10-20 的本次工作 session 明確回覆「核准 4A，實作這個小修復」，批准 §19.2 的 NVML 失敗契約；範圍限 C0-05，不包含 merge、部署或其他 profile 的支持批准。
 
 ## 5. 證據
 
@@ -82,15 +83,15 @@ F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義�
 
 | 項目 | 需要的裁決 | 歸屬 |
 |:--|:--|:--|
-| C0-01～C0-03 的拒絕點 | 各 profile 在哪一步拒絕（import、construct 或 update），以及怎麼回報 | REQ-535-02-01／02-03／02-04；#441 |
-| C0-05 | NVML 不可用時，consumer 應該看到什麼（unknown、停用降級，或其他具名狀態）；F07 後仍發佈 FRESH NORMAL | REQ-535-07-01 |
+| C0-01／02 的拒絕點 | public facade 的拒絕點與相容性由 #441／#537 協調；eval entrypoint 的 preflight／結果政策仍歸 #536／#537。online 的 C0-03 已由 R-1 修復（§10） | REQ-535-02-01／02-03／02-04 |
+| C0-05 | 4A 已核准（§19）；初始化／probe／無效 sample 明確拒絕，實作與證據見 §20 | REQ-535-07-01；CAP owner：raylei50653 |
 | C0-06～C0-08 | 已由 F07 修復（§7）；T 預設值、多 writer、shutdown 仍待 #538 | #538 |
 | C0-09 | WorkbenchPool 是否支援 resource degradation | REQ-535-07-02 |
 | C2 其他參數 | 重啟初值與決策頻率已裁決（R0、F0，見 §8）；非法 usage（NaN、負值、>100）只在 C2 PR 內維持現況（O0），不構成支持契約，仍待裁決 | D-537-2 未涵蓋 |
 | R-1（C0-11） | 呼叫契約已由 R-1 修復（§10）；worker task 異常終止後的錯誤傳遞、health、stop 與 shutdown 語義依 §10 的切片順序處理 | #537 C0-11；#538 D2-AD、D2-WB-0／1、D2-GPU |
 | health CLI、orchestrator 錯誤後的 ACK | 報告 unknown 的方式；ACK 語義 | REQ-535-07-03；REQ-535-06-01（#538） |
 
-建議順序：先提出 C0-08（B0-F07）的修復方案給 owner，方案要包含事件持久化與 ACK 的負控制（非 anomaly 事件在舊 reader 下不得未寫入就被 ACK）；C2 依 D-537-2 另開 PR，附上目標測試和負控制。每個修復 PR 只處理一類行為。
+F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。本次 C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 另外處理，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
 
 ## 7. B0-F07 修復（C0-06／07／08 收斂）
 
@@ -864,3 +865,105 @@ M2 沒有讓「下一幀等 clone」失敗：該測試檢查的是排序（M1、
 - consumer 若在 legacy default stream 以外的 stream 讀取結果，要自己先等待 legacy default stream。
 - `concurrent_mot17.py` 多 worker 的 CUDA graph capture segfault；`mot17.py --threads` 是沒有作用的參數。
 - 不宣稱 online qualified；8stream `--workbench` 維持 unsupported。
+
+## 19. C0-05：NVML 失敗的重現與核准方案
+
+**狀態：4A accepted（2026-10-20），實作與驗證見 §20。** 本節在 `main@d6724f11301ed737f2370694111ea1e16b730ca6` 重新檢查 C0-05，重現與原始提案另固定於 `6cb6d121`。#537 要求「實作期望必須先核准」；CAP owner raylei50653 在本工作 session 明確批准 4A（§4）。4B 仍未批准，本次裁決也不代替 ledger 中其餘 REQ 的正式指派或 profile 支持決策。
+
+### 19.1 現況與重現範圍
+
+實際路徑是 `ResourceManager.get_stats()` → `decide_degradation_level()` → `AsyncDispatcher._worker_loop()` → `VRAMLevelWriter.write()` → orchestrator。`main.py` 在模組載入時建構 resource manager，orchestrator-only 模式也會經過該建構；因此不能直接把 constructor 改成拒絕而不檢查 caller。
+
+| 情境 | 現行行為 | 問題／控制組 |
+|:--|:--|:--|
+| 初始化失敗 | `get_stats()` 回四個 0；決策從 EMERGENCY 逐次降為 NORMAL；dispatcher 為每次決策發佈新的 FRESH level | 零值不是有效測量；init 失敗後不再重試，即使下一次 NVML init 本可成功也不能自動恢復 |
+| 初始化成功，真正的 used=0、total>0 | 回報 0% 與非零 capacity，正常依 hysteresis 恢復 | 合法的空閒 GPU，必須與 unavailable 分開 |
+| 初始化成功，之後取得 handle／memory info 失敗 | 原始例外往外拋；dispatcher 依 D2-AD 進入 FAILED，保留 cause；該次沒有新的快照 | 已有明確失敗通道，不能宣稱所有 NVML 故障目前都被吞成 NORMAL |
+| NVML 回 total=0 | `ZeroDivisionError`，同樣走 dispatcher FAILED | 不是合法的 0% 控制組；尚無具名的 monitor error |
+| 單獨重試 manager，後續 probe 恢復 | 已初始化的 manager 能在下一次成功讀取後繼續決策 | 不等於 FAILED dispatcher 自動復原；後者仍須照 lifecycle 契約 stop／start |
+
+原始重現測試固定於 `6cb6d121:tests/unit/test_resource_monitor_observed_537.py`，**9 個案例通過**。使用假的 NVML、detector、writer 與 CPU frame；不呼叫真實 GPU、不寫正式 `/dev/shm/saccade_vram_level`。當時標為 `diagnostic`，斷言的是上表**修復前**的現況。4A 修復將相關測試轉成目標契約（§20）；D2-AD 的 failure／queue／cleanup 契約測試仍是其 authority。
+
+本切片另跑既有 resource observed／hysteresis／snapshot／orchestrator policy 與 D2-AD／caller lifecycle 測試（六個檔，`-m 'not gpu'`）：176 passed。這些是 regression 核對，不是對待決方案的驗收，也不是完整 service／GPU qualification。
+
+### 19.2 D-537-4A：建議採明確拒絕，沿用 D2-AD 的錯誤通道
+
+此方案只裁決 online `AsyncDispatcher` 的 NVML 監控依賴，**不批准整個 online-service profile**。
+
+| 邊界 | 4A 核准的精確目標 |
+|:--|:--|
+| import／construct | 保留可 import／construct；constructor 記下 NVML init 的錯誤，不回傳虛構的 healthy stats，也不因此讓 orchestrator-only 模式在 import 時失敗 |
+| `ResourceManager.get_stats()` | 初始化不可用或 NVML probe 失敗時，拋具名 `ResourceMonitorUnavailable(RuntimeError)`，保留原始 cause；成功才回 `VRAMStats`。不以四個 0 代表 unavailable |
+| probe 的有效域 | total 必須為有限正數，used 必須為有限值且 0 ≤ used ≤ total，free 必須為有限非負數；不要求 free+used==total。無效 sample 也屬 monitor unavailable，以 `ValueError` 保留 sample 驗證原因，不捏造 NVML 例外；由 stub 直接注入 `usage_percent` 的 O0 仍不構成支持契約 |
+| `AsyncDispatcher.start()` | 在建立 writer／worker、接受 frame 之前先做一次 probe；失敗拋 `ResourceMonitorUnavailable`，維持原 CREATED／STOPPED，不建立新 task／writer，不接受 frame。這是測量 preflight，不做 hysteresis 決策，也不改 F0「每 batch 決策一次」 |
+| 執行中失敗 | 以原有 D2-AD 通道進入 FAILED，拒絕新 frame；`stop()` 清理後拋 `DispatcherFailed`，cause 是具名 monitor error，其 cause 保留 NVML 原始例外或 sample 驗證的 `ValueError`。不得吞掉後繼續推論 |
+| level／可觀測性 | `ResourceManager.current_level` 只保留最後的 hysteresis 狀態，不因無效 sample 恢復。dispatcher stats 新增 `resource_monitor_status`（初始 `unprobed`；成功 probe 為 `available`；失敗為 `unavailable`）與 `resource_monitor_error`（初始／成功時空字串，失敗時具名錯誤）；startup 錯誤記在 monitor 欄位，不覆寫 D2 的 worker failure 欄位。`current_level` 在初始、本次 start 嘗試後尚未有效決策或 monitor 失敗時回 `"UNKNOWN"`，有效決策後才回 level 名稱。caller 的文字報告須保留 unknown 與錯誤原因，不由最後的 level 推定健康 |
+| 跨程序 consumer | 不為失敗 probe 發佈 FRESH level。現存快照在既有 T 內仍可 FRESH，其後 STALE；啟動 preflight 拒絕時不改任何既存快照，其中可能包含舊版 init-failure 產生的 level。正常 stop 按 [degradation §6](../modules/resource/architecture_degradation.md#6-vram-level-跨程序快照契約537-b0-f07) 嘗試退役自己的快照；replacement 成功才立即 STALE，失敗則靠 T 老化。保留此有界殘留，不宣稱兩程序即時同步知道 monitor failure |
+| 恢復／告警 | 沒有背景或自動 init 重試。init 失敗後須換新 manager；已初始化後的 probe 故障，可沿用 D2-AD 的 stop／start：重新 preflight 成功才接受 frame，保留該 manager 的 hysteresis。若換新 manager 則按 R0 從 NORMAL 開始。每次失敗保留一次診斷，health/stats 可重複讀，不按 frame 洗版；兩種恢復與再次失敗都須測試 |
+
+```mermaid
+flowchart LR
+    P[啟動前 NVML probe] -->|有效| R[RUNNING：每 batch 決策並發佈]
+    P -->|不可用| X[明確拒絕；未建立 writer／worker]
+    R -->|probe 不可用| F[FAILED；保留 cause；拒絕新 frame]
+    F --> S[stop 清理；嘗試退役舊快照]
+    S --> N[修復 NVML；明確重啟並重新 preflight]
+    N --> P
+```
+
+圖與表都是 **accepted target**；實作與相應證據另列於 §20。
+
+**另一個可選方案 D-537-4B**：監控 unavailable 時繼續 geometry tracking，但明確回報 unknown、停止發佈 FRESH 決策，讓 orchestrator 按 unknown policy 持久化並抑制新 RAG。這還需要裁決 batch cap、舊 EMERGENCY 的立即失效方式、重試頻率與恢復時是否保留 hysteresis；也會改變目前 runtime probe error → FAILED 的行為。相較之下，4A 能沿用已核准的 D2-AD failure／cleanup 通道，變更較小，故建議先採 4A。不得把尚未決定的 4B 寫成 approved fallback。
+
+### 19.3 實作、驗收與分工
+
+4A 核准的修復範圍是 `resource_manager.py`、`dispatcher.py` 及兩個具名 online caller 的報告／cleanup 接合；C0 特徵測試在同一修復中轉成對應目標，原始失敗證據留在本節與 `6cb6d121`。
+
+必要驗收包括：有效 0% 的正控制、init／handle／memory／無效 sample 的負控制、啟動失敗沒有 writer／worker、RUNNING → FAILED 的 cause 與 queue accounting、沒有假 FRESH 發佈、保留與退役舊快照的 T 邊界（含 retirement 失敗）、init 故障後新 instance 成功、已初始化的 manager 在 stop／start 後保留 hysteresis、重複故障的診斷節流。以 mutation 證明測試會攔住「init 失敗再回零」「失敗仍發佈」「失敗仍接受 frame」；host-only 證據與 GPU smoke 分開。
+
+兩個 runtime 檔與 online 入口都是 `decision_relevant`；實作後須依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture，再用獨立 stacked review surface 更新 publication，原子落地。原始重現／提案 `6cb6d121` 不改 runtime coordinate；4A 實作會移動 implementation 軸。修復的 rollback 亦須照當時 blob 重新檢查座標，不直接恢復舊 publication 冒充 current。
+
+其餘殘留的 owner／下一步：
+
+| 項目 | 保留的邊界與下一切片 | Owner／入口 |
+|:--|:--|:--|
+| C0-01／02 | ADR 025 與 README 仍允許 constructible stub；不能把 R-1 的 internal preflight 套到 public facade。public API 相容性與 eval entrypoint 的拒絕政策分開裁決 | raylei50653；#441／#537（public）、#536／#537（eval）；REQ-535-02-01、02-03 |
+| C0-09 | WorkbenchPool 沒有 resource manager／writer，stats 的固定 NORMAL 不構成監控證據。另提「明列未接監控」的回報切片；不在此接上降級 controller | raylei50653；#537／REQ-535-07-02；`--workbench` 仍不支援（#538） |
+| O0 | 直接注入非法 usage 的決策語義仍待裁決；4A 僅驗證 NVML 原始 sample，不放寬 C2 契約 | raylei50653；#537 |
+| freshness／ACK／ownership | T 預設、單一 writer 強制、storage 失敗仍 ACK 與 PEL 回收仍交 #538；4A 不替這些項目結案 | raylei50653；#538／REQ-535-06-01、07-01 |
+| health CLI／telemetry | 另有直接 NVML／nvidia-smi probe，不是此 ResourceManager consumer；4A 不能推廣成全 profile 的 healthy 保證 | raylei50653；#537／REQ-535-07-03 |
+| C0-10 | shipping 的 run-state／completion 已有 CC-536-01-01 實作；C0 尚未重查轉換。另以既有契約檢查完成／部分完成／失敗的狀態與診斷，證據交 #541 | raylei50653；#537／#536／#541；REQ-535-01-01 |
+
+#537 保持 OPEN；本節不提供 merge／部署授權。
+
+## 20. C0-05／4A 實作與驗證
+
+依 D-537-4A（§4、§19）的核准範圍，將 NVML init 失敗的全零 fallback 改成具名錯誤，沿用 D2-AD 的 worker failure 與 cleanup 通道。原始失敗重現固定於 `6cb6d121`；實作不改 hysteresis 門檻、快照 v1、事件／ACK／RAG policy、public tracker facade 或 WorkbenchPool 的 C0-09。
+
+**實作**：
+
+- `ResourceManager` 可 import／construct，保存 init 的原始錯誤；`get_stats()` 對 init／probe／無效原始 sample 拋 `ResourceMonitorUnavailable` 並保留 cause，成功才回測量。對已初始化的 manager，失敗不推進 hysteresis，後續有效 probe 可恢復；init 失敗不自動重試。
+- `AsyncDispatcher.start()` 先做測量 preflight，成功後才建立 writer／worker；拒絕時維持 CREATED／STOPPED，沒有新 frame／task／writer。啟動測量不做 hysteresis 決策。
+- dispatcher stats 加上 `resource_monitor_status`／`resource_monitor_error`；未決策或監控失敗時 `current_level="UNKNOWN"`。執行中 monitor error 進入 FAILED，保留具名錯誤與其原始 cause，拒絕新 frame、結清 queue，不發佈新 FRESH。其他 worker 故障保留其既有分類。
+- 8stream 的 dispatcher report 顯示 monitor status／error 與 UNKNOWN。main 沿用既有例外傳遞與清理，不增加重複 log；它的 process-global manager 所有權不變。8stream 的 per-run manager 仍由 cleanup stack 關閉。
+
+**驗收與負控制**（host-only）：
+
+| 證據 | 涵蓋 |
+|:--|:--|
+| [test_resource_monitor_contract_537.py](../../tests/unit/test_resource_monitor_contract_537.py) | 28 個案例：有效 0／100%、單位轉換、free 不必與 used 加總為 total、init 不重試／換新 instance、handle／memory 失敗的 cause 與恢復、零／負數／NaN／無窮／非數字／缺欄位的 sample 驗證；重複讀取不洗版 |
+| [test_resource_monitor_dispatcher_contract_537.py](../../tests/unit/test_resource_monitor_dispatcher_contract_537.py) | 13 個案例：preflight 無副作用、尚無決策的 UNKNOWN、初始化與 runtime 故障、queue 與 cause、同 instance stop／start 保留 hysteresis、非 monitor 故障的控制組；真實 reader／writer 路由至私有 tmp_path，驗證舊快照 byte 不變、T 等號邊界、stop 退役成功及 OSError 後靠 T 老化 |
+| [test_caller_lifecycle_538.py](../../tests/unit/test_caller_lifecycle_538.py) | 新增 7 個情境：兩個 caller 的 monitor startup／runtime 失敗與清理、main 的 orchestrator-only import 容忍 init 失敗、dispatcher 文字 report 保留 UNKNOWN／status／原因。共用 harness 在 import 前攔住 NVML，避免讀真實監控 |
+| 既有 C2／C0 測試 | init 失敗的舊零值／衰減斷言在同一修復中改為具名錯誤與保留 level；直接注入非法 `VRAMStats.usage_percent` 的 O0 行為保留 |
+
+RM 契約對修復前 `6cb6d121` 執行時，僅加缺少的例外名稱以通過 import，仍有 **21 個行為斷言失敗**（7 passed；不是 collection error）。五個隔離 mutation 都被攔住：回全零（1 failed）、允許 used>total（1）、移除 finite guard（3）、強制未批准的 free+used==total（3）、自動 init retry（1）。控制程式、變體來源與逐次輸出在本機 gitignored `results/537_c0_05_4a/`；執行前後確認共享 runtime source 的 SHA-256 相同。
+
+dispatcher 的四個隔離 mutation 也都被攔住：移除 preflight（10 failed）、monitor 故障後繼續（5）、隱藏 UNKNOWN（9）、略過重啟 preflight（3）。同樣只在獨立來源副本上執行，不改共享 runtime。RM 加既有 C2／C0 三檔測試 133 passed；dispatcher 相關六檔 104 passed／4 gpu deselected；caller 完整檔案 29 passed。
+
+**基線**：上面的 mutation 與計數，以及下面的 NVML smoke，都是 2026-10-20 在 `main@d6724f11`（#621 D2-GPU-1 之前）執行的。實作 cherry-pick 到 `main@50aad5bd` 後，`dispatcher.py` 與 #621 的改動不重疊（#621 只改 `_WorkbenchWorker`，4A 只改 `AsyncDispatcher`），mutation 沒有在新基線重跑。新基線上重跑的是：resource／dispatcher／caller／WorkbenchPool lifecycle 相關十檔 265 passed（3 gpu deselected）、`pre_push` 6006 passed／0 failed，以及 `gpu` 標記的 R-1 native smoke 與 D2-GPU-1 GPU 契約共 15 passed。
+
+**GPU 與實際 NVML smoke**：在本機選定的新 build 上跑 R-1 的 native adapter／dispatcher smoke，3 passed／20 deselected。另以真實 NVML、假 detector 及私有 tmp_path 快照確認 startup preflight 成功、stats 是 `available`／`UNKNOWN`、hysteresis 未因 preflight 改變、快照仍是尚未決策的 STALE。這不等於真實 VRAM 壓力故障注入，也不驗收 D2-GPU 的 stream／buffer lifetime。
+
+**Runtime identity**：2026-10-20 在 `d6724f11` 基線的捕捉（`8b89ca8f… → e75f0067…`）因 #621 改了 `dispatcher.py`、`detector_trt.py` 而作廢，沒有出版。rebase 後在實作 head `791d85d8` 的乾淨 tree 重新捕捉（之後只改文件，不動任何已出版軸的 blob）：本工作樹的獨立 `build/runtime_identity` 重新 build，`--run-probe --require-complete` 在 gpu0 lease 下 fresh capture 到 scratch，沒有沿用舊 probe。只有 implementation 改變：`583ede47… → d04e0183…`，317 個成員不增不減，只改 `resource_manager.py`、`dispatcher.py` 與 `run_8stream_perception.py`。其餘四軸重算後相同，probe digest 仍為 `2dabed0b…`；`equivalence=unproven`，probe 相同不構成 online monitor policy 或整體語義等價。promote 後 `--mode attested` exit 0。canonical／archive 以獨立的 stacked publication branch 提交，與實作原子落地。
+
+**邊界**：這些測試沒有執行完整 online service、Redis／Chroma 或 VRAM 耗盡，亦不提供 GPU stream／buffer lifetime 的 D2-GPU qualification。失敗 probe 不會立即撤銷別的程序仍可讀到的舊快照，正常 retirement 也可能失敗；兩者在既有 T 後變成 STALE。health CLI、獨立 telemetry、C0-09、C0-01／02、C0-10、O0 與 #538 的其餘工作保持 §19.3 的分工。

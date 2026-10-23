@@ -1,3 +1,4 @@
+import math
 import os
 import secrets
 import stat
@@ -26,6 +27,10 @@ class VRAMStats:
     usage_percent: float
 
 
+class ResourceMonitorUnavailable(RuntimeError):
+    """NVML could not supply a valid VRAM measurement (#537 D-537-4A)."""
+
+
 class ResourceManager:
     """
     Saccade 資源管理器 (Industrial Grade Decision Maker)
@@ -38,6 +43,7 @@ class ResourceManager:
     def __init__(self, gpu_id: int = 0) -> None:
         self.gpu_id = gpu_id
         self._nvml_initialized = False
+        self._nvml_init_error: Optional[Exception] = None
         self._init_nvml()
 
         # 狀態紀錄，用於實現 Hysteresis (避免在 89/91% 之間反覆切換)
@@ -48,19 +54,48 @@ class ResourceManager:
             pynvml.nvmlInit()
             self._nvml_initialized = True
         except Exception as e:
-            print(f"⚠️ [ResourceManager] NVML Init failed: {e}. Degradation disabled.")
+            self._nvml_init_error = e
+            print(f"⚠️ [ResourceManager] NVML Init failed: {e}. Monitoring unavailable.")
 
     def get_stats(self) -> VRAMStats:
-        if not self._nvml_initialized:
-            return VRAMStats(0.0, 0.0, 0.0, 0.0)
+        """Return a valid measurement or raise with its acquisition failure.
 
-        handle = pynvml.nvmlDeviceGetHandleByIndex(self.gpu_id)
-        info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        usage = (info.used / info.total) * 100
+        Construction stays tolerant, including for callers that only use the
+        orchestrator. An initialization failure is retained without automatic
+        retries; replacing that manager is the recovery boundary.
+        """
+        if not self._nvml_initialized:
+            raise ResourceMonitorUnavailable(
+                f"GPU {self.gpu_id}: NVML initialization failed: {self._nvml_init_error}"
+            ) from self._nvml_init_error
+
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(self.gpu_id)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        except Exception as e:
+            raise ResourceMonitorUnavailable(
+                f"GPU {self.gpu_id}: NVML probe failed: {e}"
+            ) from e
+
+        try:
+            total, used, free = info.total, info.used, info.free
+            if not math.isfinite(total) or total <= 0:
+                raise ValueError("total must be finite and positive")
+            if not math.isfinite(used) or not 0 <= used <= total:
+                raise ValueError("used must be finite and between zero and total")
+            if not math.isfinite(free) or free < 0:
+                raise ValueError("free must be finite and nonnegative")
+        except (AttributeError, TypeError, ValueError, OverflowError) as e:
+            invalid = e if isinstance(e, ValueError) else ValueError(str(e))
+            raise ResourceMonitorUnavailable(
+                f"GPU {self.gpu_id}: invalid NVML memory sample: {invalid}"
+            ) from invalid
+
+        usage = (used / total) * 100
         return VRAMStats(
-            free_mb=info.free / 1024 / 1024,
-            used_mb=info.used / 1024 / 1024,
-            total_mb=info.total / 1024 / 1024,
+            free_mb=free / 1024 / 1024,
+            used_mb=used / 1024 / 1024,
+            total_mb=total / 1024 / 1024,
             usage_percent=usage,
         )
 

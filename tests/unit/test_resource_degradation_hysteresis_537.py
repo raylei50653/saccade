@@ -162,12 +162,17 @@ def test_t6_two_decision_paths_match_reference_model() -> None:
 
 
 # ── T7: behavior this fix must not move ─────────────────────────────────────
-def test_t7_nvml_init_failure_still_decays_emergency_to_normal() -> None:
-    """C0-05 is unchanged: NVML-unavailable policy is out of scope for C2."""
+def test_t7_nvml_init_failure_preserves_emergency() -> None:
+    """D-537-4A: unavailable measurements cannot recover hysteresis state."""
+    from saccade.resource.resource_manager import ResourceMonitorUnavailable
+
     with mock.patch.object(pynvml, "nvmlInit", side_effect=RuntimeError("nvml")):
         manager = ResourceManager()
     manager.current_level = E
-    assert [manager.decide_degradation_level() for _ in range(3)] == [F, R, N]
+    for _ in range(3):
+        with pytest.raises(ResourceMonitorUnavailable):
+            manager.decide_degradation_level()
+        assert manager.current_level is E
 
 
 def test_t7_initial_level_is_normal() -> None:

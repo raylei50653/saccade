@@ -438,6 +438,8 @@ async def _run_dispatcher(
             "📈 Dispatcher Stats: "
             f"state={stats['state']} "
             f"level={stats['current_level']} "
+            f"monitor={stats['resource_monitor_status']} "
+            f"monitor_error={stats['resource_monitor_error']!r} "
             f"active={stats['active_streams']} "
             f"queue={stats['queue_depth']} "
             f"batch_mean={stats['mean_batch_size']:.2f} "
