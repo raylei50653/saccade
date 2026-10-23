@@ -1090,7 +1090,7 @@ journal 不加分類欄位；需要的分類都能從既有欄位推出。`state
   - **Redis**：連不上是 degraded，queue depth 是 `None`，報告印 unknown，不印 0。
 - **整體狀態**：任一項 degraded 為 `DEGRADED`；否則任一項 unknown 為 `UNKNOWN`；全部 ok 才是 `OK`。`overall_ok` 只在 `OK` 時為真。
 - **報告標示來源**：`systemctl --user`、`NVML GPU 0, all processes`、`REDIS_URL`。URL 的顯示採 allowlist：
-  - 只去掉 netloc 裡的 userinfo；其餘部分（host、port、path、query、fragment）照原文保留，所以 IPv6 的方括號與不合法的 port 都原樣顯示，不會讓報告失敗。
+  - 只去掉 netloc 裡的 userinfo；netloc 直接從原始字串切出（到第一個 `/`、`?` 或 `#`），不用 `urlsplit` 的結果，因為它會刪掉 tab 與換行。其餘部分（host、port、path、query、fragment）照原文保留，所以 IPv6 的方括號與不合法的 port 都原樣顯示，不會讓報告失敗。
   - 去掉 userinfo 後的整段 URL 必須全是純 ASCII 的 scheme／host／port／path 字元（英數與 `+-._~:/[]`）才顯示，否則印 `<unparseable URL>`；無法拆解的 URL 也一樣。檢查前不丟棄任何部分，所以帶 query 或 fragment 的 URL、拆不開的 userinfo（沒有 `scheme://`、`redis:///u:pw@h`、`redis://u:pw/x@h`，或密碼中未跳脫的 `?`／`#` 把 `@host` 推出 netloc）、`%` 編碼，以及全形 `＠` 之類的非 ASCII 字元，都不會顯示。代價是合法但帶 query 的 URL（例如 `unix:///tmp/redis.sock?db=0`）也只印 `<unparseable URL>`。
   - `REDIS_URL` 本身不是純字元時，Redis 的錯誤訊息只印例外類型，因為 redis-py 的 URL 解析錯誤會引用整段 netloc。
 
@@ -1102,12 +1102,12 @@ journal 不加分類欄位；需要的分類都能從既有欄位推出。`state
 
 | 測試 | 涵蓋 |
 |:--|:--|
-| [test_pipeline_health_contract_537.py](../../tests/unit/test_pipeline_health_contract_537.py) | 85 個案例（模組 fixture 固定 `REDIS_URL`，不受環境變數影響）：<br>• 整體狀態的優先序（8 組，含 NVML 缺失、其餘 ok 時為 UNKNOWN）<br>• systemd 的 9 種輸出（含屬性順序顛倒、缺欄位）、3 種例外與非零 exit<br>• NVML 的 init／查詢失敗與 shutdown、device 0、門檻含等號（測試內固定門檻，不受環境變數影響）<br>• Redis 失敗時 depth 為 `None`、Fragmentation 不回 0<br>• 端到端：NVML 失敗而其餘正常時報告為 UNKNOWN；報告的來源標示、URL 去掉帳密、不出現 `0 items`、三種標記<br>• `redacted_url` 的 28 種 URL（帳密、query、fragment、IPv6、unix socket、不合法 port、無法拆解、沒有 `scheme://`、拆不開的 userinfo、密碼含 `?`／`#`（含全形 `＠` 的組合）、`%` 編碼、非 ASCII、大寫 scheme），以及 URL 不合法時報告仍能產生<br>• 完整報告：16 種帶密碼的 `REDIS_URL`，Redis 錯誤訊息原樣引用 URL 時，整份報告都不出現密碼<br>• 真實 redis-py 解析器拒絕全形 `／` 與 `＠` 的 URL 時不印密碼（依賴目前的解析器在連線前就拒絕）；URL 不是純字元時只印例外類型，否則保留原訊息 |
+| [test_pipeline_health_contract_537.py](../../tests/unit/test_pipeline_health_contract_537.py) | 88 個案例（模組 fixture 固定 `REDIS_URL`，不受環境變數影響）：<br>• 整體狀態的優先序（8 組，含 NVML 缺失、其餘 ok 時為 UNKNOWN）<br>• systemd 的 9 種輸出（含屬性順序顛倒、缺欄位）、3 種例外與非零 exit<br>• NVML 的 init／查詢失敗與 shutdown、device 0、門檻含等號（測試內固定門檻，不受環境變數影響）<br>• Redis 失敗時 depth 為 `None`、Fragmentation 不回 0<br>• 端到端：NVML 失敗而其餘正常時報告為 UNKNOWN；報告的來源標示、URL 去掉帳密、不出現 `0 items`、三種標記<br>• `redacted_url` 的 31 種 URL（帳密、query、fragment、IPv6、unix socket、不合法 port、無法拆解、沒有 `scheme://`、拆不開的 userinfo、密碼含 `?`／`#`（含全形 `＠` 的組合）、`%` 編碼、非 ASCII、大寫 scheme、userinfo 或 host 中的 tab／換行），以及 URL 不合法時報告仍能產生<br>• 完整報告：16 種帶密碼的 `REDIS_URL`，Redis 錯誤訊息原樣引用 URL 時，整份報告都不出現密碼<br>• 真實 redis-py 解析器拒絕全形 `／` 與 `＠` 的 URL 時不印密碼（依賴目前的解析器在連線前就拒絕）；URL 不是純字元時只印例外類型，否則保留原訊息 |
 | [test_pipeline_health.py](../../tests/unit/test_pipeline_health.py) | 既有的「xlen 失敗時 depth == 0」改為 `None`；加 fixture 固定 `REDIS_URL` |
 
-修復前的實作只補上三個常數名稱讓測試能 import，結果是 86 failed／2 passed；其中多數失敗來自介面改變（`ServiceStatus` 改用 `status` 欄位、`check_vram()` 改回傳 tuple），行為上的重現以上面「修復前」的直接執行為準。
+修復前的實作只補上三個常數名稱讓測試能 import，結果是 89 failed／2 passed；其中多數失敗來自介面改變（`ServiceStatus` 改用 `status` 欄位、`check_vram()` 改回傳 tuple），行為上的重現以上面「修復前」的直接執行為準。
 
-17 個隔離 mutation 都被攔住，只在獨立的來源副本上執行，執行前後共享的 `health.py` SHA-256 相同：
+18 個隔離 mutation 都被攔住，只在獨立的來源副本上執行，執行前後共享的 `health.py` SHA-256 相同：
 
 | mutation | failed |
 |:--|:--|
@@ -1120,16 +1120,17 @@ journal 不加分類欄位；需要的分類都能從既有欄位推出。`state
 | 報告不去掉 URL 帳密（印原始 `REDIS_URL`） | 20 |
 | 沒有配置時 Fragmentation 回 0 | 1 |
 | 查詢失敗時不 shutdown | 2 |
-| 恢復第一版的 `redacted_url`（解析 port） | 30 |
+| 恢復第一版的 `redacted_url`（解析 port） | 31 |
 | 檢查前先丟掉 query／fragment | 11 |
 | Redis 錯誤訊息不隱藏 | 20 |
-| 顯示前不檢查是否為純字元 | 26 |
-| 恢復 r1 版的 `redacted_url` | 24 |
-| 恢復 r2 版的 denylist（只看 `@?#`） | 3 |
-| 不去掉 userinfo | 10 |
-| 恢復 r4 版的 `redacted_url`（`@` 計數＋先丟 query） | 6 |
+| 顯示前不檢查是否為純字元 | 27 |
+| 恢復 r1 版的 `redacted_url` | 25 |
+| 恢復 r2 版的 denylist（只看 `@?#`） | 4 |
+| 不去掉 userinfo | 11 |
+| 恢復 r4 版的 `redacted_url`（`@` 計數＋先丟 query） | 7 |
+| 恢復 r5 版的 `redacted_url`（用 `urlsplit` 的 netloc 長度切） | 2 |
 
-Codex r1（`2b120bf6`）判 NOT-READY：第一版的 `redacted_url` 會解析 port，port 不合法時報告本身丟 `ValueError`，orchestrator 啟動時的那次呼叫也會跟著失敗（MAJOR）；IPv6 host 的方括號被拿掉（MINOR）；門檻測試依賴環境變數 `VRAM_WARN_PCT`（MINOR）。三項都已修正，並加上對應的測試與 mutation。Codex r2（`1368913b`）再判 NOT-READY，兩項 MAJOR：沒有 `scheme://` 的 `user:pw@host:6379/0` 被拆成 scheme `user`、path `pw@host…`，密碼照樣印出；redis-py 解析失敗的 `ValueError` 訊息含有帶帳密的 netloc，經 `redis.detail` 印出。Codex r3（`3486a7be`）第三次判 NOT-READY，兩項 MAJOR、一項 MINOR：`redis://u:pw/x@h` 與 `redis:///u:pw@h` 的帳密沒有被拆開而照印；全形 `＠` 繞過 `@?#` 檢查，解析錯誤又把密碼帶出；兩個測試讀到環境中的 `REDIS_URL`。逐一補 denylist 已經三輪仍有漏洞，因此改為上述 allowlist，並固定測試中的 `REDIS_URL`。Codex r4（`bc8e3780`）判 NOT-READY，一項 MAJOR：密碼中未跳脫的 `?` 或 `#` 會把 `@host` 推進 query 或 fragment，剩下的 `user:pw` 通過 allowlist 而被印出；第一次修正只檢查 netloc 以外的 `@`；Codex r5（`60c2ddb2`）再以全形 `＠` 加 `?`／`#` 的組合指出同一類漏洞（MAJOR）：丟掉 query／fragment 之後才檢查，被丟掉的部分正好藏著可疑字元。現在改為只去掉 userinfo、不丟棄任何部分就檢查整段，`@` 計數檢查因此多餘而移除。
+Codex r1（`2b120bf6`）判 NOT-READY：第一版的 `redacted_url` 會解析 port，port 不合法時報告本身丟 `ValueError`，orchestrator 啟動時的那次呼叫也會跟著失敗（MAJOR）；IPv6 host 的方括號被拿掉（MINOR）；門檻測試依賴環境變數 `VRAM_WARN_PCT`（MINOR）。三項都已修正，並加上對應的測試與 mutation。Codex r2（`1368913b`）再判 NOT-READY，兩項 MAJOR：沒有 `scheme://` 的 `user:pw@host:6379/0` 被拆成 scheme `user`、path `pw@host…`，密碼照樣印出；redis-py 解析失敗的 `ValueError` 訊息含有帶帳密的 netloc，經 `redis.detail` 印出。Codex r3（`3486a7be`）第三次判 NOT-READY，兩項 MAJOR、一項 MINOR：`redis://u:pw/x@h` 與 `redis:///u:pw@h` 的帳密沒有被拆開而照印；全形 `＠` 繞過 `@?#` 檢查，解析錯誤又把密碼帶出；兩個測試讀到環境中的 `REDIS_URL`。逐一補 denylist 已經三輪仍有漏洞，因此改為上述 allowlist，並固定測試中的 `REDIS_URL`。Codex r4（`bc8e3780`）判 NOT-READY，一項 MAJOR：密碼中未跳脫的 `?` 或 `#` 會把 `@host` 推進 query 或 fragment，剩下的 `user:pw` 通過 allowlist 而被印出；第一次修正只檢查 netloc 以外的 `@`；Codex r5（`60c2ddb2`）再以全形 `＠` 加 `?`／`#` 的組合指出同一類漏洞（MAJOR）：丟掉 query／fragment 之後才檢查，被丟掉的部分正好藏著可疑字元。現在改為只去掉 userinfo、不丟棄任何部分就檢查整段，`@` 計數檢查因此多餘而移除。Codex r6（`d9e949d1`）判 READY-WITH-CHANGES，一項 MINOR：`urlsplit` 會刪掉 tab 與換行，用它的 netloc 長度去切原始字串會錯位，`redis://u:pw\t@cache.local:6379/0` 顯示成 port `63799`（沒有外洩）；現在 netloc 改從原始字串切出。
 
 本機真實執行（Redis 未啟動、沒有安裝 user units）的報告是 `DEGRADED`：三個 unit 為 `? unknown: no such user unit`，Redis 為 degraded，queue depth 為 unknown，Fragmentation 為 n/a，exit 0。
 

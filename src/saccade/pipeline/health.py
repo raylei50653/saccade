@@ -193,16 +193,19 @@ def redacted_url(url: str) -> str:
     plain, or the URL is replaced. Nothing is discarded before that check, so
     a URL with a query or fragment, userinfo the split did not separate (a '?'
     or '#' in a password moves '@host' out of the netloc), escapes or
-    look-alike characters is never shown. The report never fails on REDIS_URL
-    and never prints a password from it."""
+    look-alike characters is never shown. The netloc is cut from ``url`` as
+    written (up to the first '/', '?' or '#'), not taken from urlsplit, which
+    drops tabs and newlines. The report never fails on REDIS_URL and never
+    prints a password from it."""
     try:
         parts = urlsplit(url)
     except ValueError:
         return UNPARSEABLE_URL
     prefix = f"{parts.scheme}://"
     if parts.scheme and url.startswith(prefix):
-        rest = url[len(prefix) + len(parts.netloc) :]  # path, query, fragment
-        shown = prefix + parts.netloc.rpartition("@")[2] + rest
+        after = url[len(prefix) :]
+        end = min((i for i in map(after.find, "/?#") if i >= 0), default=len(after))
+        shown = prefix + after[:end].rpartition("@")[2] + after[end:]
     else:
         shown = url
     return UNPARSEABLE_URL if url_may_carry_secrets(shown) else shown

@@ -336,6 +336,10 @@ async def test_report_names_sources_and_unknowns() -> None:
         ("redis://user:s3cret?part\uff20cache.local:6379/0", "<unparseable URL>"),
         ("redis://user:s3cret#part\uff20cache.local:6379/0", "<unparseable URL>"),
         ("REDIS://u:s3cret@h/0", "<unparseable URL>"),
+        # urlsplit drops tabs and newlines; the netloc is cut as written (r6).
+        ("redis://u:s3cret\t@cache.local:6379/0", "redis://cache.local:6379/0"),
+        ("redis://u:s3cret@ho\nst.example.com:6379/0", "<unparseable URL>"),
+        ("redis://cache.local:6379", "redis://cache.local:6379"),
     ],
 )
 def test_redacted_url_never_fails_or_leaks(url: str, shown: str) -> None:
