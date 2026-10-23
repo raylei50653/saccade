@@ -105,6 +105,16 @@ class ResourceManager:
         """
         stats = self.get_stats()
         usage = stats.usage_percent
+        # A replaced get_stats() can bypass sample validation; out-of-domain
+        # usage is an unavailable measurement, not a decision (#537 O0).
+        try:
+            if not 0 <= usage <= 100:  # also rejects NaN and infinities
+                raise ValueError("must be between 0 and 100")
+        except (TypeError, ValueError) as e:
+            invalid = e if isinstance(e, ValueError) else ValueError(str(e))
+            raise ResourceMonitorUnavailable(
+                f"GPU {self.gpu_id}: invalid usage_percent {usage!r}: {invalid}"
+            ) from invalid
 
         # 門檻值定義 (上升)
         UP_EMERGENCY = 96
