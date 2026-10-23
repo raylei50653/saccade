@@ -13,6 +13,8 @@ public shared-memory name is used. Pre-fix observations are preserved at
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -313,6 +315,45 @@ async def test_runtime_failure_accounts_for_queue_and_preserves_cause_on_restart
         for _ in range(3):
             dispatcher.get_stats()
         assert capsys.readouterr().out.count("[Dispatcher] Worker failed:") == 2
+    finally:
+        await _stop(dispatcher)
+        manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("usage", [-1.0, Decimal("NaN")], ids=repr)
+async def test_out_of_domain_usage_fails_the_worker_without_publishing(
+    monkeypatch: pytest.MonkeyPatch, nvml: _FakeNVML, usage: object
+) -> None:
+    """O0: a replaced get_stats() yielding invalid usage takes the 4A path."""
+    manager = rm.ResourceManager()
+    dispatcher, writers, process, _ = _dispatcher(monkeypatch, manager)
+    try:
+        await dispatcher.start()
+        await _frame(dispatcher)
+        assert manager.current_level is L.EMERGENCY
+        valid = manager.get_stats
+        monkeypatch.setattr(
+            manager,
+            "get_stats",
+            lambda: dataclasses.replace(valid(), usage_percent=usage),
+        )
+        task = dispatcher._worker_task
+        await _frame(dispatcher)
+        assert task is not None
+        await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+        failure = dispatcher.failure
+        assert isinstance(failure, rm.ResourceMonitorUnavailable)
+        assert isinstance(failure.__cause__, ValueError)
+        assert dispatcher.state is DispatcherState.FAILED
+        assert manager.current_level is L.EMERGENCY
+        stats = dispatcher.get_stats()
+        assert stats["current_level"] == "UNKNOWN"
+        assert stats["resource_monitor_status"] == "unavailable"
+        assert stats["resource_monitor_error"] == repr(failure)
+        writers[0].write.assert_called_once()
+        assert writers[0].write.call_args.args[0] is L.EMERGENCY
+        process.assert_awaited_once()
     finally:
         await _stop(dispatcher)
         manager.close()

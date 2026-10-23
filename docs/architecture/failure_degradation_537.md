@@ -87,11 +87,11 @@ F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義�
 | C0-05 | 4A 已核准（§19）；初始化／probe／無效 sample 明確拒絕，實作與證據見 §20 | REQ-535-07-01；CAP owner：raylei50653 |
 | C0-06～C0-08 | 已由 F07 修復（§7）；T 預設值、多 writer、shutdown 仍待 #538 | #538 |
 | C0-09 | stats 已改為明列「未接監控」（§21）；WorkbenchPool 是否支援 resource degradation 仍未裁決 | REQ-535-07-02 |
-| C2 其他參數 | 重啟初值與決策頻率已裁決（R0、F0，見 §8）；非法 usage（NaN、負值、>100）只在 C2 PR 內維持現況（O0），不構成支持契約，仍待裁決 | D-537-2 未涵蓋 |
+| C2 其他參數 | 重啟初值與決策頻率已裁決（R0、F0，見 §8）；非法 usage（NaN、負值、>100）已改為明確拒絕（O0，見 §22） | D-537-2 未涵蓋；O0 依 #550 §0A 方案紀錄 |
 | R-1（C0-11） | 呼叫契約已由 R-1 修復（§10）；worker task 異常終止後的錯誤傳遞、health、stop 與 shutdown 語義依 §10 的切片順序處理 | #537 C0-11；#538 D2-AD、D2-WB-0／1、D2-GPU |
 | health CLI、orchestrator 錯誤後的 ACK | 報告 unknown 的方式；ACK 語義 | REQ-535-07-03；REQ-535-06-01（#538） |
 
-F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 的「未接監控」回報見 §21，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
+F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 的「未接監控」回報見 §21，O0 的非法 usage 拒絕見 §22，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
 
 ## 7. B0-F07 修復（C0-06／07／08 收斂）
 
@@ -149,7 +149,7 @@ F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（
 | 修復方案 | A（單行 clamp）；與 if/elif 改寫在本契約下等價 |
 | EMERGENCY 保留區間 | 接受：進入 EMERGENCY 後，usage 要低於 91 才恢復到 FAST_PATH；事件卸載因此延長，是 D-537-2 的預期效果 |
 | 重啟初值 | R0：維持 NORMAL，第一次量測後立即決策；不繼承前一個 writer 的狀態 |
-| 非法 usage | O0，只限本 PR：維持既有行為（NaN 維持原級、負值降一級、>100 升到 EMERGENCY），不視為支持契約，仍待後續裁決 |
+| 非法 usage | O0，只限本 PR：維持既有行為（NaN 維持原級、負值降一級、>100 升到 EMERGENCY），不視為支持契約，仍待後續裁決（後續已改為明確拒絕，見 §22） |
 | 決策頻率 | F0：維持每個 batch 決策一次，不加停留時間或 heartbeat |
 | R-1 | 獨立的 P1 候選缺口，不併入 C2；要在 online service 端到端驗收前處理 |
 
@@ -161,7 +161,7 @@ F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（
 
 | 測試 | 涵蓋 |
 |:--|:--|
-| [test_resource_degradation_hysteresis_537.py](../../tests/unit/test_resource_degradation_hysteresis_537.py) | 86 個案例：4 個級別 × 15 個臨界 usage 的單步表（依 D-537-2 手寫）、issue 反例、跨級升級、逐級恢復、遲滯區內來回 100 次不轉換、0.1% 網格（0～100）上的單調性與「每次最多降一級」、兩步路徑對照獨立參考模型；另釘住修復不得移動的 C0-05、R0 與 O0 現況（O0 列只是觀察，不是契約） |
+| [test_resource_degradation_hysteresis_537.py](../../tests/unit/test_resource_degradation_hysteresis_537.py) | 86 個案例：4 個級別 × 15 個臨界 usage 的單步表（依 D-537-2 手寫）、issue 反例、跨級升級、逐級恢復、遲滯區內來回 100 次不轉換、0.1% 網格（0～100）上的單調性與「每次最多降一級」、兩步路徑對照獨立參考模型；另釘住修復不得移動的 C0-05、R0 與 O0 現況（O0 列只是觀察，不是契約；§22 已改為拒絕契約，案例數隨之改變） |
 | [test_resource_degradation_observed_537.py](../../tests/unit/test_resource_degradation_observed_537.py) | 移除 7 個不一致的單步案例，留下修復前後相同的 12 個 |
 
 負控制的輸出附在 PR 描述：同一個與版本無關的 harness 只替換 `resource_manager.py`，以本 PR 的 contract 測試執行。修復前的 `978e5538` 有 17 個行為斷言失敗；6 個有效 mutation（恢復改 `<=`、升級改 `>=`、一次恢復多級、clamp 放在恢復之後、遲滯寬度 4、升級限一級）各自造成 7～23 個失敗。把恢復鏈改成以 `new_level` 判斷的 mutation 是**等價 mutant**：理由同上段的互斥性，它與修復版在所有輸入上結果相同，因此不算測試漏洞。
@@ -929,7 +929,7 @@ flowchart LR
 |:--|:--|:--|
 | C0-01／02 | ADR 025 與 README 仍允許 constructible stub；不能把 R-1 的 internal preflight 套到 public facade。public API 相容性與 eval entrypoint 的拒絕政策分開裁決 | raylei50653；#441／#537（public）、#536／#537（eval）；REQ-535-02-01、02-03 |
 | C0-09 | WorkbenchPool 沒有 resource manager／writer，stats 的固定 NORMAL 不構成監控證據。另提「明列未接監控」的回報切片（已落地，見 §21）；不在此接上降級 controller | raylei50653；#537／REQ-535-07-02；`--workbench` 仍不支援（#538） |
-| O0 | 直接注入非法 usage 的決策語義仍待裁決；4A 僅驗證 NVML 原始 sample，不放寬 C2 契約 | raylei50653；#537 |
+| O0 | 直接注入非法 usage 的決策語義仍待裁決；4A 僅驗證 NVML 原始 sample，不放寬 C2 契約（已收斂為明確拒絕，見 §22） | raylei50653；#537 |
 | freshness／ACK／ownership | T 預設、單一 writer 強制、storage 失敗仍 ACK 與 PEL 回收仍交 #538；4A 不替這些項目結案 | raylei50653；#538／REQ-535-06-01、07-01 |
 | health CLI／telemetry | 另有直接 NVML／nvidia-smi probe，不是此 ResourceManager consumer；4A 不能推廣成全 profile 的 healthy 保證 | raylei50653；#537／REQ-535-07-03 |
 | C0-10 | shipping 的 run-state／completion 已有 CC-536-01-01 實作；C0 尚未重查轉換。另以既有契約檢查完成／部分完成／失敗的狀態與診斷，證據交 #541 | raylei50653；#537／#536／#541；REQ-535-01-01 |
@@ -983,3 +983,24 @@ dispatcher 的四個隔離 mutation 也都被攔住：移除 preflight（10 fail
 **Runtime identity**：`dispatcher.py` 與 `run_8stream_perception.py` 是 `decision_relevant`，依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture 後以 stacked publication 原子落地；座標變化與證據記在 PR。
 
 **邊界**：WorkbenchPool 仍沒有任何 resource degradation 能力；`--workbench` 仍 unsupported（#538），不取得 online-service qualification、不部署。`not_wired` 只說明沒有監控，不是健康判定。C0-01／02、C0-10、O0、health CLI 與 #538 的其餘工作不變。
+
+## 22. O0：拒絕非法 usage
+
+方案依 #550 §0A 的開工條件記錄於 [#537 comment](https://github.com/raylei50653/saccade/issues/537#issuecomment-6363972851)（選 A）。修復前，`decide_degradation_level()` 不檢查 `VRAMStats.usage_percent`：NaN 維持原級、負值降一級、>100 升到 EMERGENCY，三者都被當成一次有效決策（§8 O0、§19.3）。4A 之後 production `get_stats()` 只回傳 0～100 的有限值，所以這條路徑只在 `get_stats()` 被替換時可達（測試替身、子類別、未來的其他 telemetry 來源），目前沒有 production 觸發點。
+
+**實作**：`decide_degradation_level()` 決策前要求 `usage_percent` 是 `numbers.Real`，而且 `0 <= usage_percent <= 100`。非實數型別（字串、None、`Decimal`）在比較前就拒絕，因為它們的比較可能丟出別種例外（`Decimal("NaN")` 會丟 `InvalidOperation`）；範圍比較本身就會拒絕 NaN 與 ±inf。不合法時拋 `ResourceMonitorUnavailable`，cause 是 `ValueError`，訊息含 GPU 與原值；`current_level` 不變，也不算一次決策。這是把 4A「無效 sample 也屬 monitor unavailable」（§19.2）套到決策輸入上，dispatcher 走 §20 的既有錯誤通道：monitor 回報 `unavailable`、level 為 UNKNOWN、worker FAILED、不寫新快照。不採夾到 [0, 100]：負值會被當成 0% 而降級，等於把壞資料當成資源充足。
+
+**不改**：`get_stats()` 的 sample 驗證、門檻、D-537-2 遲滯、R0／F0、快照 v1 與 `dispatcher.py`。dispatcher 的啟動 probe 直接呼叫 `get_stats()`，所以被替換的 `get_stats()` 回傳非法 usage 時，啟動仍會成功，第一次 batch 決策才失敗；production `get_stats()` 不會產生這種值，本節不處理。
+
+**驗收與負控制**（host-only）：
+
+| 測試 | 涵蓋 |
+|:--|:--|
+| [test_resource_degradation_hysteresis_537.py](../../tests/unit/test_resource_degradation_hysteresis_537.py) | T7 的三個 O0「觀察」列改為 T8 契約（86 → 133 個案例）：4 個級別 × 11 個非法值（NaN、±inf、-1、-1e-9、100.0001、101、`"50"`、None、`Decimal("NaN")`、`Decimal("50")`）都拒絕並保留 level；連續拒絕不推進遲滯，之後的有效 0% 從保留的 EMERGENCY 逐級恢復；其他實數型別（int 0／100、`np.int64`、`np.float64`、`Fraction`）有效。浮點端點 0.0／100.0 仍由 T1 表涵蓋 |
+| [test_resource_monitor_dispatcher_contract_537.py](../../tests/unit/test_resource_monitor_dispatcher_contract_537.py) | 新增 2 個案例（13 → 15）：真實 manager 與 fake NVML 先決策出 EMERGENCY，再把 `get_stats()` 換成回傳 -1 或 `Decimal("NaN")`；worker FAILED、cause 為 `ValueError`、stats 為 UNKNOWN／`unavailable`，快照只寫過第一次的 EMERGENCY，manager 仍是 EMERGENCY |
+
+修復前這兩檔有 47 個案例失敗（101 passed）。六個隔離 mutation 都被攔住：移除驗證（47 failed）、上界改成 `< 100`（15）、移除下界（14）、改拋 `ValueError`（47）、驗證移到改寫 `current_level` 之後（36）、移除 `numbers.Real` 檢查（17）。審查過程的兩點修正：第一版另加 `math.isfinite`，移除它的 mutation 全部通過（範圍比較本身就會拒絕 NaN 與 ±inf，是等價 mutant），因此拿掉；Codex r1 指出第一版只 catch `TypeError`／`ValueError`，`Decimal("NaN")` 的 `InvalidOperation` 會漏出去，dispatcher 進入 FAILED 但 stats 仍報 `available`，因此改成先檢查 `numbers.Real`，第一版在現行測試下有 9 個案例失敗。
+
+**Runtime identity**：`resource_manager.py` 是 `decision_relevant`，依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture 後以 stacked publication 原子落地；座標變化與證據記在 PR。
+
+**邊界**：沒有真實 GPU 的非法 sample（production 無觸發點），不跑完整 online service，不取得 online-service qualification、不部署。C0-01／02、C0-10、health CLI 與 #538 的其餘工作不變。

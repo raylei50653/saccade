@@ -36,7 +36,7 @@ L6 是 Saccade 的「決策大腦」，負責高層級的 VRAM 資源監控與�
 - 一次決策不會同時升級又恢復，也不會一次降兩級。從 EMERGENCY 回到 NORMAL 至少要 3 次決策。
 - 決策頻率：dispatcher 每個 batch 決策一次，閒置時不決策；沒有最短停留時間（F0）。
 - 初值：新的 `ResourceManager` 從 NORMAL 開始，第一次決策就升到 usage 對應的級別，不繼承前一個 writer 的狀態（R0）。
-- NVML 不可用與無效原始 sample 依 §7 明確失敗，不做這次 hysteresis 決策。測試替身直接注入 NaN、負值或超過 100 的 `VRAMStats.usage_percent` 仍不在決策支持契約內（NaN 維持原級、負值降一級、>100 升到 EMERGENCY，只是 O0 現況）。
+- NVML 不可用與無效原始 sample 依 §7 明確失敗，不做這次 hysteresis 決策。`usage_percent` 不是 0～100（含端點）的實數時同樣拒絕（O0）：NaN、±inf、超出範圍或非 `numbers.Real` 的值（字串、None、`Decimal`）拋 `ResourceMonitorUnavailable`（cause 為 `ValueError`），level 不變。production `get_stats()` 不會產生這種值；只有被替換的 `get_stats()` 會走到這裡。
 
 契約測試在 `tests/unit/test_resource_degradation_hysteresis_537.py`；修復前的轉換表與修復紀錄見 [#537 C0 §3、§8](../../architecture/failure_degradation_537.md#8-c2-遲滯修復c0-04-收斂)。
 
@@ -99,7 +99,7 @@ Dispatcher 端的 `VRAMLevelWriter` 把每次決策發佈為一份完整快照�
 
 Owner 在 2026-10-20 核准 4A，裁決與原始重現見 [#537 §19](../../architecture/failure_degradation_537.md#19-c0-05nvml-失敗的重現與核准方案)，實作證據見該文件 §20。此契約限 `ResourceManager` → `AsyncDispatcher` 的 online 路徑；不批准整個 online-service profile，也不把 WorkbenchPool、health CLI 或獨立 telemetry 視為已接上此監控。
 
-**取得有效測量才決策**：constructor 保留 NVML init 的原始錯誤，允許 import／construct，讓 orchestrator-only 入口不因監控能力缺失而在 import 時失敗。`get_stats()` 只在有效測量時回 `VRAMStats`；init／handle／memory info 取得失敗時，拋 `ResourceMonitorUnavailable(RuntimeError)` 並保留原始 cause。原始 sample 必須 total 為有限正數、used 有限且 0 ≤ used ≤ total、free 有限且非負；不要求 free+used==total。驗證失敗時，同一具名錯誤以 `ValueError` 保留驗證原因。真正 used=0 且 total>0 仍是合法測量，依 §5 恢復。
+**取得有效測量才決策**：constructor 保留 NVML init 的原始錯誤，允許 import／construct，讓 orchestrator-only 入口不因監控能力缺失而在 import 時失敗。`get_stats()` 只在有效測量時回 `VRAMStats`；init／handle／memory info 取得失敗時，拋 `ResourceMonitorUnavailable(RuntimeError)` 並保留原始 cause。原始 sample 必須 total 為有限正數、used 有限且 0 ≤ used ≤ total、free 有限且非負；不要求 free+used==total。驗證失敗時，同一具名錯誤以 `ValueError` 保留驗證原因。真正 used=0 且 total>0 仍是合法測量，依 §5 恢復。`decide_degradation_level()` 另外檢查 `get_stats()` 回傳的 `usage_percent` 必須是 0～100 內的實數，不合法時拋同一具名錯誤並保留 level（O0，[#537 §22](../../architecture/failure_degradation_537.md#22-o0拒絕非法-usage)）。
 
 **啟動與執行中失敗**：
 
