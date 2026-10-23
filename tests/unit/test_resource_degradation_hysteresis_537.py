@@ -16,9 +16,9 @@ escalation. Keying the recovery chain on `new_level` instead of
 `current_level` is an equivalent mutant: escalation and recovery are disjoint
 whenever thresholds ascend and the deadband is non-negative.
 
-T7 pins behavior the fix must not move. Its out-of-domain usage rows are
-observed behavior only, not a supported contract (O0; NaN, negative and
-> 100 % usage remain undecided).
+T7 pins behavior the fix must not move. T8 pins O0: usage outside the
+finite range 0..100 is refused as an unavailable measurement and leaves the
+level untouched (failure_degradation_537.md §22).
 """
 
 # scope: resource
@@ -36,6 +36,7 @@ import pytest
 from saccade.resource.resource_manager import (
     DegradationLevel as L,
     ResourceManager,
+    ResourceMonitorUnavailable,
     VRAMStats,
 )
 
@@ -130,7 +131,7 @@ def test_t5_oscillation_inside_deadband_is_stable(
 
 
 # ── T6: structural properties ───────────────────────────────────────────────
-# Supported domain only; out-of-domain usage stays in T7 (O0, undecided).
+# Supported domain only; out-of-domain usage is refused in T8 (O0).
 GRID = [round(x * 0.1, 1) for x in range(1001)]  # 0.0 .. 100.0
 
 
@@ -164,8 +165,6 @@ def test_t6_two_decision_paths_match_reference_model() -> None:
 # ── T7: behavior this fix must not move ─────────────────────────────────────
 def test_t7_nvml_init_failure_preserves_emergency() -> None:
     """D-537-4A: unavailable measurements cannot recover hysteresis state."""
-    from saccade.resource.resource_manager import ResourceMonitorUnavailable
-
     with mock.patch.object(pynvml, "nvmlInit", side_effect=RuntimeError("nvml")):
         manager = ResourceManager()
     manager.current_level = E
@@ -181,13 +180,33 @@ def test_t7_initial_level_is_normal() -> None:
         assert ResourceManager().current_level is N
 
 
-@pytest.mark.parametrize(
-    ("usage", "observed"),
-    [(float("nan"), E), (-1.0, F), (101.0, E)],
-    ids=["nan-holds", "negative-recovers-one", "over-100-escalates"],
-)
-def test_t7_out_of_domain_usage_is_observed_not_contract(
-    usage: float, observed: L
+# ── T8: out-of-domain usage is refused (O0) ─────────────────────────────────
+INVALID = [float("nan"), float("inf"), float("-inf"), -1.0, -1e-9, 100.0001, 101.0, "50", None]  # fmt: skip
+
+
+@pytest.mark.parametrize("usage", INVALID, ids=repr)
+@pytest.mark.parametrize("current", [N, R, F, E], ids=lambda c: c.name)
+def test_t8_out_of_domain_usage_is_refused_and_holds_level(
+    current: L, usage: object
 ) -> None:
-    """O0: unchanged by the fix; not a supported contract."""
-    assert _decide(E, usage) is observed
+    manager = _manager(current, [usage])  # type: ignore[list-item]
+    with pytest.raises(ResourceMonitorUnavailable, match="usage_percent") as exc:
+        manager.decide_degradation_level()
+    assert isinstance(exc.value.__cause__, ValueError)
+    assert manager.current_level is current
+
+
+def test_t8_refusals_do_not_advance_hysteresis() -> None:
+    """Refused samples are not decisions: recovery resumes one level at a time."""
+    manager = _manager(E, [-1.0, float("nan"), -1.0, 0.0, 0.0])
+    for _ in range(3):
+        with pytest.raises(ResourceMonitorUnavailable):
+            manager.decide_degradation_level()
+        assert manager.current_level is E
+    assert manager.decide_degradation_level() is F
+    assert manager.decide_degradation_level() is R
+
+
+@pytest.mark.parametrize(("usage", "expected"), [(0, F), (100, E)])
+def test_t8_integer_endpoints_are_in_domain(usage: int, expected: L) -> None:
+    assert _decide(E, usage) is expected
