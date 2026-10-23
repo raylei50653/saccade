@@ -17,14 +17,14 @@ Guarantee coverage per module (behavior/contract/regression/acceptance/diagnosti
 | `resource` | 1 | 5 | 0 | 0 | 2 | 8 |
 | `cognition` | 2 | 0 | 0 | 0 | 0 | 2 |
 | `storage` | 3 | 0 | 0 | 0 | 0 | 3 |
-| `perception` | 11 | 5 | 1 | 0 | 4 | 21 |
+| `perception` | 11 | 6 | 1 | 0 | 3 | 21 |
 | `detection` | 15 | 8 | 0 | 0 | 0 | 23 |
 | `reid` | 3 | 0 | 0 | 0 | 0 | 3 |
 | `eval` | 49 | 46 | 1 | 0 | 0 | 96 |
 | `tracking` | 8 | 23 | 0 | 0 | 1 | 32 |
 | `cross-module` | 0 | 6 | 0 | 0 | 0 | 6 |
 | `system` | 0 | 98 | 4 | 1 | 1 | 104 |
-| **Total** | 98 | 193 | 6 | 1 | 8 | **306** |
+| **Total** | 98 | 194 | 6 | 1 | 7 | **306** |
 
 ## Scope × lifecycle
 
@@ -247,7 +247,7 @@ Governance state per module. A multi-scope test counts once per scope.
 | `test_tracker_block_divergence_465_r2_runner.py` | system | contract | active | The tracker block-divergence r2 runner implements its exploratory declaration. |
 | `test_tracker_block_divergence_465_runner.py` | system | contract | active | The tracker block-divergence runner implements its exploratory declaration. |
 | `test_vram_level_snapshot_contract_537.py` | resource | contract | active | #537 B0-F07: VRAM-level snapshot contract (rename-published record, stateless reader). |
-| `test_workbench_pool_gpu_observed_538.py` | perception | diagnostic | active | #538 D2-GPU-0: CUDA ordering, output ownership and batcher failure, as they are. |
+| `test_workbench_pool_gpu_contract_538.py` | perception | contract | active | #538 D2-GPU-1: CUDA ordering, output ownership and batcher failure contracts. |
 | `test_workbench_pool_lifecycle_contract_538.py` | perception | contract | active | #538 D2-WB-1: WorkbenchPool bounded stop, worker failure and safe release. |
 | `test_workbench_pool_lifecycle_observed_538.py` | perception | diagnostic | active | #538 D2-WB-0: the WorkbenchPool normal path, plus the harness that the contract tests share. |
 
