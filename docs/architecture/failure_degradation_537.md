@@ -86,12 +86,12 @@ F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義�
 | C0-01／02 的拒絕點 | public facade 的拒絕點與相容性由 #441／#537 協調；eval entrypoint 的 preflight／結果政策仍歸 #536／#537。online 的 C0-03 已由 R-1 修復（§10） | REQ-535-02-01／02-03／02-04 |
 | C0-05 | 4A 已核准（§19）；初始化／probe／無效 sample 明確拒絕，實作與證據見 §20 | REQ-535-07-01；CAP owner：raylei50653 |
 | C0-06～C0-08 | 已由 F07 修復（§7）；T 預設值、多 writer、shutdown 仍待 #538 | #538 |
-| C0-09 | WorkbenchPool 是否支援 resource degradation | REQ-535-07-02 |
+| C0-09 | stats 已改為明列「未接監控」（§21）；WorkbenchPool 是否支援 resource degradation 仍未裁決 | REQ-535-07-02 |
 | C2 其他參數 | 重啟初值與決策頻率已裁決（R0、F0，見 §8）；非法 usage（NaN、負值、>100）只在 C2 PR 內維持現況（O0），不構成支持契約，仍待裁決 | D-537-2 未涵蓋 |
 | R-1（C0-11） | 呼叫契約已由 R-1 修復（§10）；worker task 異常終止後的錯誤傳遞、health、stop 與 shutdown 語義依 §10 的切片順序處理 | #537 C0-11；#538 D2-AD、D2-WB-0／1、D2-GPU |
 | health CLI、orchestrator 錯誤後的 ACK | 報告 unknown 的方式；ACK 語義 | REQ-535-07-03；REQ-535-06-01（#538） |
 
-F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。本次 C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 另外處理，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
+F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 的「未接監控」回報見 §21，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
 
 ## 7. B0-F07 修復（C0-06／07／08 收斂）
 
@@ -386,7 +386,7 @@ function 標籤是 `diagnostic`。要修復時，必須在同一個 PR 把這些
   - deadline 到時還有 worker 存活：**不 shutdown batcher**，狀態維持 STOPPING，拋 `WorkbenchPoolStopTimeout`（列出存活的 worker），不印「Stopped.」。之後再呼叫 `stop()` 會重試。
   - 所有 worker 都結束後：清空 queue 並計入 `discarded_on_stop`，shutdown batcher，狀態改為 STOPPED。
   - 這次執行如果失敗過，最後拋 `WorkbenchPoolFailed`。第二次呼叫 `stop()` 不再報告。
-- `get_stats()` 新增 `state`、`failure`、`failed_stream`、`late_callbacks`、`discarded_on_stop`、`stop_timeouts`。`current_level` 仍固定為 `"NORMAL"`（C0-09 不變）。
+- `get_stats()` 新增 `state`、`failure`、`failed_stream`、`late_callbacks`、`discarded_on_stop`、`stop_timeouts`。`current_level` 仍固定為 `"NORMAL"`（C0-09 不變；之後由 §21 改為 `"UNKNOWN"`／`not_wired`）。
 
 **修復後的行為**（對照 §12）：
 
@@ -928,7 +928,7 @@ flowchart LR
 | 項目 | 保留的邊界與下一切片 | Owner／入口 |
 |:--|:--|:--|
 | C0-01／02 | ADR 025 與 README 仍允許 constructible stub；不能把 R-1 的 internal preflight 套到 public facade。public API 相容性與 eval entrypoint 的拒絕政策分開裁決 | raylei50653；#441／#537（public）、#536／#537（eval）；REQ-535-02-01、02-03 |
-| C0-09 | WorkbenchPool 沒有 resource manager／writer，stats 的固定 NORMAL 不構成監控證據。另提「明列未接監控」的回報切片；不在此接上降級 controller | raylei50653；#537／REQ-535-07-02；`--workbench` 仍不支援（#538） |
+| C0-09 | WorkbenchPool 沒有 resource manager／writer，stats 的固定 NORMAL 不構成監控證據。另提「明列未接監控」的回報切片（已落地，見 §21）；不在此接上降級 controller | raylei50653；#537／REQ-535-07-02；`--workbench` 仍不支援（#538） |
 | O0 | 直接注入非法 usage 的決策語義仍待裁決；4A 僅驗證 NVML 原始 sample，不放寬 C2 契約 | raylei50653；#537 |
 | freshness／ACK／ownership | T 預設、單一 writer 強制、storage 失敗仍 ACK 與 PEL 回收仍交 #538；4A 不替這些項目結案 | raylei50653；#538／REQ-535-06-01、07-01 |
 | health CLI／telemetry | 另有直接 NVML／nvidia-smi probe，不是此 ResourceManager consumer；4A 不能推廣成全 profile 的 healthy 保證 | raylei50653；#537／REQ-535-07-03 |
@@ -967,3 +967,19 @@ dispatcher 的四個隔離 mutation 也都被攔住：移除 preflight（10 fail
 **Runtime identity**：2026-10-20 在 `d6724f11` 基線的捕捉（`8b89ca8f… → e75f0067…`）因 #621 改了 `dispatcher.py`、`detector_trt.py` 而作廢，沒有出版。rebase 後在實作 head `791d85d8` 的乾淨 tree 重新捕捉（之後只改文件，不動任何已出版軸的 blob）：本工作樹的獨立 `build/runtime_identity` 重新 build，`--run-probe --require-complete` 在 gpu0 lease 下 fresh capture 到 scratch，沒有沿用舊 probe。只有 implementation 改變：`583ede47… → d04e0183…`，317 個成員不增不減，只改 `resource_manager.py`、`dispatcher.py` 與 `run_8stream_perception.py`。其餘四軸重算後相同，probe digest 仍為 `2dabed0b…`；`equivalence=unproven`，probe 相同不構成 online monitor policy 或整體語義等價。promote 後 `--mode attested` exit 0。canonical／archive 以獨立的 stacked publication branch 提交，與實作原子落地。
 
 **邊界**：這些測試沒有執行完整 online service、Redis／Chroma 或 VRAM 耗盡，亦不提供 GPU stream／buffer lifetime 的 D2-GPU qualification。失敗 probe 不會立即撤銷別的程序仍可讀到的舊快照，正常 retirement 也可能失敗；兩者在既有 T 後變成 STALE。health CLI、獨立 telemetry、C0-09、C0-01／02、C0-10、O0 與 #538 的其餘工作保持 §19.3 的分工。
+
+## 21. C0-09：WorkbenchPool stats 明列未接監控
+
+方案依 #550 §0A 的開工條件記錄於 [#537 comment](https://github.com/raylei50653/saccade/issues/537#issuecomment-6362121273)（選 B），範圍沿用 §19.3 的分工：只修正回報，不接上降級 controller。修復前的現況見 §2 C0-09 與 §13。
+
+**實作**：
+
+- `WorkbenchPool.get_stats()` 的 `current_level` 由固定的 `"NORMAL"` 改為 `"UNKNOWN"`，並新增 `resource_monitor_status="not_wired"` 與 `resource_monitor_error=""`。欄位名稱與 UNKNOWN 語義沿用 §20 的 AsyncDispatcher；`not_wired` 表示這條路徑沒有 resource manager 或 VRAM writer，與「監控失敗」的 `unavailable` 不同。所有 pool 狀態（CREATED／RUNNING／FAILED／STOPPING／STOPPED）回同一組值。
+- `run_8stream_perception.py --workbench` 的文字報告加印 `monitor=<status>`。
+- 不改 AsyncDispatcher、hysteresis、快照 v1、`_WorkbenchWorker` 或 batcher；WorkbenchPool 不讀 NVML、不發佈快照。
+
+**驗收與負控制**：[test_workbench_pool_monitor_contract_537.py](../../tests/unit/test_workbench_pool_monitor_contract_537.py) 3 個案例。host：CPU fake 的 pool 在 CREATED、RUNNING、STOPPING（batcher 未釋放）、STOPPED、FAILED 及失敗後 STOPPED 都回 `UNKNOWN`／`not_wired`／空錯誤；`--workbench` caller 的單次報告含 `level=UNKNOWN monitor=not_wired`，且不出現 `level=NORMAL`，結束時 pool STOPPED、batcher 已回收、沒有殘留 task。`gpu`：沿用 D2-GPU-1 harness，真實 WorkbenchPool／Workbench／BatchingTRTDetector 在 CUDA 上送出 3 個結果時與 stop 後都回 `UNKNOWN`／`not_wired`（只有 TRT engine 是 fake）。五個隔離 mutation 都被 host 案例攔住：level 改回 `NORMAL`（2 failed）、移除 `resource_monitor_status`（2）、報告移除 `monitor=`（1）、status 改為 `available`（2）、只在 STOPPING 回 `NORMAL`（1；Codex r1 指出後補上 STOPPING 案例）。
+
+**Runtime identity**：`dispatcher.py` 與 `run_8stream_perception.py` 是 `decision_relevant`，依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture 後以 stacked publication 原子落地；座標變化與證據記在 PR。
+
+**邊界**：WorkbenchPool 仍沒有任何 resource degradation 能力；`--workbench` 仍 unsupported（#538），不取得 online-service qualification、不部署。`not_wired` 只說明沒有監控，不是健康判定。C0-01／02、C0-10、O0、health CLI 與 #538 的其餘工作不變。

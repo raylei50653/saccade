@@ -118,3 +118,5 @@ Owner 在 2026-10-20 核准 4A，裁決與原始重現見 [#537 §19](../../arch
 - 沒有背景 init retry。init 失敗後要換新 manager；post-init 的暫時故障可在修復 NVML 後明確 stop／start，重新 preflight 成功才接受 frame，沿用該 manager 的 hysteresis。新 manager 則遵守 R0 的 NORMAL 初值。
 - 初始化錯誤只在建構時診斷一次；讀取失敗保留在例外／stats，不按 frame 重複印 log。FAILED 也不會繼續消費 frame 來反覆故障。
 - 本次不改快照 v1、T、事件持久化／ACK／RAG policy、tracker 數值或 public facade。D2-GPU 完成前不宣稱 online-service qualification、不部署。
+
+**WorkbenchPool（C0-09）**：此路徑沒有接上 ResourceManager 或快照 writer。stats 固定回 `current_level="UNKNOWN"`、`resource_monitor_status="not_wired"`、`resource_monitor_error=""`，`--workbench` 報告印出 `monitor=not_wired`；這只說明沒有監控，不是健康判定（[#537 §21](../../architecture/failure_degradation_537.md#21-c0-09workbenchpool-stats-明列未接監控)）。
