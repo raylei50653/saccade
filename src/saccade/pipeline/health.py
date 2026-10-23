@@ -172,18 +172,37 @@ def check_vram() -> Tuple[Optional[VramStatus], str]:
     ), ""
 
 
+def url_may_carry_secrets(url: str) -> bool:
+    """Whether ``url`` has userinfo, a query or a fragment (a password can sit
+    in any of them)."""
+    return any(c in url for c in "@?#")
+
+
 def redacted_url(url: str) -> str:
     """``url`` without its credentials or query (which can carry a password),
     for the report. The host and port are kept as written -- an IPv6 host keeps
-    its brackets and an invalid port is shown, not parsed -- and a URL that
-    cannot be split is not shown at all: the report never fails on it."""
+    its brackets and an invalid port is shown, not parsed. A URL that cannot be
+    split, or one without ``scheme://`` that may carry secrets (split, its
+    userinfo would land in the path), is not shown at all: the report never
+    fails on it and never prints a password."""
     try:
         parts = urlsplit(url)
     except ValueError:
         return "<unparseable URL>"
+    if not (parts.scheme and url.startswith(f"{parts.scheme}://")):
+        return "<unparseable URL>" if url_may_carry_secrets(url) else url
     netloc = parts.netloc.rpartition("@")[2]
-    prefix = f"{parts.scheme}://" if parts.scheme else ""
-    return f"{prefix}{netloc}{parts.path}"
+    return f"{parts.scheme}://{netloc}{parts.path}"
+
+
+def redis_error_detail(error: Exception) -> str:
+    """The Redis error for the report. Parser and connection errors can quote
+    REDIS_URL, so when it may carry secrets only the error type is shown."""
+    if url_may_carry_secrets(REDIS_URL):
+        return (
+            f"{type(error).__name__} (message hidden: REDIS_URL may carry credentials)"
+        )
+    return str(error)
 
 
 async def check_redis() -> Tuple[ServiceStatus, Optional[int]]:
@@ -198,7 +217,9 @@ async def check_redis() -> Tuple[ServiceStatus, Optional[int]]:
         depth = await cast(Awaitable[int], r.xlen("saccade:stream"))
         return ServiceStatus(name="redis", status=OK, detail="connected"), int(depth)
     except Exception as e:
-        return ServiceStatus(name="redis", status=DEGRADED, detail=str(e)), None
+        return ServiceStatus(
+            name="redis", status=DEGRADED, detail=redis_error_detail(e)
+        ), None
     finally:
         if r is not None:
             try:

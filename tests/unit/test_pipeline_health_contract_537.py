@@ -309,6 +309,13 @@ async def test_report_names_sources_and_unknowns() -> None:
         ("redis://u:s3cret@h:notaport/0", "redis://h:notaport/0"),
         ("redis://u:s3cret@h:65536/0", "redis://h:65536/0"),
         ("redis://u:s3cret@[::1/0", "<unparseable URL>"),
+        # Without scheme://, urlsplit puts the userinfo in the path (Codex r2).
+        ("user:s3cret@cache.local:6379/0", "<unparseable URL>"),
+        ("redis:u:s3cret@h", "<unparseable URL>"),
+        ("//user:s3cret@h:6379/0", "<unparseable URL>"),
+        ("localhost:6379?password=s3cret", "<unparseable URL>"),
+        ("localhost:6379", "localhost:6379"),
+        ("redis://h/0#s3cret", "redis://h/0"),
     ],
 )
 def test_redacted_url_never_fails_or_leaks(url: str, shown: str) -> None:
@@ -325,6 +332,48 @@ def test_report_renders_with_an_invalid_redis_url(url: str) -> None:
         text = H.render(_report(redis=DEGRADED))
     assert "Saccade Status — DEGRADED" in text
     assert "Services (REDIS_URL redis://cache:" in text and "s3cret" not in text
+
+
+@pytest.mark.asyncio
+async def test_redis_parser_error_does_not_print_the_password() -> None:
+    """Codex r2: redis-py's own URL error quotes the netloc. The real parser
+    refuses this URL before connecting (fullwidth slash), so no network."""
+    url = "redis://user:s3cret@h\uff0f:6379/0"
+    with patch.object(H, "REDIS_URL", url):
+        status, depth = await H.check_redis()
+        report = _report(redis=status.status)
+        report.redis = status
+        text = H.render(report)
+    assert status.status == DEGRADED and depth is None
+    assert status.detail.startswith("ValueError (message hidden")
+    assert "s3cret" not in text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("url", "hidden"),
+    [
+        ("redis://localhost:6379/0", False),
+        ("redis://user:s3cret@localhost:6379/0", True),
+        ("unix:///tmp/r.sock?password=s3cret", True),
+    ],
+)
+async def test_redis_error_message_is_hidden_only_when_the_url_may_carry_secrets(
+    url: str, hidden: bool
+) -> None:
+    client = MagicMock()
+    client.ping = AsyncMock(side_effect=ConnectionError(f"cannot reach {url}"))
+    client.aclose = AsyncMock()
+    with (
+        patch.object(H, "REDIS_URL", url),
+        patch("saccade.pipeline.health.aioredis.from_url", return_value=client),
+    ):
+        status, _ = await H.check_redis()
+    assert status.status == DEGRADED
+    assert ("s3cret" in status.detail) is False
+    assert status.detail.startswith("ConnectionError (message hidden") is hidden
+    if not hidden:
+        assert status.detail == f"cannot reach {url}"
 
 
 def test_report_marks_each_state() -> None:
