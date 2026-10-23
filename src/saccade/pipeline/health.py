@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import string
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -172,27 +173,35 @@ def check_vram() -> Tuple[Optional[VramStatus], str]:
     ), ""
 
 
+# Plain ASCII scheme / host / port / path characters. Anything else -- '@'
+# (userinfo), '?' (query), '#' (fragment), '%' (escapes), non-ASCII look-alikes
+# such as a fullwidth '＠' -- may carry or hide a secret.
+_PLAIN_URL_CHARS = frozenset(string.ascii_letters + string.digits + "+-._~:/[]")
+UNPARSEABLE_URL = "<unparseable URL>"
+
+
 def url_may_carry_secrets(url: str) -> bool:
-    """Whether ``url`` has userinfo, a query or a fragment (a password can sit
-    in any of them)."""
-    return any(c in url for c in "@?#")
+    """Whether ``url`` has any character outside the plain set above (an
+    allowlist: a secret cannot sit in a URL made only of these)."""
+    return not set(url) <= _PLAIN_URL_CHARS
 
 
 def redacted_url(url: str) -> str:
-    """``url`` without its credentials or query (which can carry a password),
-    for the report. The host and port are kept as written -- an IPv6 host keeps
-    its brackets and an invalid port is shown, not parsed. A URL that cannot be
-    split, or one without ``scheme://`` that may carry secrets (split, its
-    userinfo would land in the path), is not shown at all: the report never
-    fails on it and never prints a password."""
+    """``url`` for the report, without its credentials, query or fragment. The
+    host and port are kept as written -- an IPv6 host keeps its brackets and an
+    invalid port is shown, not parsed. Only a plain result is shown: a URL that
+    cannot be split, or whose remaining text still is not plain (userinfo the
+    split did not separate, non-ASCII), is replaced. The report never fails on
+    REDIS_URL and never prints a password from it."""
     try:
         parts = urlsplit(url)
     except ValueError:
-        return "<unparseable URL>"
-    if not (parts.scheme and url.startswith(f"{parts.scheme}://")):
-        return "<unparseable URL>" if url_may_carry_secrets(url) else url
-    netloc = parts.netloc.rpartition("@")[2]
-    return f"{parts.scheme}://{netloc}{parts.path}"
+        return UNPARSEABLE_URL
+    if parts.scheme and url.startswith(f"{parts.scheme}://"):
+        shown = f"{parts.scheme}://{parts.netloc.rpartition('@')[2]}{parts.path}"
+    else:
+        shown = url
+    return UNPARSEABLE_URL if url_may_carry_secrets(shown) else shown
 
 
 def redis_error_detail(error: Exception) -> str:

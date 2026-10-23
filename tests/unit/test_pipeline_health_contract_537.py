@@ -33,6 +33,12 @@ import saccade.pipeline.health as H
 OK, DEGRADED, UNKNOWN = H.OK, H.DEGRADED, H.UNKNOWN
 
 
+@pytest.fixture(autouse=True)
+def _plain_redis_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """REDIS_URL comes from the environment; tests that need another patch it."""
+    monkeypatch.setattr(H, "REDIS_URL", "redis://localhost:6379/0")
+
+
 def _vram(warn: bool = False) -> H.VramStatus:
     return H.VramStatus(
         used_gb=1.0, total_gb=12.0, pct=90.0 if warn else 8.3, warn=warn
@@ -316,6 +322,12 @@ async def test_report_names_sources_and_unknowns() -> None:
         ("localhost:6379?password=s3cret", "<unparseable URL>"),
         ("localhost:6379", "localhost:6379"),
         ("redis://h/0#s3cret", "redis://h/0"),
+        # Userinfo the split does not separate, and look-alikes (Codex r3).
+        ("redis://user:s3cret/part@cache.local:6379/0", "<unparseable URL>"),
+        ("redis:///user:s3cret@cache.local:6379/0", "<unparseable URL>"),
+        ("redis://user:s3cret\uff20cache.local:6379/0", "<unparseable URL>"),
+        ("redis://u%3As3cret@h/0", "redis://h/0"),
+        ("redis://h\u0301/0", "<unparseable URL>"),
     ],
 )
 def test_redacted_url_never_fails_or_leaks(url: str, shown: str) -> None:
@@ -334,11 +346,52 @@ def test_report_renders_with_an_invalid_redis_url(url: str) -> None:
     assert "Services (REDIS_URL redis://cache:" in text and "s3cret" not in text
 
 
+_SECRET_URLS = [
+    "redis://user:s3cret@cache.local:6380/2",
+    "redis://:s3cret@h/1",
+    "user:s3cret@cache.local:6379/0",
+    "redis:u:s3cret@h",
+    "//user:s3cret@h:6379/0",
+    "redis://user:s3cret/part@cache.local:6379/0",
+    "redis:///user:s3cret@cache.local:6379/0",
+    "redis://user:s3cret\uff20cache.local:6379/0",
+    "redis://user:s3cret@h\uff0f:6379/0",
+    "unix:///tmp/redis.sock?password=s3cret",
+    "redis://h/0#s3cret",
+    "redis://u%3As3cret@h/0",
+]
+
+
 @pytest.mark.asyncio
-async def test_redis_parser_error_does_not_print_the_password() -> None:
-    """Codex r2: redis-py's own URL error quotes the netloc. The real parser
-    refuses this URL before connecting (fullwidth slash), so no network."""
-    url = "redis://user:s3cret@h\uff0f:6379/0"
+@pytest.mark.parametrize("url", _SECRET_URLS)
+async def test_report_never_prints_a_password_from_redis_url(url: str) -> None:
+    """The whole report, when the Redis error quotes REDIS_URL verbatim."""
+    with (
+        patch.object(H, "REDIS_URL", url),
+        patch(
+            "saccade.pipeline.health.aioredis.from_url",
+            side_effect=ValueError(f"Invalid URL {url}"),
+        ),
+    ):
+        status, _ = await H.check_redis()
+        report = _report(redis=status.status)
+        report.redis = status
+        text = H.render(report)
+    assert status.status == DEGRADED
+    assert "s3cret" not in text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "redis://user:s3cret@h\uff0f:6379/0",
+        "redis://user:s3cret\uff20cache.local:6379/0",
+    ],
+)
+async def test_redis_parser_error_does_not_print_the_password(url: str) -> None:
+    """Codex r2/r3: redis-py's own URL error quotes the netloc. The real parser
+    refuses these URLs (fullwidth '/' or '@') before connecting: no network."""
     with patch.object(H, "REDIS_URL", url):
         status, depth = await H.check_redis()
         report = _report(redis=status.status)

@@ -13,6 +13,13 @@ import pytest
 from saccade.pipeline.health import check_redis
 
 
+@pytest.fixture(autouse=True)
+def _plain_redis_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """REDIS_URL comes from the environment; a credential-bearing one hides
+    the error message these tests read (#537 health CLI)."""
+    monkeypatch.setattr("saccade.pipeline.health.REDIS_URL", "redis://localhost:6379/0")
+
+
 @pytest.mark.asyncio
 async def test_check_redis_measures_stream_depth() -> None:
     client = MagicMock()
