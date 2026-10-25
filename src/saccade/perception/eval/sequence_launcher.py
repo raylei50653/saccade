@@ -168,7 +168,7 @@ def run_sequence_children(
                 now = time.monotonic()
                 if terminated_at is None:
                     _signal(proc, signal.SIGTERM, sent)
-                    terminated_at = now
+                    terminated_at = time.monotonic()  # grace counts from the send
                 elif now - terminated_at >= grace_s:
                     _signal(proc, signal.SIGKILL, sent)
         code = proc.returncode
@@ -179,17 +179,17 @@ def run_sequence_children(
         # (e.g. cleanup, then re-raising SIGTERM) is counted as stopped.
         if code < 0 and -code in sent:
             return ChildResult(
-                seq, TERMINATED, code, _read(out_f), _read(err_f), spawned_at
+                seq, TERMINATED, code, _collect(out_f), _collect(err_f), spawned_at
             )
         if code != 0:
             # Record the failure and abort before collecting its output.
             failed_at = time.monotonic()
             abort_at = _abort()
-            out, err = _read(out_f), _read(err_f)
+            out, err = _collect(out_f), _collect(err_f)
             return ChildResult(
                 seq, FAILED, code, out, err, spawned_at, failed_at, abort_at
             )
-        return ChildResult(seq, OK, 0, _read(out_f), _read(err_f), spawned_at)
+        return ChildResult(seq, OK, 0, _collect(out_f), _collect(err_f), spawned_at)
 
     executor = ThreadPoolExecutor(max_workers=max(1, max_workers))
     try:
@@ -211,6 +211,15 @@ def _read(f: IO[bytes]) -> str:
         chunks.append(chunk)
         offset += len(chunk)
     return b"".join(chunks).decode(errors="replace")
+
+
+def _collect(f: IO[bytes]) -> str:
+    # The child's status is already known here; a capture read error must
+    # not replace it, so it is reported inside that stream instead.
+    try:
+        return _read(f)
+    except Exception as exc:
+        return f"[launcher could not read this capture: {_exc(exc)}]"
 
 
 def _exc(exc: BaseException) -> str:

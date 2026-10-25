@@ -127,9 +127,9 @@ def test_multiprocess_launch_failure_exits_before_metrics():
     assert len(launch.body) == 1
     assert isinstance(launch.body[0], ast.Assign)
     assert ast.unparse(launch.body[0].targets[0]) == "results"
-    assert ast.unparse(launch.body[0].value).startswith(
-        "sequence_launcher.run_sequence_children("
-    )
+    call = launch.body[0].value
+    assert isinstance(call, ast.Call)
+    assert ast.unparse(call.func) == "sequence_launcher.run_sequence_children"
 
     assign_i = _stmt_index(
         body,

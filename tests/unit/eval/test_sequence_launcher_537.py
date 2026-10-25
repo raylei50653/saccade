@@ -214,8 +214,9 @@ def test_pending_sequences_build_no_command_after_the_abort(tmp_path: Path) -> N
 def test_child_ignoring_sigterm_is_killed_after_grace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """SIGKILL is sent no earlier than grace_s after SIGTERM, measured at the
-    send_signal calls (Codex r3/r4)."""
+    """SIGKILL is sent no earlier than grace_s after SIGTERM was actually sent,
+    measured at the send_signal calls; the SIGTERM send itself is slowed down
+    (Codex r3/r4/r5)."""
     rig = Rig(
         tmp_path,
         {
@@ -227,9 +228,12 @@ def test_child_ignoring_sigterm_is_killed_after_grace(
 
     class Popen(subprocess.Popen):  # type: ignore[type-arg]
         def send_signal(self, sig: int) -> None:
-            if "B" in list(self.args):  # type: ignore[arg-type]
-                sends.append((sig, time.monotonic()))
+            is_b = "B" in list(self.args)  # type: ignore[arg-type]
+            if is_b and sig == signal.SIGTERM:
+                time.sleep(1.3)  # Codex r5: grace must count from the send
             super().send_signal(sig)
+            if is_b:
+                sends.append((sig, time.monotonic()))  # after the send
 
     monkeypatch.setattr(subprocess, "Popen", Popen)
     results, elapsed = rig.run(["A", "B"], grace_s=1.0)
@@ -622,6 +626,33 @@ def test_reading_the_capture_leaves_the_shared_offset_alone(tmp_path: Path) -> N
         f.seek(9)  # wherever a writer sharing the descriptor left it
         assert sl._read(f) == "ORIGINAL-CHILD-OUTPUT\n"
         assert f.tell() == 9
+
+
+def test_capture_read_error_keeps_the_child_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex r5: A exited 5; reading its stderr raised (EIO) and the worker
+    guard replaced the failure with a launcher error (70). The child's own
+    status, timestamp and readable output are kept."""
+    rig = Rig(tmp_path, {"A": {"kind": "fail", "code": 5}})
+    real = sl._read
+    reads = []
+
+    def flaky_read(f: Any) -> str:
+        reads.append(1)
+        if len(reads) == 2:  # A's stderr
+            raise OSError(5, "Input/output error")
+        return real(f)
+
+    monkeypatch.setattr(sl, "_read", flaky_read)
+    results, _ = rig.run(["A"])
+    (a,) = results
+    assert a.status == sl.FAILED and not a.launcher_error
+    assert a.returncode == 5 and a.failed_at is not None
+    assert "out-A" in a.stdout
+    assert "Input/output error" in a.stderr
+    assert sl.launch_exit_code(results) == 5
+    _assert_no_leftovers(rig)
 
 
 def test_signal_death_is_a_failure_with_128_plus_n(tmp_path: Path) -> None:
