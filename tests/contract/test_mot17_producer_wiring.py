@@ -34,7 +34,7 @@ def test_mot17_claims_before_any_result_writer():
     """Ordering in source is the stand-in for an import we cannot perform in CI."""
     source = _source()
     claim_at = source.index("claim_or_join_run(")
-    assert claim_at < source.index("subprocess.run(")
+    assert claim_at < source.index("run_sequence_children(")
     assert claim_at < source.index("run_eval(")
     assert claim_at < source.index("run_eval_cpp(")
     assert claim_at < source.index("run_motmetrics_evaluation(")
@@ -51,7 +51,26 @@ def test_mot17_does_not_offer_overwrite_or_resume_defaults():
 def test_multiprocess_children_are_given_the_parent_claim():
     """The launcher must not spawn workers that only 'see a manifest'."""
     source = _source()
-    spawn_at = source.index("subprocess.run(")
+    spawn_at = source.index("run_sequence_children(")
     claim_env_at = source.index("parent_claim_environ(")
     assert claim_env_at < spawn_at
     assert "env=child_env" in source
+
+
+def test_multiprocess_launch_failure_exits_before_metrics():
+    """#537 F01: a failed child must exit non-zero before parent metrics run.
+
+    Source-level for the same reason as the rest of this file; the launcher
+    itself is exercised with real child processes in
+    tests/unit/eval/test_sequence_launcher_537.py.
+    """
+    source = _source()
+    spawn_at = source.index("run_sequence_children(")
+    assert "subprocess.run(" not in source
+    exit_at = source.index("sys.exit(exit_code)", spawn_at)
+    interrupt_at = source.index(
+        "sys.exit(sequence_launcher.EXIT_INTERRUPTED)", spawn_at
+    )
+    metrics_at = source.index("run_motmetrics_evaluation(", spawn_at)
+    assert spawn_at < interrupt_at < exit_at < metrics_at
+    assert "launch_exit_code(results)" in source[spawn_at:exit_at]
