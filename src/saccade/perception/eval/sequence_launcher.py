@@ -8,8 +8,9 @@ launch (fail-fast):
 * running children get SIGTERM, then SIGKILL after ``grace_s``, and every
   child is reaped before :func:`run_sequence_children` returns;
 * each original failure keeps its sequence, return code, stdout and stderr;
-  children stopped by the launcher are reported as ``terminated``, never as a
-  failure of their own sequence.
+  a child that dies from the launcher's SIGTERM/SIGKILL is reported as
+  ``terminated``, never as a failure of its own sequence, while a child that
+  exits by itself after the abort keeps its own status.
 
 An exception in the waiting thread (``KeyboardInterrupt`` included) stops and
 reaps the children the same way before it propagates; the caller exits with
@@ -37,6 +38,8 @@ NOT_STARTED = "not_started"
 EXIT_START_FAILED = 127  # the original failure is a child that could not be started
 EXIT_INCOMPLETE = 1  # no child failed, yet not every child completed
 EXIT_INTERRUPTED = 130  # KeyboardInterrupt, after the children were reaped
+
+_STOP_CODES = (-signal.SIGTERM, -signal.SIGKILL)  # the launcher's own signals
 
 
 @dataclass(frozen=True)
@@ -94,7 +97,10 @@ def run_sequence_children(
                     terminated_at = now
                 elif now - terminated_at >= grace_s:
                     proc.kill()
-        if terminated_at is not None:
+        # Only a death by the launcher's own signal is TERMINATED; a child
+        # that exited by itself (before the signal landed, or by handling
+        # it) keeps its own status even after abort was set.
+        if terminated_at is not None and proc.returncode in _STOP_CODES:
             return ChildResult(seq, TERMINATED, proc.returncode, out, err)
         if proc.returncode != 0:
             return _failed(seq, proc.returncode, out, err)

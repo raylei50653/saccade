@@ -37,6 +37,11 @@ spec = json.loads(open(spec_path).read())[seq]
 kind = spec["kind"]
 if kind == "stubborn":
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
+if kind == "trap":
+    def _own_exit(*_):
+        print("trapped-" + seq, file=sys.stderr, flush=True)
+        os._exit(spec["code"])
+    signal.signal(signal.SIGTERM, _own_exit)
 open(os.path.join(state, seq + ".pid"), "w").write(str(os.getpid()))
 for peer in spec.get("wait_for", []):
     while not os.path.exists(os.path.join(state, peer + ".pid")):
@@ -50,7 +55,7 @@ if kind == "fail":
     sys.exit(spec["code"])
 if kind == "sigkill":
     os.kill(os.getpid(), signal.SIGKILL)
-time.sleep(30)  # "sleep" and "stubborn": only the launcher ends these early
+time.sleep(30)  # "sleep", "stubborn", "trap": only the launcher ends these early
 sys.exit(0)
 """
 
@@ -148,6 +153,31 @@ def test_child_ignoring_sigterm_is_killed_after_grace(tmp_path: Path) -> None:
     assert by["B"].status == sl.TERMINATED
     assert by["B"].returncode == -signal.SIGKILL
     assert sl.launch_exit_code(results) == 2
+    assert elapsed < 10
+    _assert_no_leftovers(rig)
+
+
+def test_child_exiting_by_itself_after_abort_keeps_its_own_status(
+    tmp_path: Path,
+) -> None:
+    """Seen on the GPU probe: a child failed by itself while the launcher was
+    already stopping it. Only a death by the launcher's own signal is
+    TERMINATED; here B handles SIGTERM and exits 4 on its own.
+    """
+    rig = Rig(
+        tmp_path,
+        {
+            "A": {"kind": "fail", "code": 3, "wait_for": ["B"], "delay": 0.2},
+            "B": {"kind": "trap", "code": 4},
+        },
+    )
+    results, elapsed = rig.run(["A", "B"])
+    by = _by_seq(results)
+    assert by["B"].status == sl.FAILED
+    assert by["B"].returncode == 4
+    assert "trapped-B" in by["B"].stderr
+    assert [r.sequence for r in sl.failures(results)] == ["A", "B"]
+    assert sl.launch_exit_code(results) == 3
     assert elapsed < 10
     _assert_no_leftovers(rig)
 
