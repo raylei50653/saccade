@@ -11,6 +11,7 @@ protocol through ``run_manifest`` rather than by running the eval.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 from scripts.provenance.check_producer_coverage import calls_open_run
@@ -55,3 +56,56 @@ def test_multiprocess_children_are_given_the_parent_claim():
     claim_env_at = source.index("parent_claim_environ(")
     assert claim_env_at < spawn_at
     assert "env=child_env" in source
+
+
+def _if_block(test_source: str) -> ast.If:
+    tree = ast.parse(_source())
+    hits = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.If) and ast.unparse(n.test) == test_source
+    ]
+    assert len(hits) == 1, test_source
+    return hits[0]
+
+
+def _calls_named(node: ast.AST, name: str) -> list[ast.Call]:
+    return [
+        n
+        for n in ast.walk(node)
+        if isinstance(n, ast.Call) and ast.unparse(n.func).endswith(name)
+    ]
+
+
+def test_detector_discovery_goes_through_sequence_selection():
+    """#537 F06: ``--detector`` discovery skips (and logs) sequences without
+    seqinfo.ini and refuses zero valid ones, via select_sequences."""
+    block = _if_block("args.detector and (not args.sequences)")
+    (call,) = _calls_named(block, "select_sequences")
+    assert ast.unparse(call) == (
+        "select_sequences(args.data_root, args.split, args.detector)"
+    )
+    assigns = [
+        n
+        for n in ast.walk(block)
+        if isinstance(n, ast.Assign)
+        and [ast.unparse(t) for t in n.targets] == ["args.sequences"]
+    ]
+    assert len(assigns) == 1
+    assert ast.unparse(assigns[0].value) == (
+        "','.join(select_sequences(args.data_root, args.split, args.detector).valid)"
+    )
+    assert "iterdir" not in ast.unparse(block)
+
+
+def test_multiprocess_parent_validates_before_spawning():
+    """#537 F06: explicit sequences without seqinfo.ini fail in the parent,
+    before any child is prepared (``parent_claim_environ`` is the spawn
+    preparation in every launcher version)."""
+    block = _if_block("getattr(args, 'processes', 0) > 0 and args.sequences")
+    (check,) = _calls_named(block, "select_sequences")
+    assert ast.unparse(check) == (
+        "select_sequences(args.data_root, args.split, args.sequences)"
+    )
+    (prepare,) = _calls_named(block, "parent_claim_environ")
+    assert check.lineno < prepare.lineno

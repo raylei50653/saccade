@@ -152,15 +152,15 @@ if __name__ == "__main__":
     if args.detector and not args.sequences:
         from pathlib import Path as _Path
 
+        from saccade.perception.eval.sequence_selection import select_sequences
+
         data_root = _Path(args.data_root)
         split_dir = data_root / args.split
         if split_dir.exists():
+            # #537 F06: discovery; directories without seqinfo.ini are logged
+            # and skipped here, zero valid sequences is an error.
             args.sequences = ",".join(
-                sorted(
-                    d.name
-                    for d in split_dir.iterdir()
-                    if d.is_dir() and d.name.endswith(f"-{args.detector}")
-                )
+                select_sequences(args.data_root, args.split, args.detector).valid
             )
 
     # ADR 021 AP-2: first artifact side effect. Top-level invocations claim
@@ -183,6 +183,11 @@ if __name__ == "__main__":
 
         seq_list = [s.strip() for s in args.sequences.split(",") if s.strip()]
         if len(seq_list) > 1:
+            # #537 F06: refuse explicit sequences without seqinfo.ini before
+            # spawning; children re-check their own sequence.
+            from saccade.perception.eval.sequence_selection import select_sequences
+
+            select_sequences(args.data_root, args.split, args.sequences)
             print(
                 f"\n🔥 [Multi-Process Launcher] Spawning {len(seq_list)} processes (max {args.processes} concurrent)"
             )
