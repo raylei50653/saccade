@@ -27,9 +27,11 @@ from __future__ import annotations
 
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
+from typing import IO
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
@@ -97,50 +99,43 @@ def run_sequence_children(
         )
 
     def _run(seq: str) -> ChildResult:
-        if abort.is_set():
-            return ChildResult(seq, NOT_STARTED, None)
-        try:
-            cmd = command_for(seq)
-        except BaseException as exc:
-            err = f"launcher error building the command for {seq}: {_exc(exc)}"
-            return _failed(seq, None, "", err, None, launcher_error=True)
-        with spawn_lock:
-            if abort.is_set():
-                return ChildResult(seq, NOT_STARTED, None)
-            print(f" 🚀 Spawning process for {seq}...", flush=True)
+        # Any error in this worker, wherever it happens, kills and reaps its
+        # child and aborts the launch as a launcher error.
+        proc: subprocess.Popen[bytes] | None = None
+        spawned_at: float | None = None
+        with tempfile.TemporaryFile() as out_f, tempfile.TemporaryFile() as err_f:
             try:
-                proc = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    env=None if env is None else dict(env),
-                )
+                if abort.is_set():
+                    return ChildResult(seq, NOT_STARTED, None)
+                cmd = command_for(seq)
+                with spawn_lock:
+                    if abort.is_set():
+                        return ChildResult(seq, NOT_STARTED, None)
+                    try:
+                        # Files, not pipes: a descendant that keeps the
+                        # output open cannot hide the child's own exit.
+                        proc = subprocess.Popen(
+                            cmd,
+                            stdout=out_f,
+                            stderr=err_f,
+                            env=None if env is None else dict(env),
+                        )
+                    except OSError as exc:
+                        failed_at = time.monotonic()
+                        abort.set()
+                        return ChildResult(
+                            seq, FAILED, None, "", _exc(exc), None, failed_at, failed_at
+                        )
+                    spawned_at = time.monotonic()
+                print(f" 🚀 Spawned process for {seq} (pid {proc.pid})", flush=True)
+                return _supervise(seq, proc, spawned_at, out_f, err_f)
             except BaseException as exc:
-                failed_at = time.monotonic()
-                abort.set()
-                err, launcher_error = _exc(exc), not isinstance(exc, OSError)
-                return ChildResult(
-                    seq,
-                    FAILED,
-                    None,
-                    "",
-                    err,
-                    None,
-                    failed_at,
-                    failed_at,
-                    launcher_error,
-                )
-            spawned_at = time.monotonic()
-        try:
-            return _supervise(seq, proc, spawned_at)
-        except BaseException as exc:
-            # A launcher-side error must still stop the launch and this child.
-            proc.kill()
-            proc.wait()
-            err = f"launcher error while supervising {seq}: {_exc(exc)}"
-            return _failed(
-                seq, proc.returncode, "", err, spawned_at, launcher_error=True
-            )
+                if proc is not None and proc.returncode is None:
+                    proc.kill()
+                    proc.wait()
+                err = f"launcher error for {seq}: {_exc(exc)}"
+                code = None if proc is None else proc.returncode
+                return _failed(seq, code, "", err, spawned_at, launcher_error=True)
 
     def _signal(proc: subprocess.Popen[bytes], sig: int, sent: set[int]) -> None:
         # Popen.send_signal polls first and sends nothing when that reaps the
@@ -150,13 +145,17 @@ def run_sequence_children(
             sent.add(sig)
 
     def _supervise(
-        seq: str, proc: subprocess.Popen[bytes], spawned_at: float
+        seq: str,
+        proc: subprocess.Popen[bytes],
+        spawned_at: float,
+        out_f: IO[bytes],
+        err_f: IO[bytes],
     ) -> ChildResult:
         sent: set[int] = set()
         terminated_at: float | None = None
         while True:
             try:
-                raw_out, raw_err = proc.communicate(timeout=poll_s)
+                proc.wait(timeout=poll_s)
                 break
             except subprocess.TimeoutExpired:
                 if not abort.is_set():
@@ -167,12 +166,13 @@ def run_sequence_children(
                     terminated_at = now
                 elif now - terminated_at >= grace_s:
                     _signal(proc, signal.SIGKILL, sent)
-        out = raw_out.decode(errors="replace")
-        err = raw_err.decode(errors="replace")
+        out, err = _read(out_f), _read(err_f)
         code = proc.returncode
         # Only a death by a signal the launcher sent is TERMINATED; any other
         # exit (before the signal landed, by handling it, or by a signal the
-        # child raised itself) keeps the child's own status.
+        # child raised itself before it was signalled) keeps the child's own
+        # status. A child that dies of that same signal after receiving it
+        # (e.g. cleanup, then re-raising SIGTERM) is counted as stopped.
         if code < 0 and -code in sent:
             return ChildResult(seq, TERMINATED, code, out, err, spawned_at)
         if code != 0:
@@ -189,6 +189,11 @@ def run_sequence_children(
     finally:
         # Workers observe ``abort`` and reap their own child; wait for them.
         executor.shutdown(wait=True, cancel_futures=True)
+
+
+def _read(f: IO[bytes]) -> str:
+    f.seek(0)
+    return f.read().decode(errors="replace")
 
 
 def _exc(exc: BaseException) -> str:

@@ -36,7 +36,10 @@ seq, spec_path, state = sys.argv[1], sys.argv[2], sys.argv[3]
 spec = json.loads(open(spec_path).read())[seq]
 kind = spec["kind"]
 if kind == "stubborn":
-    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    def _note_term(*_):
+        with open(os.path.join(state, seq + ".term"), "w") as f:
+            f.write(repr(time.monotonic()))
+    signal.signal(signal.SIGTERM, _note_term)
 if kind == "trap":
     def _own_exit(*_):
         print("trapped-" + seq, file=sys.stderr, flush=True)
@@ -61,6 +64,12 @@ if kind == "fail":
     sys.exit(spec["code"])
 if kind == "selfterm":
     os.kill(os.getpid(), signal.SIGTERM)
+if kind == "orphaner":
+    import subprocess
+    subprocess.Popen([sys.executable, sys.argv[0], spec["grandchild"], spec_path, state])
+    while not os.path.exists(os.path.join(state, spec["grandchild"] + ".pid")):
+        time.sleep(0.01)
+    sys.exit(spec["code"])
 if kind == "sigkill":
     os.kill(os.getpid(), signal.SIGKILL)
 if kind == "badutf8":
@@ -128,8 +137,10 @@ def _kill_leftovers(tmp_path: Path) -> Any:
             pass
 
 
-def _assert_no_leftovers(rig: Rig) -> None:
-    leftovers = {seq: pid for seq, pid in rig.pids().items() if _alive(pid)}
+def _assert_no_leftovers(rig: Rig, ignore: tuple[str, ...] = ()) -> None:
+    leftovers = {
+        seq: pid for seq, pid in rig.pids().items() if seq not in ignore and _alive(pid)
+    }
     assert leftovers == {}
 
 
@@ -200,6 +211,8 @@ def test_pending_sequences_build_no_command_after_the_abort(tmp_path: Path) -> N
 
 
 def test_child_ignoring_sigterm_is_killed_after_grace(tmp_path: Path) -> None:
+    """SIGKILL comes no earlier than grace_s after SIGTERM (Codex r3: the old
+    test also accepted a kill on the next poll)."""
     rig = Rig(
         tmp_path,
         {
@@ -207,10 +220,13 @@ def test_child_ignoring_sigterm_is_killed_after_grace(tmp_path: Path) -> None:
             "B": {"kind": "stubborn"},
         },
     )
-    results, elapsed = rig.run(["A", "B"], grace_s=0.5)
+    results, elapsed = rig.run(["A", "B"], grace_s=1.0)
+    done = time.monotonic()
     by = _by_seq(results)
     assert by["B"].status == sl.TERMINATED
     assert by["B"].returncode == -signal.SIGKILL
+    term_at = float((rig.state / "B.term").read_text())
+    assert 1.0 <= done - term_at < 5.0
     assert sl.launch_exit_code(results) == 2
     assert elapsed < 10
     _assert_no_leftovers(rig)
@@ -289,10 +305,10 @@ def test_launcher_error_fails_the_sequence_and_aborts(
     rig = Rig(tmp_path, {"A": {"kind": "sleep"}, "B": {"kind": "sleep"}})
 
     class Popen(subprocess.Popen):  # type: ignore[type-arg]
-        def communicate(self, *a: Any, **kw: Any) -> Any:
-            if "B" in list(self.args):  # type: ignore[arg-type]
+        def wait(self, timeout: float | None = None) -> int:
+            if timeout is not None and "B" in list(self.args):  # type: ignore[arg-type]
                 raise RuntimeError("injected supervision failure")
-            return super().communicate(*a, **kw)
+            return super().wait(timeout)
 
     monkeypatch.setattr(subprocess, "Popen", Popen)
     results, elapsed = rig.run(["A", "B"])
@@ -321,8 +337,8 @@ def test_no_child_is_spawned_after_the_abort(
     A is spawned first (B's command waits for A's pid file) and fails after
     0.1 s. ``popen``: B's Popen takes 0.5 s, holding the spawn lock, so B
     must be spawned before A's failure could set the abort (``abort_at``).
-    ``command``: building B's command takes 0.5 s, so the abort is set
-    before B reaches the spawn lock and B must not be started at all.
+    ``command``: building B's command takes 0.5 s, so normally the abort is
+    set before B reaches the spawn lock and B is not started.
     """
     rig = Rig(
         tmp_path,
@@ -346,8 +362,9 @@ def test_no_child_is_spawned_after_the_abort(
     results = sl.run_sequence_children(["A", "B"], command_for, max_workers=2)
     by = _by_seq(results)
     assert by["A"].status == sl.FAILED and by["A"].abort_at is not None
-    if slow == "command":
-        assert by["B"].status == sl.NOT_STARTED
+    # Under any scheduling, B is either not started or was spawned before the
+    # abort (Codex r3: a late A may legitimately let B spawn first).
+    if by["B"].status == sl.NOT_STARTED:
         assert "B" not in rig.pids()
     else:
         assert by["B"].status == sl.TERMINATED
@@ -377,14 +394,12 @@ def test_signal_not_sent_when_popen_reaps_first(
     class Popen(subprocess.Popen):  # type: ignore[type-arg]
         faked = False
 
-        def communicate(self, *a: Any, **kw: Any) -> Any:
+        def wait(self, timeout: float | None = None) -> int:
             if "B" in list(self.args) and not self.faked:  # type: ignore[arg-type]
                 self.faked = True
                 os.waitid(os.P_PID, self.pid, os.WEXITED | os.WNOWAIT)
-                raise subprocess.TimeoutExpired(
-                    self.args, float(kw.get("timeout") or 0)
-                )
-            return super().communicate(*a, **kw)
+                raise subprocess.TimeoutExpired(self.args, float(timeout or 0))
+            return super().wait(timeout)
 
     monkeypatch.setattr(subprocess, "Popen", Popen)
     results, elapsed = rig.run(["A", "B"])
@@ -478,8 +493,60 @@ def test_earliest_observed_failure_wins_over_lock_order(
     _assert_no_leftovers(rig)
 
 
+def test_descendant_holding_the_output_does_not_hide_the_exit(tmp_path: Path) -> None:
+    """Codex r3: A exits 7 while its own child G keeps A's stdout/stderr
+    open. With pipes the launcher waited for EOF (G sleeps 30 s) and B's
+    later exit 9 decided the code; the exit is seen at once now."""
+    rig = Rig(
+        tmp_path,
+        {
+            "A": {"kind": "orphaner", "code": 7, "grandchild": "G", "wait_for": ["B"]},
+            "G": {"kind": "sleep"},
+            "B": {"kind": "fail", "code": 9, "delay": 1.0},
+        },
+    )
+    results, elapsed = rig.run(["A", "B"])
+    by = _by_seq(results)
+    assert by["A"].status == sl.FAILED and by["A"].returncode == 7
+    assert sl.launch_exit_code(results) == 7
+    assert elapsed < 10
+    # G is A's child, not the launcher's: out of scope (§25), killed by teardown.
+    _assert_no_leftovers(rig, ignore=("G",))
+
+
+def test_spawn_message_error_aborts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex r3: printing the spawn message (e.g. BrokenPipeError on a closed
+    stdout) raised outside every guard; B's child kept running unsupervised."""
+    rig = Rig(
+        tmp_path, {"A": {"kind": "sleep"}, "B": {"kind": "sleep"}, "C": {"kind": "ok"}}
+    )
+
+    def fake_print(*args: Any, **kw: Any) -> None:
+        if any("for B" in str(a) for a in args):
+            raise BrokenPipeError(32, "Broken pipe")
+
+    def command_for(seq: str) -> list[str]:
+        if seq == "B":
+            _wait_for_pid(rig, "A")
+        return rig.command_for(seq)
+
+    monkeypatch.setattr(sl, "print", fake_print, raising=False)
+    results = sl.run_sequence_children(["A", "B", "C"], command_for, max_workers=2)
+    by = _by_seq(results)
+    assert by["B"].status == sl.FAILED and by["B"].launcher_error
+    assert "BrokenPipeError" in by["B"].stderr
+    assert by["A"].status == sl.TERMINATED
+    assert by["C"].status == sl.NOT_STARTED
+    assert sl.launch_exit_code(results) == sl.EXIT_LAUNCHER_ERROR
+    _assert_no_leftovers(rig)
+
+
 def test_signal_death_is_a_failure_with_128_plus_n(tmp_path: Path) -> None:
-    rig = Rig(tmp_path, {"A": {"kind": "sigkill"}, "B": {"kind": "sleep"}})
+    rig = Rig(
+        tmp_path, {"A": {"kind": "sigkill", "wait_for": ["B"]}, "B": {"kind": "sleep"}}
+    )
     results, elapsed = rig.run(["A", "B"])
     by = _by_seq(results)
     assert by["A"].status == sl.FAILED
@@ -496,6 +563,7 @@ def test_start_failure_has_a_stable_exit_code(tmp_path: Path) -> None:
 
     def command_for(seq: str) -> list[str]:
         if seq == "A":
+            _wait_for_pid(rig, "B")
             return [str(tmp_path / "no-such-interpreter")]
         return rig.command_for(seq)
 
