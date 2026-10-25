@@ -1142,3 +1142,85 @@ Codex r1（`2b120bf6`）判 NOT-READY：第一版的 `redacted_url` 會解析 po
 - 報告是給人讀的文字，不是相容 API；exit code 不代表 readiness。
 - 不取得 online-service qualification、不部署。
 - C0-01／02、WorkbenchPool 是否支援資源降級，以及 #538 的其餘工作都不變。
+
+## 26. F06：評估 sequence 不再被靜默略過
+
+來源是 #538 D1 的 [D1-F06](async_ownership_538.md)（owner 裁決同 D1-F01：#537 擁有修復契約）。**修復前**（`main@4380c2fa`，GPU 重現，見下表）：
+- `run_eval` 對沒有 `seqinfo.ini` 的 sequence 直接 `continue`，不記錄原因；全部缺少時沒有任何輸出，`mot17.py` 仍 exit 0（單一程序與 `--processes` 都一樣）。
+- C++ 路徑（`--cpp-threads`）沒有略過，而是用 1920×1080 的預設值建構該 sequence，並寫出它的 MOT 結果檔。
+
+**實作**：[sequence_selection.py](../../src/saccade/perception/eval/sequence_selection.py) 擁有「明確指定 vs 自動發現」的規則：
+- **明確指定**：`--sequences` 是 sequence 名稱。
+- **自動發現**：`--sequences` 為空，或只含 detector 後綴（`SDP`、`SDP,FRCNN`），或 `mot17.py --detector` 沒有給 `--sequences`。
+- `parse_eval_config` 改用同一個 `requested_sequences()` 產生 `EvalConfig.seqs`，結果與修復前逐字相同（測試以修復前的程式碼逐案比對）。
+
+`select_sequences()` 在 eval 執行**之前**驗證每個要求的 sequence 是否有 `seqinfo.ini`：
+- 明確指定但缺少：`SequenceSelectionError`，訊息列出所有缺少的名稱；不略過、不執行任何 sequence。
+- 自動發現但缺少：記錄原因（`⚠️  Skipping discovered sequence <name>: no seqinfo.ini (<path>)`）後略過。
+- 沒有任何有效 sequence（含 split 目錄不存在）：`SequenceSelectionError`。
+- 空名稱（`A,,B`、結尾逗號）不是 sequence，直接忽略。
+
+呼叫點：
+- `run_eval` 與 `run_eval_cpp` 的第一個動作就是驗證，在 config 解析、extension import 與任何 detector 載入之前。
+- `run_eval_cpp` 只為有效的 sequence 建構 C++ config；`_build_cpp_seq_config` 遇到缺少的 `seqinfo.ini` 會丟 `SequenceSelectionError`，不再退回預設值。
+- `mot17.py --detector` 的自動發現改走 `select_sequences()`；`--processes` 的 parent 在準備子程序之前驗證，所以不依賴 F01（§25）也不會 exit 0。
+
+錯誤以未捕捉的例外結束，exit 1。
+
+**不改**：`EvalConfig.seqs` 的內容、`run_eval` 迴圈（自動發現且被略過的 sequence 仍由原本的 `continue` 跳過，此時已記錄過原因）、交給 metrics 的 sequence 清單、tracking 數值、shipping config exporter 依賴的入口敘述（`if args.detector and not args.sequences:`、`if getattr(args, "processes", 0) > 0 and args.sequences:`、`for seq in cfg.seqs:`；`test_resolved_shipping_config.py` 通過）。`seqinfo.ini` 存在但缺少欄位（例如沒有 `[Sequence]`）不在本節範圍。
+
+**驗收與負控制**：
+
+| 測試 | 涵蓋 |
+|:--|:--|
+| [test_sequence_selection_537.py](../../tests/unit/eval/test_sequence_selection_537.py)（CPU，CI） | 35 個案例：<br>• 明確指定：全部存在（保留要求的順序）、部分缺少、全部缺少、split 不存在、空名稱<br>• 自動發現（空字串與 `None`）：全部存在、部分缺少（略過並記錄原因）、全部缺少（先記錄原因再報錯）、空目錄<br>• detector 後綴：部分缺少、沒有符合的目錄<br>• `requested_sequences()` 與修復前 `parse_eval_config` 的規則在 8 種輸入下逐字相同；`parse_eval_config` 的 `cfg.seqs` 不變<br>• `run_eval`：明確缺少與零個有效時在 config 解析之前報錯、不建立輸出目錄；有效選擇則到達解析<br>• `run_eval_cpp`：同上，在 `saccade_eval_ext` import 之前報錯<br>• `_build_cpp_seq_config` 遇到缺少的 `seqinfo.ini` 報錯，不給 1920×1080 |
+| [test_mot17_producer_wiring.py](../../tests/contract/test_mot17_producer_wiring.py)（CI） | 新增 2 個 AST 案例：`--detector` 區塊以 `select_sequences(args.data_root, args.split, args.detector).valid` 設定 `args.sequences`、不再 `iterdir`；`--processes` 區塊在 `parent_claim_environ` 之前呼叫 `select_sequences(args.data_root, args.split, args.sequences)` |
+
+11 個 source mutation 與 3 個 `mot17.py` mutation 都被攔住，只在獨立的來源副本上執行，執行前後 worktree 的檔案 SHA-256 相同：
+
+| mutation | failed |
+|:--|:--|
+| 明確指定缺少時允許 | 3 |
+| 自動發現缺少時報錯 | 10 |
+| 零個有效時允許 | 5 |
+| 略過時不記錄原因 | 6 |
+| detector 後綴當成明確指定 | 9 |
+| 只檢查目錄、不檢查 `seqinfo.ini` | 12 |
+| 保留空名稱 | 1 |
+| 不檢查 split 目錄 | 2 |
+| `run_eval` 不驗證 | 5 |
+| `run_eval_cpp` 不驗證 | 3 |
+| `_build_cpp_seq_config` 恢復預設值 | 1 |
+| `--detector` 恢復 `iterdir`（wiring） | 1 |
+| 移除 `--processes` parent 的驗證（wiring） | 1 |
+| parent 的驗證移到 `parent_claim_environ` 之後（wiring） | 1 |
+
+`run_eval_cpp` 只建構有效 sequence 的那一行在 CPU 上到不了（在 extension import 之後），由下面的 GPU 重現涵蓋；拿掉它時，自動發現且部分缺少的 C++ 執行會在 `_build_cpp_seq_config` 報錯，而不是靜默退回預設值。
+
+**GPU 重現**（本機，`--max-frames 10`）。before／after 用同一個 cwd、`.venv`、`build/`、`models/` 與 `datasets/`，只換 checkout。三棵樹：
+- normal：`MOT17-09-SDP`、`MOT17-10-SDP`（連到真實資料）。
+- partial：normal 加上一個沒有 `seqinfo.ini` 的 `MISSING-A-SDP`。
+- allmissing：兩個沒有 `seqinfo.ini` 的目錄。
+
+每棵樹 6 種模式：明確指定單一程序、明確指定 `--processes 2`、`--detector SDP`、`--detector SDP --processes 2`、`--sequences SDP`、`--cpp-threads 2 --sequences SDP`。
+
+| 樹 | 模式 | `main@4380c2fa` | 修正後（`76d2808c`） |
+|:--|:--|:--|:--|
+| normal | 全部 6 種 | exit 0，兩個 sequence 都有輸出與 metrics | 相同 |
+| partial | 明確指定（單一、`--processes`） | exit 0，`MISSING-A-SDP` 被靜默略過 | exit 1，`SequenceSelectionError` 列出 `MISSING-A-SDP`，沒有輸出 |
+| partial | 自動發現的 3 種 Python 模式 | exit 0，靜默略過 | exit 0，記錄 1 次略過原因，兩個有效 sequence 都有輸出與 metrics |
+| partial | `--cpp-threads` 自動發現 | exit 0，**以預設值寫出 `MISSING-A-SDP.txt`** | exit 0，記錄略過原因，不寫 `MISSING-A-SDP.txt` |
+| allmissing | 明確指定（單一、`--processes`） | exit 0，沒有輸出 | exit 1，`SequenceSelectionError` |
+| allmissing | 自動發現的 4 種模式 | exit 0；C++ 以預設值寫出兩個結果檔 | exit 1，記錄 2 次略過原因後 `no valid sequence` |
+
+normal 與 partial 兩棵樹中，before／after 都有輸出的 20 組 MOT 結果檔（每種模式的 `MOT17-09-SDP`、`MOT17-10-SDP`）逐位元組相同。
+
+證據（repo 外）：`~/.local/state/saccade/evidence/537-f06/20261025T155523/`（probe 腳本與每次執行的輸出、mutation 腳本與結果）。
+
+**Runtime identity**：`config.py`、`evaluator.py`、`cpp_runner.py`、`mot17.py` 與新的 `sequence_selection.py` 都是 `decision_relevant`，依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture 後以 stacked publication 原子落地；座標變化與證據記在 PR。
+
+**邊界**：
+- 只檢查 `seqinfo.ini` 是否存在，不檢查內容；`img1/` 是否有影格、`gt/` 是否存在都不在範圍內。
+- `run_eval_concurrent`、`multi_stream.py`、DanceTrack／SportsMOT 的入口沿用 `run_eval` 的驗證，但沒有個別測試。
+- 錯誤是未捕捉的例外（exit 1、印出 traceback），沒有定義專用的 exit code。
+- F01（子程序失敗傳播，§25）、tracking 數值與 online qualification 不在本節範圍。
