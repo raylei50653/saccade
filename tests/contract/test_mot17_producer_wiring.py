@@ -11,6 +11,7 @@ protocol through ``run_manifest`` rather than by running the eval.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 from scripts.provenance.check_producer_coverage import calls_open_run
@@ -57,20 +58,70 @@ def test_multiprocess_children_are_given_the_parent_claim():
     assert "env=child_env" in source
 
 
+def _launcher_block() -> ast.If:
+    """The ``if getattr(args, "processes", 0) > 0 and args.sequences:`` block."""
+    tree = ast.parse(_source())
+    hits = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.If)
+        and ast.unparse(n.test)
+        == "getattr(args, 'processes', 0) > 0 and args.sequences"
+    ]
+    assert len(hits) == 1
+    return hits[0]
+
+
+def _calls(node: ast.AST, name: str) -> list[ast.Call]:
+    return [
+        n
+        for n in ast.walk(node)
+        if isinstance(n, ast.Call) and ast.unparse(n.func).endswith(name)
+    ]
+
+
 def test_multiprocess_launch_failure_exits_before_metrics():
     """#537 F01: a failed child must exit non-zero before parent metrics run.
 
-    Source-level for the same reason as the rest of this file; the launcher
-    itself is exercised with real child processes in
-    tests/unit/eval/test_sequence_launcher_537.py.
+    Structural (AST), because mot17.py cannot be imported on CPU CI: the
+    guard is ``if exit_code != 0:`` with ``exit_code`` from
+    ``launch_exit_code(results)``, its body exits with that code, the
+    KeyboardInterrupt handler exits with EXIT_INTERRUPTED, and both come
+    before the parent's metrics. The launcher itself is exercised with real
+    child processes in tests/unit/eval/test_sequence_launcher_537.py.
     """
-    source = _source()
-    spawn_at = source.index("run_sequence_children(")
-    assert "subprocess.run(" not in source
-    exit_at = source.index("sys.exit(exit_code)", spawn_at)
-    interrupt_at = source.index(
-        "sys.exit(sequence_launcher.EXIT_INTERRUPTED)", spawn_at
-    )
-    metrics_at = source.index("run_motmetrics_evaluation(", spawn_at)
-    assert spawn_at < interrupt_at < exit_at < metrics_at
-    assert "launch_exit_code(results)" in source[spawn_at:exit_at]
+    block = _launcher_block()
+    assert "subprocess.run(" not in _source()
+    (spawn,) = _calls(block, "run_sequence_children")
+    (metrics,) = _calls(block, "run_motmetrics_evaluation")
+
+    assigns = [
+        n
+        for n in ast.walk(block)
+        if isinstance(n, ast.Assign)
+        and [ast.unparse(t) for t in n.targets] == ["exit_code"]
+    ]
+    assert [ast.unparse(a.value) for a in assigns] == [
+        "sequence_launcher.launch_exit_code(results)"
+    ]
+    guards = [
+        n
+        for n in ast.walk(block)
+        if isinstance(n, ast.If) and ast.unparse(n.test) == "exit_code != 0"
+    ]
+    assert len(guards) == 1
+    guard_exits = [ast.unparse(c) for c in _calls(guards[0], "sys.exit")]
+    assert guard_exits == ["sys.exit(exit_code)"]
+    assert spawn.lineno < assigns[0].lineno < guards[0].lineno < metrics.lineno
+
+    handlers = [
+        h
+        for n in ast.walk(block)
+        if isinstance(n, ast.Try)
+        for h in n.handlers
+        if h.type is not None and ast.unparse(h.type) == "KeyboardInterrupt"
+    ]
+    assert len(handlers) == 1
+    handler_exits = [ast.unparse(c) for c in _calls(handlers[0], "sys.exit")]
+    assert handler_exits == ["sys.exit(sequence_launcher.EXIT_INTERRUPTED)"]
+    assert handlers[0].lineno < metrics.lineno

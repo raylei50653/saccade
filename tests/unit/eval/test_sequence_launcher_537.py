@@ -42,7 +42,13 @@ if kind == "trap":
         print("trapped-" + seq, file=sys.stderr, flush=True)
         os._exit(spec["code"])
     signal.signal(signal.SIGTERM, _own_exit)
-open(os.path.join(state, seq + ".pid"), "w").write(str(os.getpid()))
+if kind == "trap_kill":
+    signal.signal(signal.SIGTERM, lambda *_: os.kill(os.getpid(), signal.SIGKILL))
+# Published atomically: a reader never sees an empty pid file.
+tmp = os.path.join(state, seq + ".pid.tmp")
+with open(tmp, "w") as f:
+    f.write(str(os.getpid()))
+os.replace(tmp, os.path.join(state, seq + ".pid"))
 for peer in spec.get("wait_for", []):
     while not os.path.exists(os.path.join(state, peer + ".pid")):
         time.sleep(0.01)
@@ -55,7 +61,11 @@ if kind == "fail":
     sys.exit(spec["code"])
 if kind == "sigkill":
     os.kill(os.getpid(), signal.SIGKILL)
-time.sleep(30)  # "sleep", "stubborn", "trap": only the launcher ends these early
+if kind == "badutf8":
+    sys.stderr.buffer.write(b"bad-\xff\xfe-" + seq.encode() + b"\n")
+    sys.stderr.flush()
+    sys.exit(spec["code"])
+time.sleep(30)  # "sleep", "stubborn", "trap*": only the launcher ends these early
 sys.exit(0)
 """
 
@@ -95,6 +105,25 @@ def _alive(pid: int) -> bool:
     except ProcessLookupError:
         return False
     return True
+
+
+@pytest.fixture(autouse=True)
+def _kill_leftovers(tmp_path: Path) -> Any:
+    """Teardown even when a test fails: SIGKILL scripted children still alive.
+
+    Only pids whose command line is this test's child script, so a recycled
+    pid is never touched.
+    """
+    yield
+    child = str(tmp_path / "child.py")
+    for pid_file in (tmp_path / "state").glob("*.pid"):
+        try:
+            pid = int(pid_file.read_text())
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+            if child.encode() in cmdline:
+                os.kill(pid, signal.SIGKILL)
+        except (OSError, ValueError):
+            pass
 
 
 def _assert_no_leftovers(rig: Rig) -> None:
@@ -179,6 +208,96 @@ def test_child_exiting_by_itself_after_abort_keeps_its_own_status(
     assert [r.sequence for r in sl.failures(results)] == ["A", "B"]
     assert sl.launch_exit_code(results) == 3
     assert elapsed < 10
+    _assert_no_leftovers(rig)
+
+
+def test_child_raising_sigkill_on_sigterm_is_not_terminated(tmp_path: Path) -> None:
+    """Codex r1: B answers the launcher's SIGTERM by SIGKILLing itself before
+    the grace period ends. The launcher never sent SIGKILL, so it is B's own
+    failure, not ``terminated``.
+    """
+    rig = Rig(
+        tmp_path,
+        {
+            "A": {"kind": "fail", "code": 3, "wait_for": ["B"], "delay": 0.2},
+            "B": {"kind": "trap_kill"},
+        },
+    )
+    results, elapsed = rig.run(["A", "B"], grace_s=20.0)
+    by = _by_seq(results)
+    assert by["B"].status == sl.FAILED
+    assert by["B"].returncode == -signal.SIGKILL
+    assert sl.launch_exit_code(results) == 3
+    assert elapsed < 10
+    _assert_no_leftovers(rig)
+
+
+def test_invalid_utf8_output_is_kept_and_still_aborts(tmp_path: Path) -> None:
+    """Codex r1: invalid UTF-8 used to raise in the worker and hide B's failure."""
+    rig = Rig(
+        tmp_path,
+        {
+            "A": {"kind": "sleep"},
+            "B": {"kind": "badutf8", "code": 7, "wait_for": ["A"], "delay": 0.2},
+        },
+    )
+    results, elapsed = rig.run(["A", "B"])
+    by = _by_seq(results)
+    assert by["B"].status == sl.FAILED
+    assert by["B"].returncode == 7
+    assert "bad-\ufffd\ufffd-B" in by["B"].stderr
+    assert by["A"].status == sl.TERMINATED
+    assert sl.launch_exit_code(results) == 7
+    assert elapsed < 10
+    _assert_no_leftovers(rig)
+
+
+def test_launcher_error_fails_the_sequence_and_aborts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex r1: an exception while supervising B must stop A and reap B."""
+    rig = Rig(tmp_path, {"A": {"kind": "sleep"}, "B": {"kind": "sleep"}})
+
+    class Popen(subprocess.Popen):  # type: ignore[type-arg]
+        def communicate(self, *a: Any, **kw: Any) -> Any:
+            if "B" in list(self.args):  # type: ignore[arg-type]
+                raise RuntimeError("injected supervision failure")
+            return super().communicate(*a, **kw)
+
+    monkeypatch.setattr(subprocess, "Popen", Popen)
+    results, elapsed = rig.run(["A", "B"])
+    by = _by_seq(results)
+    assert by["B"].status == sl.FAILED and by["B"].launcher_error
+    assert "injected supervision failure" in by["B"].stderr
+    assert by["A"].status == sl.TERMINATED
+    assert sl.launch_exit_code(results) == sl.EXIT_LAUNCHER_ERROR == 70
+    assert elapsed < 10
+    _assert_no_leftovers(rig)
+
+
+def test_no_child_is_spawned_after_the_abort(tmp_path: Path) -> None:
+    """Codex r1: B passed the abort check, paused, then spawned after A failed.
+
+    B's command takes 0.5 s to build while A fails at once; whichever order
+    the workers run in, B is either not started or was spawned before A's
+    failure set the abort.
+    """
+    rig = Rig(tmp_path, {"A": {"kind": "fail", "code": 3}, "B": {"kind": "sleep"}})
+
+    def command_for(seq: str) -> list[str]:
+        if seq == "B":
+            time.sleep(0.5)
+        return rig.command_for(seq)
+
+    results = sl.run_sequence_children(["A", "B"], command_for, max_workers=2)
+    by = _by_seq(results)
+    assert by["A"].status == sl.FAILED and by["A"].failed_at is not None
+    if by["B"].status == sl.NOT_STARTED:
+        assert "B" not in rig.pids()
+    else:
+        assert by["B"].status == sl.TERMINATED
+        assert by["B"].spawned_at is not None
+        assert by["B"].spawned_at < by["A"].failed_at
     _assert_no_leftovers(rig)
 
 
@@ -315,6 +434,7 @@ def test_parent_interrupt_reaps_children_and_exits_130(tmp_path: Path) -> None:
         ([sl.ChildResult("A", sl.FAILED, 9, failed_at=1.0)], 9),
         ([sl.ChildResult("A", sl.FAILED, -15, failed_at=1.0)], 143),
         ([sl.ChildResult("A", sl.FAILED, None, failed_at=1.0)], 127),
+        ([sl.ChildResult("A", sl.FAILED, -9, failed_at=1.0, launcher_error=True)], 70),
         (
             [
                 sl.ChildResult("A", sl.FAILED, 4, failed_at=2.0),

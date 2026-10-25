@@ -4,13 +4,17 @@ One child process per sequence, at most ``max_workers`` at a time. A child
 that exits non-zero, dies on a signal or cannot be started fails the whole
 launch (fail-fast):
 
-* sequences not yet started are not started;
+* sequences not yet started are not started (no child is spawned after the
+  abort is set);
 * running children get SIGTERM, then SIGKILL after ``grace_s``, and every
   child is reaped before :func:`run_sequence_children` returns;
 * each original failure keeps its sequence, return code, stdout and stderr;
-  a child that dies from the launcher's SIGTERM/SIGKILL is reported as
+  a child that dies from a signal the launcher sent is reported as
   ``terminated``, never as a failure of its own sequence, while a child that
-  exits by itself after the abort keeps its own status.
+  exits by itself after the abort keeps its own status;
+* an error in the launcher while supervising a child fails that sequence and
+  aborts the launch like a child failure (child output is decoded with
+  replacement, so invalid UTF-8 is not such an error).
 
 An exception in the waiting thread (``KeyboardInterrupt`` included) stops and
 reaps the children the same way before it propagates; the caller exits with
@@ -38,8 +42,7 @@ NOT_STARTED = "not_started"
 EXIT_START_FAILED = 127  # the original failure is a child that could not be started
 EXIT_INCOMPLETE = 1  # no child failed, yet not every child completed
 EXIT_INTERRUPTED = 130  # KeyboardInterrupt, after the children were reaped
-
-_STOP_CODES = (-signal.SIGTERM, -signal.SIGKILL)  # the launcher's own signals
+EXIT_LAUNCHER_ERROR = 70  # the launcher itself failed supervising a child (EX_SOFTWARE)
 
 
 @dataclass(frozen=True)
@@ -49,7 +52,11 @@ class ChildResult:
     returncode: int | None  # None: never ran, or Popen itself raised
     stdout: str = ""
     stderr: str = ""
-    failed_at: float | None = None  # time.monotonic() when FAILED was seen
+    # time.monotonic(), both taken under the spawn lock: when this child was
+    # spawned, and when its failure set the abort.
+    spawned_at: float | None = None
+    failed_at: float | None = None
+    launcher_error: bool = False  # FAILED by the launcher, not by the child
 
 
 def run_sequence_children(
@@ -63,30 +70,55 @@ def run_sequence_children(
 ) -> list[ChildResult]:
     """Run one child per sequence; results come back in ``sequences`` order."""
     abort = threading.Event()
+    # Spawning and setting abort share this lock, so no child starts after
+    # abort was set: a sequence is NOT_STARTED or its child is stopped.
+    spawn_lock = threading.Lock()
 
-    def _failed(seq: str, code: int | None, out: str, err: str) -> ChildResult:
-        failed_at = time.monotonic()
-        abort.set()
-        return ChildResult(seq, FAILED, code, out, err, failed_at)
+    def _abort() -> float:
+        with spawn_lock:
+            abort.set()
+            return time.monotonic()
 
     def _run(seq: str) -> ChildResult:
-        if abort.is_set():
-            return ChildResult(seq, NOT_STARTED, None)
-        print(f" 🚀 Spawning process for {seq}...", flush=True)
+        with spawn_lock:
+            if abort.is_set():
+                return ChildResult(seq, NOT_STARTED, None)
+            print(f" 🚀 Spawning process for {seq}...", flush=True)
+            cmd = command_for(seq)
+            spawned_at = time.monotonic()
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=None if env is None else dict(env),
+                )
+            except OSError as exc:
+                abort.set()
+                err = f"{type(exc).__name__}: {exc}"
+                return ChildResult(
+                    seq, FAILED, None, "", err, spawned_at, time.monotonic()
+                )
         try:
-            proc = subprocess.Popen(
-                command_for(seq),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=None if env is None else dict(env),
+            return _supervise(seq, proc, spawned_at)
+        except BaseException as exc:
+            # A launcher-side error must still stop the launch and this child.
+            failed_at = _abort()
+            proc.kill()
+            proc.wait()
+            err = f"launcher error while supervising {seq}: {type(exc).__name__}: {exc}"
+            return ChildResult(
+                seq, FAILED, proc.returncode, "", err, spawned_at, failed_at, True
             )
-        except OSError as exc:
-            return _failed(seq, None, "", f"{type(exc).__name__}: {exc}")
+
+    def _supervise(
+        seq: str, proc: subprocess.Popen[bytes], spawned_at: float
+    ) -> ChildResult:
+        sent: set[int] = set()
         terminated_at: float | None = None
         while True:
             try:
-                out, err = proc.communicate(timeout=poll_s)
+                raw_out, raw_err = proc.communicate(timeout=poll_s)
                 break
             except subprocess.TimeoutExpired:
                 if not abort.is_set():
@@ -94,24 +126,29 @@ def run_sequence_children(
                 now = time.monotonic()
                 if terminated_at is None:
                     proc.terminate()
+                    sent.add(signal.SIGTERM)
                     terminated_at = now
                 elif now - terminated_at >= grace_s:
                     proc.kill()
-        # Only a death by the launcher's own signal is TERMINATED; a child
-        # that exited by itself (before the signal landed, or by handling
-        # it) keeps its own status even after abort was set.
-        if terminated_at is not None and proc.returncode in _STOP_CODES:
-            return ChildResult(seq, TERMINATED, proc.returncode, out, err)
-        if proc.returncode != 0:
-            return _failed(seq, proc.returncode, out, err)
-        return ChildResult(seq, OK, 0, out, err)
+                    sent.add(signal.SIGKILL)
+        out = raw_out.decode(errors="replace")
+        err = raw_err.decode(errors="replace")
+        code = proc.returncode
+        # Only a death by a signal the launcher sent is TERMINATED; any other
+        # exit (before the signal landed, by handling it, or by a signal the
+        # child raised itself) keeps the child's own status.
+        if code < 0 and -code in sent:
+            return ChildResult(seq, TERMINATED, code, out, err, spawned_at)
+        if code != 0:
+            return ChildResult(seq, FAILED, code, out, err, spawned_at, _abort())
+        return ChildResult(seq, OK, 0, out, err, spawned_at)
 
     executor = ThreadPoolExecutor(max_workers=max(1, max_workers))
     try:
         futures = [executor.submit(_run, seq) for seq in sequences]
         return [fut.result() for fut in futures]
     except BaseException:
-        abort.set()
+        _abort()
         raise
     finally:
         # Workers observe ``abort`` and reap their own child; wait for them.
@@ -127,8 +164,9 @@ def failures(results: Sequence[ChildResult]) -> list[ChildResult]:
 def launch_exit_code(results: Sequence[ChildResult]) -> int:
     """0 only when every child succeeded; otherwise from the original failure.
 
-    Its own positive exit code, ``128 + N`` when it died on signal N, and
-    :data:`EXIT_START_FAILED` when it could not be started.
+    Its own positive exit code, ``128 + N`` when it died on signal N,
+    :data:`EXIT_START_FAILED` when it could not be started and
+    :data:`EXIT_LAUNCHER_ERROR` when the launcher failed supervising it.
     :data:`EXIT_INCOMPLETE` when nothing failed but some child did not complete.
     """
     if all(r.status == OK for r in results):
@@ -136,6 +174,8 @@ def launch_exit_code(results: Sequence[ChildResult]) -> int:
     failed = failures(results)
     if not failed:
         return EXIT_INCOMPLETE
+    if failed[0].launcher_error:
+        return EXIT_LAUNCHER_ERROR
     code = failed[0].returncode
     if code is None:
         return EXIT_START_FAILED
