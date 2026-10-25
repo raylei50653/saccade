@@ -65,6 +65,12 @@ if kind == "fail":
     sys.exit(spec["code"])
 if kind == "selfterm":
     os.kill(os.getpid(), signal.SIGTERM)
+if kind == "spew":
+    end = time.monotonic() + 30
+    while time.monotonic() < end:
+        sys.stdout.write("x" * 4096)
+        sys.stdout.flush()
+        time.sleep(0.001)  # ~4 MB/s: faster than the test's slowed reader
 if kind == "orphaner":
     import subprocess
     subprocess.Popen([sys.executable, sys.argv[0], spec["grandchild"], spec_path, state])
@@ -401,7 +407,7 @@ def test_signal_not_sent_when_popen_reaps_first(
     rig = Rig(
         tmp_path,
         {
-            "A": {"kind": "fail", "code": 3},
+            "A": {"kind": "fail", "code": 3, "wait_for": ["B"]},
             "B": {"kind": "selfterm", "wait_for": ["A"], "delay": 0.3},
         },
     )
@@ -631,27 +637,94 @@ def test_reading_the_capture_leaves_the_shared_offset_alone(tmp_path: Path) -> N
 def test_capture_read_error_keeps_the_child_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Codex r5: A exited 5; reading its stderr raised (EIO) and the worker
-    guard replaced the failure with a launcher error (70). The child's own
-    status, timestamp and readable output are kept."""
+    """Codex r5/r6: A exited 5; reading its stderr failed (EIO) part-way.
+    The failure stays A's own (code, timestamp), and the bytes read before
+    the error are kept next to the error marker."""
     rig = Rig(tmp_path, {"A": {"kind": "fail", "code": 5}})
-    real = sl._read
-    reads = []
+    real = os.pread
+    calls = []
 
-    def flaky_read(f: Any) -> str:
-        reads.append(1)
-        if len(reads) == 2:  # A's stderr
+    def flaky_pread(fd: int, n: int, offset: int) -> bytes:
+        calls.append(1)
+        if len(calls) == 3:  # stdout "out-A\n" took one 6-byte read, then stderr
             raise OSError(5, "Input/output error")
-        return real(f)
+        return real(fd, min(n, 6), offset)
 
-    monkeypatch.setattr(sl, "_read", flaky_read)
+    monkeypatch.setattr(os, "pread", flaky_pread)
     results, _ = rig.run(["A"])
     (a,) = results
     assert a.status == sl.FAILED and not a.launcher_error
     assert a.returncode == 5 and a.failed_at is not None
-    assert "out-A" in a.stdout
-    assert "Input/output error" in a.stderr
+    assert a.stdout == "out-A\n"
+    assert a.stderr.startswith("boom-A") and "Input/output error" in a.stderr
     assert sl.launch_exit_code(results) == 5
+    _assert_no_leftovers(rig)
+
+
+def test_capture_read_does_not_chase_a_growing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex r6: A exits 7 while its child G keeps appending to A's stdout
+    (~4 MB/s for 30 s) faster than the slowed reader (~0.4 MB/s) reads it;
+    collection stops at the size seen on entry instead of chasing EOF."""
+    rig = Rig(
+        tmp_path,
+        {
+            "A": {"kind": "orphaner", "code": 7, "grandchild": "G"},
+            "G": {"kind": "spew"},
+        },
+    )
+    real = os.pread
+
+    def slow_pread(fd: int, n: int, offset: int) -> bytes:
+        time.sleep(0.01)
+        return real(fd, min(n, 4096), offset)
+
+    monkeypatch.setattr(os, "pread", slow_pread)
+    t0 = time.monotonic()
+    results = sl.run_sequence_children(
+        ["A"], rig.command_for, max_workers=1, poll_s=0.05
+    )
+    assert time.monotonic() - t0 < 10
+    assert results[0].status == sl.FAILED and results[0].returncode == 7
+    _assert_no_leftovers(rig, ignore=("G",))
+
+
+def test_launcher_error_is_recorded_before_slow_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex r6: B's supervision failed first, but its failure was recorded
+    only after a slow kill/reap, so A's later exit 5 won. It is recorded and
+    aborts first: A is stopped and the exit code is 70."""
+    rig = Rig(
+        tmp_path,
+        {
+            "A": {"kind": "fail", "code": 5, "wait_for": ["B"], "delay": 0.5},
+            "B": {"kind": "sleep", "wait_for": ["A"]},
+        },
+    )
+
+    class Popen(subprocess.Popen):  # type: ignore[type-arg]
+        def _is_b(self) -> bool:
+            return "B" in list(self.args)  # type: ignore[arg-type]
+
+        def wait(self, timeout: float | None = None) -> int:
+            if timeout is not None and self._is_b():
+                _wait_for_pid(rig, "A")
+                raise RuntimeError("injected supervision failure")
+            return super().wait(timeout)
+
+        def kill(self) -> None:
+            if self._is_b():
+                time.sleep(1.0)
+            super().kill()
+
+    monkeypatch.setattr(subprocess, "Popen", Popen)
+    results, _ = rig.run(["A", "B"])
+    by = _by_seq(results)
+    assert by["B"].status == sl.FAILED and by["B"].launcher_error
+    assert by["A"].status == sl.TERMINATED
+    assert sl.launch_exit_code(results) == sl.EXIT_LAUNCHER_ERROR
     _assert_no_leftovers(rig)
 
 

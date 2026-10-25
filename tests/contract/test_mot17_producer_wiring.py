@@ -130,6 +130,9 @@ def test_multiprocess_launch_failure_exits_before_metrics():
     call = launch.body[0].value
     assert isinstance(call, ast.Call)
     assert ast.unparse(call.func) == "sequence_launcher.run_sequence_children"
+    assert [ast.unparse(a) for a in call.args][0] == "seq_list"
+    keywords = {k.arg: ast.unparse(k.value) for k in call.keywords}
+    assert keywords == {"max_workers": "args.processes", "env": "child_env"}
 
     assign_i = _stmt_index(
         body,

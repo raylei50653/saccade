@@ -86,20 +86,6 @@ def run_sequence_children(
             abort.set()
             return time.monotonic()
 
-    def _failed(
-        seq: str,
-        code: int | None,
-        out: str,
-        err: str,
-        spawned_at: float | None,
-        *,
-        launcher_error: bool = False,
-    ) -> ChildResult:
-        failed_at = time.monotonic()  # observed before waiting for the lock
-        return ChildResult(
-            seq, FAILED, code, out, err, spawned_at, failed_at, _abort(), launcher_error
-        )
-
     def _run(seq: str) -> ChildResult:
         # Any error in this worker, wherever it happens (capture files too),
         # kills and reaps its child and aborts the launch as a launcher error.
@@ -134,12 +120,17 @@ def run_sequence_children(
                 print(f" 🚀 Spawned process for {seq} (pid {proc.pid})", flush=True)
                 return _supervise(seq, proc, spawned_at, out_f, err_f)
             except BaseException as exc:
+                # Record the failure and abort first; cleanup may be slow.
+                failed_at = time.monotonic()
+                abort_at = _abort()
                 if proc is not None and proc.returncode is None:
                     proc.kill()
                     proc.wait()
                 err = f"launcher error for {seq}: {_exc(exc)}"
                 code = None if proc is None else proc.returncode
-                return _failed(seq, code, "", err, spawned_at, launcher_error=True)
+                return ChildResult(
+                    seq, FAILED, code, "", err, spawned_at, failed_at, abort_at, True
+                )
         raise AssertionError("unreachable")  # pragma: no cover
 
     def _signal(proc: subprocess.Popen[bytes], sig: int, sent: set[int]) -> None:
@@ -179,17 +170,17 @@ def run_sequence_children(
         # (e.g. cleanup, then re-raising SIGTERM) is counted as stopped.
         if code < 0 and -code in sent:
             return ChildResult(
-                seq, TERMINATED, code, _collect(out_f), _collect(err_f), spawned_at
+                seq, TERMINATED, code, _read(out_f), _read(err_f), spawned_at
             )
         if code != 0:
             # Record the failure and abort before collecting its output.
             failed_at = time.monotonic()
             abort_at = _abort()
-            out, err = _collect(out_f), _collect(err_f)
+            out, err = _read(out_f), _read(err_f)
             return ChildResult(
                 seq, FAILED, code, out, err, spawned_at, failed_at, abort_at
             )
-        return ChildResult(seq, OK, 0, _collect(out_f), _collect(err_f), spawned_at)
+        return ChildResult(seq, OK, 0, _read(out_f), _read(err_f), spawned_at)
 
     executor = ThreadPoolExecutor(max_workers=max(1, max_workers))
     try:
@@ -204,22 +195,28 @@ def run_sequence_children(
 
 
 def _read(f: IO[bytes]) -> str:
-    # pread from offset 0: the file offset is shared with every process that
-    # inherited the descriptor, so seeking would let a late writer clobber it.
-    fd, chunks, offset = f.fileno(), [], 0
-    while chunk := os.pread(fd, 1 << 20, offset):
-        chunks.append(chunk)
-        offset += len(chunk)
-    return b"".join(chunks).decode(errors="replace")
+    """The capture as it is now, without ever raising.
 
-
-def _collect(f: IO[bytes]) -> str:
-    # The child's status is already known here; a capture read error must
-    # not replace it, so it is reported inside that stream instead.
+    Bytes up to the size seen on entry, read with pread from offset 0: the
+    file offset is shared with every process that inherited the descriptor
+    (seeking would let a late writer clobber it), and a descendant that
+    keeps appending must not keep the read going. The child's status is
+    already known here, so a read error must not replace it: it is reported
+    after whatever was readable.
+    """
+    chunks: list[bytes] = []
     try:
-        return _read(f)
+        fd = f.fileno()
+        size, offset = os.fstat(fd).st_size, 0
+        while offset < size:
+            chunk = os.pread(fd, min(1 << 20, size - offset), offset)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            offset += len(chunk)
     except Exception as exc:
-        return f"[launcher could not read this capture: {_exc(exc)}]"
+        chunks.append(f"\n[launcher could not read the rest: {_exc(exc)}]".encode())
+    return b"".join(chunks).decode(errors="replace")
 
 
 def _exc(exc: BaseException) -> str:
