@@ -5,7 +5,7 @@
 
 # 非同步 edge 與 buffer ownership 盤點（#538 D1）
 
-本稿是 [#538](https://github.com/raylei50653/saccade/issues/538) 的 **D1**：依 #535 的 profiles，盤點主要的非同步 edge，逐條記下誰持有資料、何時算完成、何時可以重用或釋放、容量與溢出、失敗怎麼傳、取消與重啟時怎麼收尾，以及支撐這些說法的證據等級。**本稿不修改行為，也不選定政策**；新發現的缺口只列出並建議路由（§5），裁決歸 owner。閱讀入口是 [architecture README](README.md)。
+本稿是 [#538](https://github.com/raylei50653/saccade/issues/538) 的 **D1**：依 #535 的 profiles，盤點主要的非同步 edge，逐條記下誰持有資料、何時算完成、何時可以重用或釋放、容量與溢出、失敗怎麼傳、取消與重啟時怎麼收尾，以及支撐這些說法的證據等級。**本稿不修改行為，也不選定政策**；新發現的缺口只列出並路由（§5）。Owner 對發布、路由與 #340 trace 的裁決見 §9（決策來源是 #538 的 comment）。閱讀入口是 [architecture README](README.md)。
 
 **Source baseline**：`main@3375e7d4`（#629 merge，2026-10-25）。除 §5 標 `reproduced` 的兩項與 §1 註明的 DALI 建構觀察外，本稿新增的判讀都是 `source-inspected`；引用的既有證據保留原文件的等級與座標，本稿沒有重跑。
 
@@ -33,11 +33,11 @@
 | GPU-validated | 在本機 GPU 執行過的契約測試或正控制（D2-GPU 等） |
 | reproduced | 本稿或既有文件以可重播的程序重現了具體行為 |
 | host-only | CPU fake 的 lifecycle 測試；不涵蓋 CUDA 排序或 buffer lifetime |
-| vendor-documented | 依第三方套件的文件與 source；本 repo 沒有 runtime 驗證 |
+| documentation-supported | 依第三方套件的文件與 source，GPU-unverified：本 repo 沒有 runtime 驗證，不能取代 GPU 端到端測試 |
 | source-inspected | 只讀過本 repo 的 source |
 | unknown | 沒有讀到足以判斷的 source，或屬 C++ 內部未查 |
 
-**DALI 2.0.0 的建構觀察**：`DALIVideoPipeline` 與 eval 的 `_JpgPipe` 都沒有關閉預設的 dynamic executor。在本機只建構不 build 的 `DALIVideoPipeline` 上讀到 `exec_dynamic=True`。這條件下 `DALIGenericIterator.__next__` 走 `torch.from_dlpack`（零拷貝），DALI 的 `TensorGPU.__dlpack__` 文件說預設執行模型的輸出可以無限期持有，並會在呼叫端 stream 插入同步。這是 vendor-documented，**不是**本 repo 的 runtime 驗證（AE-O2、AE-E1b）。
+**DALI 2.0.0 的建構觀察**：`DALIVideoPipeline` 與 eval 的 `_JpgPipe` 都沒有關閉預設的 dynamic executor。在本機只建構不 build 的 `DALIVideoPipeline` 上讀到 `exec_dynamic=True`。這條件下 `DALIGenericIterator.__next__` 走 `torch.from_dlpack`（零拷貝），DALI 的 `TensorGPU.__dlpack__` 文件說預設執行模型的輸出可以無限期持有，並會在呼叫端 stream 插入同步。這是 documentation-supported，**不是**本 repo 的 runtime 驗證（AE-O2、AE-E1b）。
 
 **欄位**（#538 D1 要求的 12 欄，拆成兩張表，以 ID 對應）：表 A 是 producer／consumer、buffer owner、snapshot／version、publish／completion、reuse／free、ordering；表 B 是 capacity、overflow／backpressure、failure propagation、cancel／drain、restart／reset、evidence。
 
@@ -58,7 +58,7 @@
 | ID | producer → consumer | buffer owner | snapshot／version | publish／completion | reuse／free 條件 | ordering |
 |:--|:--|:--|:--|:--|:--|:--|
 | AE-E1a | `TorchvisionGpuStreamer` decode worker（`SACCADE_GPU_DECODE=1`）→ frame loop | caching allocator；frame 在 worker 的 decode stream 上配置 | 每個 worker generation 綁自己的 queue 與 decode stream | 每幀在 decode stream 記 `ready`，consumer stream `wait_event` | consumer 對 frame `record_stream`，丟掉引用後才可回收 | queue FIFO；一個 sequence 一個 worker generation |
-| AE-E1b | eval `DALIStreamerStream`（預設）→ frame loop | DALI（dynamic executor）經 DLPack 交給 torch | — | `from_dlpack` 在 consumer 的 current stream 插入同步（vendor） | vendor：預設執行模型的輸出可以無限期持有 | iterator 順序 |
+| AE-E1b | eval `DALIStreamerStream`（預設）→ frame loop | DALI（dynamic executor）經 DLPack 交給 torch | — | `from_dlpack` 在 consumer 的 current stream 插入同步（DALI 文件） | DALI 文件：預設執行模型的輸出可以無限期持有 | iterator 順序 |
 | AE-E2 | double-buffer side stream 的 detect(k+1) → main stream 的 frame(k+1) | `EvalPipeline`：兩個 `AdaptiveFramePool`、一條 side stream、兩組 event | parity；graph 輸出在 side stream 上 clone | `input_ready` 記在 main、side 等它；clone 後記 `ready_event`，main 等它 | 輸出 tensor 對 main stream `record_stream`；`frame_gpu` 對 side stream `record_stream` | 一個 detection 在飛（同 AE-S2，是它的 oracle） |
 | AE-E3 | double-buffer 的 tracker 輸出 D2H(k) → 下一幀開頭的 emit／relink(k) | 兩組 pinned buffer，依 `frame_id % 2` | parity | main stream 上 non-blocking copy 後記 event；`_flush_db_tracker_out` 先 `ev.synchronize()` 再 clone 出 pinned | 下一個同 parity 的 copy 在兩幀之後，flush 已在其前完成 | flush 在 tracker(k+1) 之前，保留 relink→tracker 順序 |
 | AE-E4 | 非 double-buffer 的延後輸出（`_defer_emit`）→ 下一幀開頭的 emit | 單組 pinned buffer | — | 專用 copy stream 等 `compute_done` 後拷貝並記 event；`_flush_deferred_emit` 在 `_run_frame` 開頭 host 等 event | 下一次 tracker update 排入前已 host 同步；pinned 在下一次 copy 前已讀完 | copy stream 與 main stream 只經 event 與 host 同步連接 |
@@ -73,7 +73,7 @@
 | ID | producer → consumer | buffer owner | snapshot／version | publish／completion | reuse／free 條件 | ordering |
 |:--|:--|:--|:--|:--|:--|:--|
 | AE-O1 | MediaMTX（GStreamer callback thread，或 C++ GstClient callback）→ producer task 的 `grab_tensor()` | 每個 sample 新配置的 tensor；C++ 路徑在 buffer 專屬 stream 上 `clone()` 後歸還 pool slot | `_frame_generation`；`grab_tensor` 不回傳同一 generation 兩次 | slot 在 `_lock` 下替換 | slot 只保留最新一幀，舊的由 GC 回收（[GE-08](failure_degradation_537.md#17-538-d2-gpu-0cuda-排序輸出所有權與-batcher-失敗現況)） | latest-wins；Python 路徑的 `.to("cuda")` 在 callback thread 的 legacy stream 0 |
-| AE-O2 | `DALIMediaClient.grab_tensor()` → `main.py` producer → `AsyncDispatcher` queue | DALI（dynamic executor）經 DLPack；producer 放進 queue 的是 `squeeze(0)` 的 view，沒有 clone | — | `from_dlpack` 在 current stream 插入同步（vendor） | vendor：輸出可以無限期持有；本 repo 未驗證（GE-07 收窄） | queue FIFO |
+| AE-O2 | `DALIMediaClient.grab_tensor()` → `main.py` producer → `AsyncDispatcher` queue | DALI（dynamic executor）經 DLPack；producer 放進 queue 的是 `squeeze(0)` 的 view，沒有 clone | — | `from_dlpack` 在 current stream 插入同步（DALI 文件） | DALI 文件：輸出可以無限期持有；本 repo 未驗證（GE-07 收窄） | queue FIFO |
 | AE-O3 | producer task → `AsyncDispatcher` worker → `on_track_result` | queue 中的 `_QueuedFrame` 持有 frame 引用；`torch.stack` 拷進新的 batch tensor | — | 同一 event loop thread、同一 legacy stream；callback 被 `await` | callback 拿到新 tensor，不被後續幀重用（[GE-06](failure_degradation_537.md#17-538-d2-gpu-0cuda-排序輸出所有權與-batcher-失敗現況)） | 單一 FIFO 跨 stream；同一 stream 內保序 |
 | AE-O4 | 8stream `--workbench` producer → `WorkbenchPool` 每 stream 的 queue → `_WorkbenchWorker` | queue 持有 frame 引用；worker 前處理產生 `padded` | pool generation（重啟換新 queue 與 worker） | worker 在前處理後 `workbench.stream.wait_stream(producer)`（G1 修復） | 同 GE-02／GE-03：正常路徑靠 C++ host 同步 | 每 stream 一個 queue、一個 worker |
 | AE-O5 | `_WorkbenchWorker.submit()` → `BatchingTRTDetector` server thread | server 的 batch 與輸出 slice | — | `frame_event`／`infer_event`；server 失敗時喚醒全部等待者（G3 修復） | 同 GE-03 | server 依到達順序組 batch |
@@ -94,7 +94,7 @@
 |:--|:--|:--|:--|:--|:--|:--|
 | AE-S1～S3 | 1 個 detection 在飛；2 個 pool；2 組 detection buffer | 不丟幀：host 決定節奏，每幀都處理 | 例外 → `RunCompletion` journal（[§23](failure_degradation_537.md#23-c0-10shipping-run-journal-的轉換語義)、CC-536-01-01） | signal／中斷語義不在 D1 重查（歸 CC-536-01-01） | track id、pool、NMS／GMC／tracker graph 每個 sequence 重建；whole-detect graph 依 key 沿用 | cited（#465）：[§14.4](../reference/native_runtime_resolved_config.md#144-驗收) detector 5316 幀、MOT 7/7、graph capture 7/7 EXACT；三個 measurement mutation 都 `DIFFERS` |
 | AE-E1a | queue `prefetch+1`（預設 3） | 阻塞的 `put`：producer 等 consumer | `_DecodeFailure` 經 queue 送出，`__next__` 拋 `RuntimeError`，與 end-of-sequence 分開 | `_stop` → 清 queue → `join(3 s)`；逾時的 worker 只能寫進自己那一代的 queue | 每次 `__iter__` 換新的 worker、queue 與 decode stream | reproduced／GPU：[test_decode_stream_ordering.py](../../tests/unit/eval/test_decode_stream_ordering.py)（含正控制）；host-only：[test_decode_producer_contract.py](../../tests/unit/eval/test_decode_producer_contract.py)（#340 Phase 2B） |
-| AE-E1b | DALI `prefetch_queue_depth=2` | 阻塞（iterator 拉取） | DALI 例外直接從 `next()` 拋出 | 檔案清單的暫存檔只在 `StopIteration` 時刪除 | `auto_reset=True` | vendor-documented |
+| AE-E1b | DALI `prefetch_queue_depth=2` | 阻塞（iterator 拉取） | DALI 例外直接從 `next()` 拋出 | 檔案清單的暫存檔只在 `StopIteration` 時刪除 | `auto_reset=True` | documentation-supported |
 | AE-E2～E4 | 1 個 detection／1 份延後輸出在飛 | 不丟幀 | 同 thread 例外直接拋出 | 不適用（同步 frame loop）；sequence 結尾 flush 最後一份延後輸出 | 每個 sequence 一個 `EvalPipeline` | AE-E2：cited（#465 oracle pins 與 parity）；AE-E3／E4：source-inspected |
 | AE-E5 | 1 個 future | `result()` 阻塞 main | 背景例外在下一次 `result()` 時於 main 重拋 | main 先出錯時，未取的 future 不會被等待；executor 沒有 `shutdown()`（D1-F03） | 每個 `EvalPipeline` 一個新的 executor，舊的 thread 留到 interpreter 結束 | source-inspected |
 | AE-E6 | 1 次在飛 | 注入前 host 阻塞 | native 例外直接拋出 | 不適用 | 每幀重設 | source-inspected |
@@ -102,7 +102,7 @@
 | AE-E8 | `n_threads` | unknown | unknown | unknown | unknown | unknown |
 | AE-E9 | `--max-workers` | 同 AE-O5 | 同 AE-O5 | 同 AE-O5 | — | GPU：`--max-workers 1` 修復前後位元相同；4 workers segfault（§18） |
 | AE-O1 | 1 格（最新一幀） | latest-wins；中間幀與「smart sampling」（像素差 < 2.0）**靜默丟棄，沒有計數** | callback 例外只印出 | `release()`：pipeline 設 NULL、`mainloop.quit()`、`join(1 s)` | `watchdog_loop` 5 s 無幀時重連；重連用阻塞的 `time.sleep(1)` 與 `connect()`，跑在 event loop 上（D1-F04） | source-inspected；GE-08 |
-| AE-O2 | DALI 預取深度（預設） | 阻塞拉取 | `grab_tensor` 吃掉例外並回 `(False, None)` | `release()` 刪除 iterator 與 pipeline | `auto_reset=True`；**`DALIMediaClient` 沒有 `watchdog_loop`**，`main.py` 的 DALI 分支在 `create_task` 時就失敗（ledger C4） | vendor-documented；GE-07 |
+| AE-O2 | DALI 預取深度（預設） | 阻塞拉取 | `grab_tensor` 吃掉例外並回 `(False, None)` | `release()` 刪除 iterator 與 pipeline | `auto_reset=True`；**`DALIMediaClient` 沒有 `watchdog_loop`**，`main.py` 的 DALI 分支在 `create_task` 時就失敗（ledger C4） | documentation-supported；GE-07 |
 | AE-O3 | `asyncio.Queue(maxsize=100)` | 丟**新**幀，每幀計數 `dropped_queue_full` | worker 例外 → FAILED，保留原始錯誤（[§11](failure_degradation_537.md#11-538-d2-adasyncdispatcher-worker-失敗與停止)） | `stop()` 清 queue 並計數 `discarded_on_stop` | trackers 依 `stream_id` 存放，超過 `max_streams=8` 時 LRU 淘汰，該 stream 的 track 狀態**靜默重設**（只印 log） | host-only（§11）；GE-06 GPU-validated（fake detector） |
 | AE-O4 | 每 stream `queue.Queue(maxsize=4)` | 滿時**清空整個 queue** 再放入新幀；`drops` 每次溢出 +1，不是每丟一幀 +1（D1-F02） | worker 例外 → FAILED（§13） | 有界 `stop(timeout)`，worker 存活時保留 batcher（§13） | 重啟換新 queue 與 worker | host-only（§12、§13）；GPU（§18） |
 | AE-O5 | server 的 batch 上限 | `submit()` 阻塞等結果 | server 例外 → batcher FAILED，等待者全部收到失敗，新的 `submit()` 立即失敗（§18） | 同 AE-O4 | — | GPU-validated（§18；fake TRT） |
@@ -128,17 +128,17 @@
 
 都沒有修復。`reproduced` 的原始輸出見 §7；其餘是 source 判讀，不推論發生率。
 
-| ID | 發現 | 等級 | 影響的 D3 驗收項 | 建議路由（待 owner） |
+| ID | 發現 | 等級 | 影響的 D3 驗收項 | 路由（§9 已裁決者註明） |
 |:--|:--|:--|:--|:--|
-| D1-F01 | `mot17.py --processes`：子程序以非零碼結束時 parent 只印 `❌`，接著用剩下的輸出算 metrics 並 `exit(0)` | reproduced | error 不得偽裝成正常完成 | #537（失敗語義），#538 只記 edge |
-| D1-F02 | `WorkbenchPool.put_frame` 溢出時清空整個 queue（最多丟 4 幀），`drops` 只加 1；`AsyncDispatcher` 則是丟 1 個新幀、加 1。兩邊的計數單位不同，`drops` 不是遺失的幀數 | source-inspected | overflow、丟幀與計數語義一致 | #538：裁決計數單位與 drain 政策（#538 原文已標「不先假定是 bug」） |
+| D1-F01 | `mot17.py --processes`：子程序以非零碼結束時 parent 只印 `❌`，接著用剩下的輸出算 metrics 並 `exit(0)` | reproduced | error 不得偽裝成正常完成 | **已裁決**：#537 擁有修復契約，#538 只保留追溯連結 |
+| D1-F02 | `WorkbenchPool.put_frame` 溢出時清空整個 queue（最多丟 4 幀），`drops` 只加 1；`AsyncDispatcher` 則是丟 1 個新幀、加 1。兩邊的計數單位不同，`drops` 不是遺失的幀數 | source-inspected | overflow、丟幀與計數語義一致 | **已裁決**：#538 獨立 D3 切片；保留 drain-all，計數改為實際丟棄的幀數（§9） |
 | D1-F03 | relink 背景寫入（`pipeline_relink`）的 executor 沒有 `shutdown()`；main 先出錯時，未取的 future 不會被等待，背景 thread 可能仍在改 relinker／bank | source-inspected | cancel／drain | #539（選用分支是否保留）後再決定是否修 |
-| D1-F04 | `main.py` 的 producer 以 `asyncio.create_task(media.watchdog_loop())` 啟動 watchdog（8stream 沒有啟動 watchdog），沒有保留引用、不在 `supervise` 內、producer 結束時不取消；它的例外不會被收集。重連路徑的 `time.sleep(1)` 與 `connect()`（最多等 3 s 第一幀）在 event loop 上阻塞，同時卡住所有 stream 與 dispatcher worker | source-inspected | cancel／drain；error 不得被吞 | #538 online qualification 前的 lifecycle 切片 |
-| D1-F05 | MediaMTX 的 latest-wins 與 smart sampling 丟幀沒有計數，`AsyncDispatcher` 的 `dropped_queue_full` 看不到 ingest 層的丟幀 | source-inspected | overflow 與計數語義 | 同 D1-F02 一起裁決 |
-| D1-F06 | `run_eval` 略過沒有 `seqinfo.ini` 的 sequence，不報錯；單一程序與 `--processes` 都 `exit(0)`，沒有輸出 | reproduced | error 不得偽裝成正常完成 | #537 |
+| D1-F04 | `main.py` 的 producer 以 `asyncio.create_task(media.watchdog_loop())` 啟動 watchdog（8stream 沒有啟動 watchdog），沒有保留引用、不在 `supervise` 內、producer 結束時不取消；它的例外不會被收集。重連路徑的 `time.sleep(1)` 與 `connect()`（最多等 3 s 第一幀）在 event loop 上阻塞，同時卡住所有 stream 與 dispatcher worker | source-inspected | cancel／drain；error 不得被吞 | **已裁決**：留在 #538（event loop 阻塞與 task ownership） |
+| D1-F05 | MediaMTX 的 latest-wins 與 smart sampling 丟幀沒有計數，`AsyncDispatcher` 的 `dropped_queue_full` 看不到 ingest 層的丟幀 | source-inspected | overflow 與計數語義 | 未個別裁決；F02 的計數原則是否涵蓋 ingest 層，待 F02 切片確認 |
+| D1-F06 | `run_eval` 略過沒有 `seqinfo.ini` 的 sequence，不報錯；單一程序與 `--processes` 都 `exit(0)`，沒有輸出 | reproduced | error 不得偽裝成正常完成 | **已裁決**：同 D1-F01 |
 | D1-F07 | Cognition 背景 batch task 數沒有上限；`run()` 結束時不取消也不等待；trim 不看 PEL；consumer 名稱固定 | source-inspected | backpressure、cancel／drain | #538（與既有的 PEL 不回收 REQ-535-06-01 一起），線上 producer 接通之前不急 |
 
-**收窄的既有 OPEN**：GE-07（DALI buffer 所有權）由「未知」收窄為 vendor-documented（§1）。仍然沒有在本 repo 以影片實跑，不能當成 GPU 證據；online qualification 前需要一個 GPU 測試（持有多幀的 DLPack tensor，確認之後的 `next()` 不改它們的內容）。
+**收窄的既有 OPEN**：GE-07（DALI buffer 所有權）由「未知」收窄為 documentation-supported、GPU-unverified（§1；owner 裁決見 §9）。仍然沒有在本 repo 以影片實跑，不能當成 GPU 證據；online qualification 前需要一個 GPU 測試（持有多幀的 DLPack tensor，確認之後的 `next()` 不改它們的內容）。
 
 ## 6. #340 trace 的證據依賴與處置選項
 
@@ -160,7 +160,7 @@
 | 無損壓縮 `cuda.jsonl` | 單檔實測 zstd `-19` 約 45 倍（430 MB → 9.6 MB，29 s）；全部約 1.6 GiB 是外推，未驗證 | 約 100 分鐘 CPU；重新分析前要解壓，`analyze.py` 讀的是解壓後的固定檔名 |
 | 刪除 `traces/`，保留其餘 | 約 1 GiB | 不能再做第二層分析；closure 的計數不受影響 |
 
-建議（proposed）：無損壓縮，保留原始 SHA-256 對照，並逐檔驗證解壓後逐位元組相同。這只是把 D1 的依賴判讀交給 owner，不授權任何刪除。
+**已裁決**：`.tar.zst` 冷封存，一次性處置，流程見 §9。驗證成功之前不刪除任何原始檔。
 
 ## 7. 證據與重現
 
@@ -179,10 +179,34 @@
 
 ## 8. 對照 D3 驗收（現況，不是結案宣告）
 
-- [~] 主要 async edge 有 ownership／completion／release 規則，或具名的未知與後續 owner：§2～§3 已逐條列出；未知集中在 AE-E8（C++ eval pool）、AE-O2／AE-E1b（DALI，vendor-documented），以及 §5 的路由。
+- [x] 主要 async edge 有 ownership／completion／release 規則，或具名的未知與後續 owner：§2～§3 已逐條列出；未知集中在 AE-E8（C++ eval pool）與 AE-O2／AE-E1b（DALI，documentation-supported），路由見 §5。Owner 已裁決 D1 inventory completed（§9）。
 - [x] WorkbenchPool 的有限狀態契約先於修復固定（D2-WB-0 → WB-1，已合併）。
 - [x] 至少一個故障注入重現了具體違約（D2）；本稿另外重現 D1-F01、D1-F06，其餘標 source-inspected。
-- [~] overflow、丟幀與計數語義一致：**不一致**（D1-F02、D1-F05），待裁決。
+- [~] overflow、丟幀與計數語義一致：**不一致**（D1-F02、D1-F05）。F02 的方向已裁決，修復尚未實作。
 - [~] error／cancel／timeout 不偽裝成正常完成：D1-F01、D1-F06 違反；D1-F03、D1-F04、D1-F07 待處理。
-- [x] host-only、GPU-validated、vendor-documented 與未驗證的證據分開記錄（§1、§3）。
+- [x] host-only、GPU-validated、documentation-supported 與未驗證的證據分開記錄（§1、§3）。
 - [x] #465 的 native schedule、capture freeze 與 trace／measurement 邊界沒有改動；本稿只引用。G 的 contract／test／limit 映射尚未交付。
+
+## 9. Owner 裁決（2026-10-25，引用）
+
+決策來源是 [#538 comment](https://github.com/raylei50653/saccade/issues/538#issuecomment-6393037794)；本節只摘錄要點，以 comment 為準。
+
+- **D1**：inventory completed。批准發布文件 Draft PR；文件與證據審核後可合併，不等待 §5 的缺陷全部修復。不授權藉此擴大 online 支援範圍。
+- **D1-F02**：不同 profile 可保留不同的丟幀策略，但計數單位統一為**實際丟棄的幀數**，禁止沒有記錄的批次丟棄。WorkbenchPool 保留 latest-wins／drain-all。新統計契約：
+  - `drops`／`workbench_drops`：實際丟棄的幀數；
+  - `overflow_events`：觸發溢出的次數；
+  - `discarded_on_stop`：獨立計算，不混入溢出；
+  - 每條 stream 保留 frame identity 與可觀察的 frame gap。
+
+  例：清掉 4 幀再放入新幀 ⇒ `drops += 4`、`overflow_events += 1`。修復要保證並行 producer 下 drain 與 enqueue 不會產生沒有記錄的丟幀，測試涵蓋競態、實際丟棄數與 telemetry 一致性。修復是 #538 獨立的 D3 小切片。
+- **D1-F01／F06**：交 #537，修復契約由 #537 維護；本稿只保留追溯。
+- **D1-F04**（watchdog）：event loop 阻塞與 task ownership 留在 #538。
+- **#340 trace**：`.tar.zst` 冷封存，是一次性處置，不建立自動封存政策：
+  1. 保留 manifest、`runs.jsonl`、`sealed/`、`logs/`，建立原始路徑與 SHA-256 清單；
+  2. 只對 trace 建立 `.tar.zst`，記錄工具版本與建立資訊；
+  3. 完整還原並逐檔核對 SHA-256，確認逐位元組相同；
+  4. 驗證成功後才刪除未壓縮的 trace。
+
+  全量的壓縮率與耗時以首次封存的實測為準。
+- **GE-07**：source／文件支持、GPU-unverified，不能取代 GPU 端到端測試（stream completion、PyTorch consumer、實際 pipeline 組態）。online qualification 維持未通過。
+- **執行順序**：D1 審核並合併 → #537 F01／F06、#538 F02 與 watchdog 分別處理 → 獨立執行 #340 封存。
