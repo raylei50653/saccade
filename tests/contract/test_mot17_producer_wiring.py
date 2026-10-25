@@ -120,3 +120,22 @@ def test_other_discovering_eval_scripts_filter_found_sequences():
         assert assigns, rel
         for a in assigns:
             assert _calls_named(a.value, "filter_discovered"), (rel, ast.unparse(a))
+
+
+def test_mot17_all_sdp_filters_discovered_sequences():
+    """#537 F06 (Codex r3 NIT): mot17_all_sdp.py hands each discovered SDP
+    sequence to a child as an explicit name, so discovery must filter first."""
+    tree = ast.parse((MOT17.parent / "mot17_all_sdp.py").read_text(encoding="utf-8"))
+    (fn,) = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name == "_discover_sequences"
+    ]
+    returns = sorted(
+        (n for n in ast.walk(fn) if isinstance(n, ast.Return)), key=lambda n: n.lineno
+    )
+    # explicit selection returns the named list; discovery goes through the filter
+    assert [bool(_calls_named(r, "filter_discovered")) for r in returns] == [
+        False,
+        True,
+    ]
