@@ -80,48 +80,69 @@ def _calls(node: ast.AST, name: str) -> list[ast.Call]:
     ]
 
 
+def _stmt_index(body: list[ast.stmt], pred: object) -> int:
+    hits = [i for i, st in enumerate(body) if pred(st)]  # type: ignore[operator]
+    assert len(hits) == 1, [ast.unparse(body[i])[:60] for i in hits]
+    return hits[0]
+
+
+def _is_exit(stmt: ast.stmt, arg: str) -> bool:
+    return isinstance(stmt, ast.Expr) and ast.unparse(stmt) == f"sys.exit({arg})"
+
+
 def test_multiprocess_launch_failure_exits_before_metrics():
     """#537 F01: a failed child must exit non-zero before parent metrics run.
 
-    Structural (AST), because mot17.py cannot be imported on CPU CI: the
-    guard is ``if exit_code != 0:`` with ``exit_code`` from
-    ``launch_exit_code(results)``, its body exits with that code, the
-    KeyboardInterrupt handler exits with EXIT_INTERRUPTED, and both come
-    before the parent's metrics. The launcher itself is exercised with real
-    child processes in tests/unit/eval/test_sequence_launcher_537.py.
+    Structural (AST), because mot17.py cannot be imported on CPU CI. Only
+    direct statements of the multi-process body count, so an exit nested
+    under any extra condition fails the check: the launcher ``try`` whose
+    KeyboardInterrupt handler ends in ``sys.exit(EXIT_INTERRUPTED)``, then
+    ``exit_code = launch_exit_code(results)``, then ``if exit_code != 0:``
+    ending in ``sys.exit(exit_code)``, then the parent metrics. The launcher
+    itself is exercised with real child processes in
+    tests/unit/eval/test_sequence_launcher_537.py.
     """
-    block = _launcher_block()
     assert "subprocess.run(" not in _source()
-    (spawn,) = _calls(block, "run_sequence_children")
-    (metrics,) = _calls(block, "run_motmetrics_evaluation")
+    outer = _launcher_block()
+    (inner,) = [
+        st
+        for st in outer.body
+        if isinstance(st, ast.If) and ast.unparse(st.test) == "len(seq_list) > 1"
+    ]
+    body = inner.body
 
-    assigns = [
-        n
-        for n in ast.walk(block)
-        if isinstance(n, ast.Assign)
-        and [ast.unparse(t) for t in n.targets] == ["exit_code"]
-    ]
-    assert [ast.unparse(a.value) for a in assigns] == [
-        "sequence_launcher.launch_exit_code(results)"
-    ]
-    guards = [
-        n
-        for n in ast.walk(block)
-        if isinstance(n, ast.If) and ast.unparse(n.test) == "exit_code != 0"
-    ]
-    assert len(guards) == 1
-    guard_exits = [ast.unparse(c) for c in _calls(guards[0], "sys.exit")]
-    assert guard_exits == ["sys.exit(exit_code)"]
-    assert spawn.lineno < assigns[0].lineno < guards[0].lineno < metrics.lineno
+    def launcher_try(st: ast.stmt) -> bool:
+        return isinstance(st, ast.Try) and bool(_calls(st, "run_sequence_children"))
 
-    handlers = [
+    try_i = _stmt_index(body, launcher_try)
+    launch = body[try_i]
+    assert isinstance(launch, ast.Try)
+    (handler,) = [
         h
-        for n in ast.walk(block)
-        if isinstance(n, ast.Try)
-        for h in n.handlers
+        for h in launch.handlers
         if h.type is not None and ast.unparse(h.type) == "KeyboardInterrupt"
     ]
-    assert len(handlers) == 1
-    handler_exits = [ast.unparse(c) for c in _calls(handlers[0], "sys.exit")]
-    assert handler_exits == ["sys.exit(sequence_launcher.EXIT_INTERRUPTED)"]
-    assert handlers[0].lineno < metrics.lineno
+    assert _is_exit(handler.body[-1], "sequence_launcher.EXIT_INTERRUPTED")
+
+    assign_i = _stmt_index(
+        body,
+        lambda st: (
+            isinstance(st, ast.Assign)
+            and ast.unparse(st)
+            == "exit_code = sequence_launcher.launch_exit_code(results)"
+        ),
+    )
+    guard_i = _stmt_index(
+        body,
+        lambda st: isinstance(st, ast.If) and ast.unparse(st.test) == "exit_code != 0",
+    )
+    guard = body[guard_i]
+    assert isinstance(guard, ast.If) and not guard.orelse
+    assert _is_exit(guard.body[-1], "exit_code")
+    metrics_i = _stmt_index(
+        body,
+        lambda st: (
+            isinstance(st, ast.Assign) and bool(_calls(st, "run_motmetrics_evaluation"))
+        ),
+    )
+    assert try_i < assign_i < guard_i < metrics_i

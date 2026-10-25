@@ -59,6 +59,8 @@ if kind == "ok":
 if kind == "fail":
     print("boom-" + seq, file=sys.stderr, flush=True)
     sys.exit(spec["code"])
+if kind == "selfterm":
+    os.kill(os.getpid(), signal.SIGTERM)
 if kind == "sigkill":
     os.kill(os.getpid(), signal.SIGKILL)
 if kind == "badutf8":
@@ -169,6 +171,34 @@ def test_failure_terminates_running_and_skips_pending(tmp_path: Path) -> None:
     _assert_no_leftovers(rig)
 
 
+def test_pending_sequences_build_no_command_after_the_abort(tmp_path: Path) -> None:
+    """A pending sequence is NOT_STARTED without its command being built (the
+    builder may be slow or may raise; neither may turn into a result)."""
+    rig = Rig(
+        tmp_path,
+        {
+            "A": {"kind": "fail", "code": 3, "wait_for": ["B"], "delay": 0.2},
+            "B": {"kind": "sleep"},
+            "C": {"kind": "ok"},
+            "D": {"kind": "ok"},
+        },
+    )
+    built: list[str] = []
+
+    def command_for(seq: str) -> list[str]:
+        built.append(seq)
+        if seq in ("C", "D"):
+            raise AssertionError(f"command built for pending {seq}")
+        return rig.command_for(seq)
+
+    results = sl.run_sequence_children(list("ABCD"), command_for, max_workers=2)
+    by = _by_seq(results)
+    assert by["C"].status == by["D"].status == sl.NOT_STARTED
+    assert sorted(built) == ["A", "B"]
+    assert sl.launch_exit_code(results) == 3
+    _assert_no_leftovers(rig)
+
+
 def test_child_ignoring_sigterm_is_killed_after_grace(tmp_path: Path) -> None:
     rig = Rig(
         tmp_path,
@@ -275,29 +305,176 @@ def test_launcher_error_fails_the_sequence_and_aborts(
     _assert_no_leftovers(rig)
 
 
-def test_no_child_is_spawned_after_the_abort(tmp_path: Path) -> None:
-    """Codex r1: B passed the abort check, paused, then spawned after A failed.
+def _wait_for_pid(rig: Rig, seq: str) -> None:
+    deadline = time.monotonic() + 20
+    while seq not in rig.pids():
+        assert time.monotonic() < deadline, f"{seq} did not start"
+        time.sleep(0.01)
 
-    B's command takes 0.5 s to build while A fails at once; whichever order
-    the workers run in, B is either not started or was spawned before A's
-    failure set the abort.
+
+@pytest.mark.parametrize("slow", ["popen", "command"])
+def test_no_child_is_spawned_after_the_abort(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, slow: str
+) -> None:
+    """Codex r1/r2: a sequence must not be spawned after the abort was set.
+
+    A is spawned first (B's command waits for A's pid file) and fails after
+    0.1 s. ``popen``: B's Popen takes 0.5 s, holding the spawn lock, so B
+    must be spawned before A's failure could set the abort (``abort_at``).
+    ``command``: building B's command takes 0.5 s, so the abort is set
+    before B reaches the spawn lock and B must not be started at all.
     """
-    rig = Rig(tmp_path, {"A": {"kind": "fail", "code": 3}, "B": {"kind": "sleep"}})
+    rig = Rig(
+        tmp_path,
+        {"A": {"kind": "fail", "code": 3, "delay": 0.1}, "B": {"kind": "sleep"}},
+    )
 
     def command_for(seq: str) -> list[str]:
         if seq == "B":
-            time.sleep(0.5)
+            _wait_for_pid(rig, "A")
+            if slow == "command":
+                time.sleep(0.5)
         return rig.command_for(seq)
 
+    class SlowPopen(subprocess.Popen):  # type: ignore[type-arg]
+        def __init__(self, args: Any, **kw: Any) -> None:
+            if slow == "popen" and "B" in list(args):
+                time.sleep(0.5)
+            super().__init__(args, **kw)
+
+    monkeypatch.setattr(subprocess, "Popen", SlowPopen)
     results = sl.run_sequence_children(["A", "B"], command_for, max_workers=2)
     by = _by_seq(results)
-    assert by["A"].status == sl.FAILED and by["A"].failed_at is not None
-    if by["B"].status == sl.NOT_STARTED:
+    assert by["A"].status == sl.FAILED and by["A"].abort_at is not None
+    if slow == "command":
+        assert by["B"].status == sl.NOT_STARTED
         assert "B" not in rig.pids()
     else:
         assert by["B"].status == sl.TERMINATED
         assert by["B"].spawned_at is not None
-        assert by["B"].spawned_at < by["A"].failed_at
+        assert by["B"].spawned_at < by["A"].abort_at
+    assert sl.launch_exit_code(results) == 3
+    _assert_no_leftovers(rig)
+
+
+def test_signal_not_sent_when_popen_reaps_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex r2: B died by its own SIGTERM before the launcher signalled it;
+    terminate() reaped it in its poll and sent nothing, so B is FAILED.
+
+    The fake timeout lets B exit (unreaped, WNOWAIT) and only then returns to
+    the launcher, which by then has seen A's failure.
+    """
+    rig = Rig(
+        tmp_path,
+        {
+            "A": {"kind": "fail", "code": 3},
+            "B": {"kind": "selfterm", "wait_for": ["A"], "delay": 0.3},
+        },
+    )
+
+    class Popen(subprocess.Popen):  # type: ignore[type-arg]
+        faked = False
+
+        def communicate(self, *a: Any, **kw: Any) -> Any:
+            if "B" in list(self.args) and not self.faked:  # type: ignore[arg-type]
+                self.faked = True
+                os.waitid(os.P_PID, self.pid, os.WEXITED | os.WNOWAIT)
+                raise subprocess.TimeoutExpired(
+                    self.args, float(kw.get("timeout") or 0)
+                )
+            return super().communicate(*a, **kw)
+
+    monkeypatch.setattr(subprocess, "Popen", Popen)
+    results, elapsed = rig.run(["A", "B"])
+    by = _by_seq(results)
+    assert by["B"].status == sl.FAILED
+    assert by["B"].returncode == -signal.SIGTERM
+    assert sl.launch_exit_code(results) == 3
+    assert elapsed < 10
+    _assert_no_leftovers(rig)
+
+
+def test_command_builder_error_aborts(tmp_path: Path) -> None:
+    """Codex r2: an exception from command_for used to escape the worker
+    without aborting; A kept running and C could start."""
+    rig = Rig(tmp_path, {"A": {"kind": "sleep"}, "C": {"kind": "ok"}})
+
+    def command_for(seq: str) -> list[str]:
+        if seq == "B":
+            _wait_for_pid(rig, "A")
+            raise KeyError("no command for B")
+        return rig.command_for(seq)
+
+    t0 = time.monotonic()
+    results = sl.run_sequence_children(["A", "B", "C"], command_for, max_workers=2)
+    by = _by_seq(results)
+    assert by["B"].status == sl.FAILED and by["B"].launcher_error
+    assert "KeyError" in by["B"].stderr and "no command for B" in by["B"].stderr
+    assert by["A"].status == sl.TERMINATED
+    assert by["C"].status == sl.NOT_STARTED
+    assert sl.launch_exit_code(results) == sl.EXIT_LAUNCHER_ERROR
+    assert time.monotonic() - t0 < 10
+    _assert_no_leftovers(rig)
+
+
+def test_popen_non_oserror_aborts_as_launcher_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex r2: a non-OSError from Popen used to escape the worker."""
+    rig = Rig(tmp_path, {"A": {"kind": "sleep"}, "C": {"kind": "ok"}})
+
+    class Popen(subprocess.Popen):  # type: ignore[type-arg]
+        def __init__(self, args: Any, **kw: Any) -> None:
+            if "B" in list(args):
+                raise ValueError("bad Popen arguments")
+            super().__init__(args, **kw)
+
+    def command_for(seq: str) -> list[str]:
+        if seq == "B":
+            _wait_for_pid(rig, "A")
+        return rig.command_for(seq)
+
+    monkeypatch.setattr(subprocess, "Popen", Popen)
+    results = sl.run_sequence_children(["A", "B", "C"], command_for, max_workers=2)
+    by = _by_seq(results)
+    assert by["B"].status == sl.FAILED and by["B"].launcher_error
+    assert "ValueError: bad Popen arguments" in by["B"].stderr
+    assert by["A"].status == sl.TERMINATED
+    assert by["C"].status == sl.NOT_STARTED
+    assert sl.launch_exit_code(results) == sl.EXIT_LAUNCHER_ERROR
+    _assert_no_leftovers(rig)
+
+
+def test_earliest_observed_failure_wins_over_lock_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex r2: A exits 5 after 0.1 s while B holds the spawn lock in a
+    0.5 s Popen that then fails to start. A's failure was observed first, so
+    it is the original failure (exit 5), although B set the abort first."""
+    rig = Rig(tmp_path, {"A": {"kind": "fail", "code": 5, "delay": 0.1}})
+
+    def command_for(seq: str) -> list[str]:
+        if seq == "B":
+            _wait_for_pid(rig, "A")
+        return rig.command_for(seq)
+
+    class SlowFailingPopen(subprocess.Popen):  # type: ignore[type-arg]
+        def __init__(self, args: Any, **kw: Any) -> None:
+            if "B" in list(args):
+                time.sleep(0.5)
+                raise FileNotFoundError("no-such-interpreter")
+            super().__init__(args, **kw)
+
+    monkeypatch.setattr(subprocess, "Popen", SlowFailingPopen)
+    results = sl.run_sequence_children(["A", "B"], command_for, max_workers=2)
+    by = _by_seq(results)
+    assert by["A"].status == by["B"].status == sl.FAILED
+    assert by["B"].abort_at is not None and by["A"].abort_at is not None
+    assert by["B"].abort_at < by["A"].abort_at  # B won the lock ...
+    assert [r.sequence for r in sl.failures(results)] == ["A", "B"]  # ... A first
+    assert sl.launch_exit_code(results) == 5
     _assert_no_leftovers(rig)
 
 
