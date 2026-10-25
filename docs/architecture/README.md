@@ -10,6 +10,7 @@
 - 能力／REQ／Profile、具名 owner、inherited scope／proposed delta 與代表鏈狀態：看 [capability_requirements_535.md](capability_requirements_535.md)（#535；批准與待決狀態只在該檔維護）
 - S-SHIP／S-EXPORT 的展開圖（現況與目標）、completion／identity／export 接口契約卡與 ID 索引：看 [ship_export_contracts_536.md](ship_export_contracts_536.md)（#536；設計狀態只在該檔維護）
 - 失敗／fallback／降級（分 profile 矩陣、owner 裁決、已落地的 F07／C2／R-1、D2 host lifecycle 與 D2-GPU-0／1；WorkbenchPool 仍未 online qualified）：看 [failure_degradation_537.md](failure_degradation_537.md)；NVML 失敗的 4A 核准方案見 [§19](failure_degradation_537.md#19-c0-05nvml-失敗的重現與核准方案)，實作與證據見 §20；WorkbenchPool 明列未接監控見 §21。
+- 非同步 edge 與 buffer ownership（各 profile 的 producer／consumer、completion、reuse／free、容量、失敗、取消與重啟，以及證據等級）：看 [async_ownership_538.md](async_ownership_538.md)（#538 D1；發現與處置選項只在該檔維護）
 - 安裝後 package 的 Completion／Gate A、entrypoint re-pin 與驗證證據：看 [package re-pin](../reference/native_runtime_package_repin_536.md)（#536；不擴大支持範圍）
 - 模型 bundle 與 native runtime 的分離（現況／目標架構圖、信任根、責任分工、A／B／C 比較）：看 [ADR 028](../decisions/028-model-bundle-runtime-separation.md)；bundle manifest 契約、fail-closed 規則、G01–G07 處置與控制矩陣：看 [model_bundle_contract_549.md](model_bundle_contract_549.md)（#549 S1；設計狀態只在該檔維護）
 
