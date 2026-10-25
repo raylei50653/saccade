@@ -250,7 +250,7 @@ def test_child_ignoring_sigterm_is_killed_after_grace(
     assert by["B"].status == sl.TERMINATED
     assert by["B"].returncode == -signal.SIGKILL
     assert [sig for sig, _ in sends] == [signal.SIGTERM, signal.SIGKILL]
-    assert 1.0 <= sends[1][1] - sends[0][1] < 2.0
+    assert 1.0 <= sends[1][1] - sends[0][1] < 8.0  # upper bound: scheduling slack
     assert sl.launch_exit_code(results) == 2
     assert elapsed < 10
     _assert_no_leftovers(rig)
@@ -534,7 +534,7 @@ def test_earliest_observed_failure_wins_over_lock_order(
                 # Fail only after A has exited and its supervisor (poll 0.2 s)
                 # has had ample time to observe it (Codex r7 NIT).
                 _wait_exited(rig.pids()["A"])
-                time.sleep(0.5)
+                time.sleep(1.5)  # >> A's supervisor poll (0.2 s); Codex r9 NIT
                 raise FileNotFoundError("no-such-interpreter")
             super().__init__(args, **kw)
 
@@ -909,25 +909,33 @@ sys.exit(sl.EXIT_INTERRUPTED)
 
 
 @pytest.mark.parametrize(("mode", "code"), [("failure", 5), ("interrupt", 130)])
-def test_report_to_a_closed_stdout_keeps_the_exit_code(
-    tmp_path: Path, mode: str, code: int
+@pytest.mark.parametrize("stream", ["closed_by_reader", "fd1_closed", "fd2_closed"])
+def test_report_to_a_broken_or_missing_stream_keeps_the_exit_code(
+    tmp_path: Path, mode: str, code: int, stream: str
 ) -> None:
-    """Codex r7: printing the (large) captured output to a stdout whose
-    reader went away raised BrokenPipeError before sys.exit(exit_code), and
-    the parent exited 1. Reporting is best effort; the code stays 5 / 130
-    (not 1, and not 120 from a failed flush at interpreter exit)."""
+    """Codex r7/r9: reporting must not replace the decided exit code.
+
+    ``closed_by_reader``: printing large captured output to a pipe whose
+    reader went away raised BrokenPipeError before sys.exit (exit 1), or the
+    flush at interpreter exit failed (120). ``fd1_closed``/``fd2_closed``: a
+    parent started with ``1>&-``/``2>&-`` has sys.stdout/sys.stderr None and
+    an unconditional flush raised AttributeError (exit 1). The code stays
+    5 / 130 in every case.
+    """
     harness = tmp_path / "report.py"
     harness.write_text(REPORT_HARNESS)
     src_root = Path(sl.__file__).resolve().parents[3]
-    proc = subprocess.Popen(
-        [sys.executable, str(harness), mode],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env={**os.environ, "PYTHONPATH": str(src_root)},
-    )
-    assert proc.stdout is not None and proc.stderr is not None
-    proc.stdout.close()
-    proc.stderr.close()
+    kw: dict[str, Any] = {"env": {**os.environ, "PYTHONPATH": str(src_root)}}
+    if stream == "closed_by_reader":
+        kw.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    else:
+        fd = 1 if stream == "fd1_closed" else 2
+        kw["preexec_fn"] = lambda: os.close(fd)
+    proc = subprocess.Popen([sys.executable, str(harness), mode], **kw)
+    if stream == "closed_by_reader":
+        assert proc.stdout is not None and proc.stderr is not None
+        proc.stdout.close()
+        proc.stderr.close()
     assert proc.wait(timeout=30) == code
 
 

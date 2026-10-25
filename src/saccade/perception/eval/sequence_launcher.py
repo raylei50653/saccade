@@ -281,20 +281,24 @@ def report_interrupt() -> None:
 
 
 def _best_effort(write: Callable[[], object]) -> None:
+    # Any failure here is swallowed: a stream may be broken (EPIPE) or absent
+    # (sys.stdout is None when the parent started with fd 1 closed, so even
+    # .flush() raises). A stream that cannot be flushed is pointed at
+    # /dev/null so the interpreter's flush at exit stays quiet.
     try:
         write()
         sys.stdout.flush()
         sys.stderr.flush()
-    except OSError:
+    except Exception:
         for stream in (sys.stdout, sys.stderr):
             try:
                 stream.flush()
-            except OSError:
+            except Exception:
                 try:
                     devnull = os.open(os.devnull, os.O_WRONLY)
                     os.dup2(devnull, stream.fileno())
                     os.close(devnull)
-                except (OSError, ValueError):
+                except Exception:
                     pass
 
 
