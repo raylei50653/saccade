@@ -939,6 +939,27 @@ def test_report_to_a_broken_or_missing_stream_keeps_the_exit_code(
     assert proc.wait(timeout=30) == code
 
 
+def test_report_prints_the_original_failure(capsys: pytest.CaptureFixture[str]) -> None:
+    """Codex r10: what mot17.py prints on failure carries the sequence, its
+    code and the child's own stdout and stderr; the summary names the
+    original failure and the exit code."""
+    results = [
+        sl.ChildResult("B", sl.TERMINATED, -15, "", ""),
+        sl.ChildResult(
+            "A", sl.FAILED, 5, "child-stdout-A", "Traceback: boom-A", failed_at=1.0
+        ),
+        sl.ChildResult("C", sl.NOT_STARTED, None),
+    ]
+    code = sl.launch_exit_code(results)
+    sl.report(results, code)
+    out, err = capsys.readouterr()
+    assert "Process for A failed with code 5" in out
+    assert "child-stdout-A" in out and "Traceback: boom-A" in out
+    assert "Process for B was terminated by the launcher (code -15 (SIGTERM))" in out
+    assert "Process for C was not started" in out
+    assert "original failure: A" in err and "exit 5" in err
+
+
 @pytest.mark.parametrize(
     ("results", "code"),
     [
