@@ -18,6 +18,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -210,9 +211,11 @@ def test_pending_sequences_build_no_command_after_the_abort(tmp_path: Path) -> N
     _assert_no_leftovers(rig)
 
 
-def test_child_ignoring_sigterm_is_killed_after_grace(tmp_path: Path) -> None:
-    """SIGKILL comes no earlier than grace_s after SIGTERM (Codex r3: the old
-    test also accepted a kill on the next poll)."""
+def test_child_ignoring_sigterm_is_killed_after_grace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SIGKILL is sent no earlier than grace_s after SIGTERM, measured at the
+    send_signal calls (Codex r3/r4)."""
     rig = Rig(
         tmp_path,
         {
@@ -220,13 +223,21 @@ def test_child_ignoring_sigterm_is_killed_after_grace(tmp_path: Path) -> None:
             "B": {"kind": "stubborn"},
         },
     )
+    sends: list[tuple[int, float]] = []
+
+    class Popen(subprocess.Popen):  # type: ignore[type-arg]
+        def send_signal(self, sig: int) -> None:
+            if "B" in list(self.args):  # type: ignore[arg-type]
+                sends.append((sig, time.monotonic()))
+            super().send_signal(sig)
+
+    monkeypatch.setattr(subprocess, "Popen", Popen)
     results, elapsed = rig.run(["A", "B"], grace_s=1.0)
-    done = time.monotonic()
     by = _by_seq(results)
     assert by["B"].status == sl.TERMINATED
     assert by["B"].returncode == -signal.SIGKILL
-    term_at = float((rig.state / "B.term").read_text())
-    assert 1.0 <= done - term_at < 5.0
+    assert [sig for sig, _ in sends] == [signal.SIGTERM, signal.SIGKILL]
+    assert 1.0 <= sends[1][1] - sends[0][1] < 2.0
     assert sl.launch_exit_code(results) == 2
     assert elapsed < 10
     _assert_no_leftovers(rig)
@@ -541,6 +552,76 @@ def test_spawn_message_error_aborts(
     assert by["C"].status == sl.NOT_STARTED
     assert sl.launch_exit_code(results) == sl.EXIT_LAUNCHER_ERROR
     _assert_no_leftovers(rig)
+
+
+def test_capture_file_error_aborts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex r4: B's capture file could not be created (EMFILE); that escaped
+    the worker guard, A kept running and C started."""
+    rig = Rig(tmp_path, {"A": {"kind": "sleep"}, "C": {"kind": "ok"}})
+    real = tempfile.TemporaryFile
+    calls = []
+
+    def temporary_file(*a: Any, **kw: Any) -> Any:
+        calls.append(1)
+        if len(calls) == 3:  # A took the first two (B waits for A's pid)
+            raise OSError(24, "Too many open files")
+        return real(*a, **kw)
+
+    def command_for(seq: str) -> list[str]:
+        if seq == "B":
+            _wait_for_pid(rig, "A")
+        return rig.command_for(seq)
+
+    monkeypatch.setattr(tempfile, "TemporaryFile", temporary_file)
+    results = sl.run_sequence_children(["A", "B", "C"], command_for, max_workers=2)
+    by = _by_seq(results)
+    assert by["B"].status == sl.FAILED and by["B"].launcher_error
+    assert "Too many open files" in by["B"].stderr
+    assert by["A"].status == sl.TERMINATED
+    assert by["C"].status == sl.NOT_STARTED
+    assert sl.launch_exit_code(results) == sl.EXIT_LAUNCHER_ERROR
+    _assert_no_leftovers(rig)
+
+
+def test_failure_is_recorded_before_its_output_is_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex r4: reading A's (large or slow) output delayed A's failure, so
+    B's later exit 7 won. A failed first, so the exit code is 5."""
+    rig = Rig(
+        tmp_path,
+        {
+            "A": {"kind": "fail", "code": 5, "wait_for": ["B"], "delay": 0.1},
+            "B": {"kind": "fail", "code": 7, "wait_for": ["A"], "delay": 0.6},
+        },
+    )
+    real = sl._read
+    reads = []
+
+    def slow_read(f: Any) -> str:
+        reads.append(1)
+        if len(reads) == 1:
+            time.sleep(1.0)
+        return real(f)
+
+    monkeypatch.setattr(sl, "_read", slow_read)
+    results, _ = rig.run(["A", "B"])
+    assert [r.sequence for r in sl.failures(results)][0] == "A"
+    assert sl.launch_exit_code(results) == 5
+    _assert_no_leftovers(rig)
+
+
+def test_reading_the_capture_leaves_the_shared_offset_alone(tmp_path: Path) -> None:
+    """Codex r4: seek(0)+read moved the offset shared with descendants that
+    inherited the descriptor, so a late writer overwrote the child's output."""
+    with tempfile.TemporaryFile() as f:
+        f.write(b"ORIGINAL-CHILD-OUTPUT\n")
+        f.flush()
+        f.seek(9)  # wherever a writer sharing the descriptor left it
+        assert sl._read(f) == "ORIGINAL-CHILD-OUTPUT\n"
+        assert f.tell() == 9
 
 
 def test_signal_death_is_a_failure_with_128_plus_n(tmp_path: Path) -> None:

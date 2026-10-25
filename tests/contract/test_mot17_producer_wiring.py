@@ -123,6 +123,13 @@ def test_multiprocess_launch_failure_exits_before_metrics():
         if h.type is not None and ast.unparse(h.type) == "KeyboardInterrupt"
     ]
     assert _is_exit(handler.body[-1], "sequence_launcher.EXIT_INTERRUPTED")
+    # The launch itself is the try body, not a call nested under a condition.
+    assert len(launch.body) == 1
+    assert isinstance(launch.body[0], ast.Assign)
+    assert ast.unparse(launch.body[0].targets[0]) == "results"
+    assert ast.unparse(launch.body[0].value).startswith(
+        "sequence_launcher.run_sequence_children("
+    )
 
     assign_i = _stmt_index(
         body,

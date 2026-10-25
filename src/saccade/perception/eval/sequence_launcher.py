@@ -25,6 +25,8 @@ docs/architecture/failure_degradation_537.md §25.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import signal
 import subprocess
 import tempfile
@@ -99,15 +101,17 @@ def run_sequence_children(
         )
 
     def _run(seq: str) -> ChildResult:
-        # Any error in this worker, wherever it happens, kills and reaps its
-        # child and aborts the launch as a launcher error.
+        # Any error in this worker, wherever it happens (capture files too),
+        # kills and reaps its child and aborts the launch as a launcher error.
         proc: subprocess.Popen[bytes] | None = None
         spawned_at: float | None = None
-        with tempfile.TemporaryFile() as out_f, tempfile.TemporaryFile() as err_f:
+        with contextlib.ExitStack() as files:
             try:
                 if abort.is_set():
                     return ChildResult(seq, NOT_STARTED, None)
                 cmd = command_for(seq)
+                out_f = files.enter_context(tempfile.TemporaryFile())
+                err_f = files.enter_context(tempfile.TemporaryFile())
                 with spawn_lock:
                     if abort.is_set():
                         return ChildResult(seq, NOT_STARTED, None)
@@ -136,6 +140,7 @@ def run_sequence_children(
                 err = f"launcher error for {seq}: {_exc(exc)}"
                 code = None if proc is None else proc.returncode
                 return _failed(seq, code, "", err, spawned_at, launcher_error=True)
+        raise AssertionError("unreachable")  # pragma: no cover
 
     def _signal(proc: subprocess.Popen[bytes], sig: int, sent: set[int]) -> None:
         # Popen.send_signal polls first and sends nothing when that reaps the
@@ -166,7 +171,6 @@ def run_sequence_children(
                     terminated_at = now
                 elif now - terminated_at >= grace_s:
                     _signal(proc, signal.SIGKILL, sent)
-        out, err = _read(out_f), _read(err_f)
         code = proc.returncode
         # Only a death by a signal the launcher sent is TERMINATED; any other
         # exit (before the signal landed, by handling it, or by a signal the
@@ -174,10 +178,18 @@ def run_sequence_children(
         # status. A child that dies of that same signal after receiving it
         # (e.g. cleanup, then re-raising SIGTERM) is counted as stopped.
         if code < 0 and -code in sent:
-            return ChildResult(seq, TERMINATED, code, out, err, spawned_at)
+            return ChildResult(
+                seq, TERMINATED, code, _read(out_f), _read(err_f), spawned_at
+            )
         if code != 0:
-            return _failed(seq, code, out, err, spawned_at)
-        return ChildResult(seq, OK, 0, out, err, spawned_at)
+            # Record the failure and abort before collecting its output.
+            failed_at = time.monotonic()
+            abort_at = _abort()
+            out, err = _read(out_f), _read(err_f)
+            return ChildResult(
+                seq, FAILED, code, out, err, spawned_at, failed_at, abort_at
+            )
+        return ChildResult(seq, OK, 0, _read(out_f), _read(err_f), spawned_at)
 
     executor = ThreadPoolExecutor(max_workers=max(1, max_workers))
     try:
@@ -192,8 +204,13 @@ def run_sequence_children(
 
 
 def _read(f: IO[bytes]) -> str:
-    f.seek(0)
-    return f.read().decode(errors="replace")
+    # pread from offset 0: the file offset is shared with every process that
+    # inherited the descriptor, so seeking would let a late writer clobber it.
+    fd, chunks, offset = f.fileno(), [], 0
+    while chunk := os.pread(fd, 1 << 20, offset):
+        chunks.append(chunk)
+        offset += len(chunk)
+    return b"".join(chunks).decode(errors="replace")
 
 
 def _exc(exc: BaseException) -> str:
