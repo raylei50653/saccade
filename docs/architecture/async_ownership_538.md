@@ -130,7 +130,7 @@
 
 | ID | 發現 | 等級 | 影響的 D3 驗收項 | 路由（§9 已裁決者註明） |
 |:--|:--|:--|:--|:--|
-| D1-F01 | `mot17.py --processes`：子程序以非零碼結束時 parent 只印 `❌`，接著用剩下的輸出算 metrics 並 `exit(0)` | reproduced | error 不得偽裝成正常完成 | **已裁決**：#537 擁有修復契約，#538 只保留追溯連結 |
+| D1-F01 | `mot17.py --processes`：子程序以非零碼結束時 parent 只印 `❌`，接著用剩下的輸出算 metrics 並 `exit(0)` | reproduced | error 不得偽裝成正常完成 | **已裁決**：#537 擁有修復契約，#538 只保留追溯連結；修復見 [failure_degradation_537.md](failure_degradation_537.md) §25 |
 | D1-F02 | `WorkbenchPool.put_frame` 溢出時清空整個 queue（最多丟 4 幀），`drops` 只加 1；`AsyncDispatcher` 則是丟 1 個新幀、加 1。兩邊的計數單位不同，`drops` 不是遺失的幀數 | source-inspected | overflow、丟幀與計數語義一致 | **已裁決**：#538 獨立 D3 切片；保留 drain-all，計數改為實際丟棄的幀數（§9） |
 | D1-F03 | relink 背景寫入（`pipeline_relink`）的 executor 沒有 `shutdown()`；main 先出錯時，未取的 future 不會被等待，背景 thread 可能仍在改 relinker／bank | source-inspected | cancel／drain | #539（選用分支是否保留）後再決定是否修 |
 | D1-F04 | `main.py` 的 producer 以 `asyncio.create_task(media.watchdog_loop())` 啟動 watchdog（8stream 沒有啟動 watchdog），沒有保留引用、不在 `supervise` 內、producer 結束時不取消；它的例外不會被收集。重連路徑的 `time.sleep(1)` 與 `connect()`（最多等 3 s 第一幀）在 event loop 上阻塞，同時卡住所有 stream 與 dispatcher worker | source-inspected | cancel／drain；error 不得被吞 | **已裁決**：留在 #538（event loop 阻塞與 task ownership） |

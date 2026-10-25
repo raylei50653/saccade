@@ -1143,6 +1143,109 @@ Codex r1（`2b120bf6`）判 NOT-READY：第一版的 `redacted_url` 會解析 po
 - 不取得 online-service qualification、不部署。
 - C0-01／02、WorkbenchPool 是否支援資源降級，以及 #538 的其餘工作都不變。
 
+## 25. F01：`mot17.py --processes` 的子程序失敗傳播
+
+來源是 #538 D1 的 [D1-F01](async_ownership_538.md)（owner 裁決：#537 擁有修復契約，#538 只保留追溯）。**修復前**（`main@4380c2fa`）：任一子程序以非零碼結束時，parent 只印 `❌` 與子程序的 stdout／stderr，接著用剩下的輸出算 metrics，然後 `exit(0)`；其他子程序照常跑完，parent 被中斷時子程序的處置未定義。
+
+**實作**：launcher 移到 [sequence_launcher.py](../../src/saccade/perception/eval/sequence_launcher.py)，因為 `mot17.py` 在 import 時就載入 TensorRT，CPU 測試無法 import。行為是 fail-fast：
+
+- **觸發**：第一個失敗讓整次 launch 失敗。失敗是指子程序非零 exit、死於 signal、無法啟動，或 launcher 在處理某個子程序時自己出錯（建構命令、建立輸出檔、印出訊息或監看時丟例外）。
+- **停止與回收**：
+  - 尚未啟動的 sequence 不再啟動（`not_started`），也不再建構它的命令。
+  - 執行中的子程序先收 SIGTERM，SIGTERM **送出之後** `grace_s`（預設 10 s）仍在的收 SIGKILL。
+  - 所有直接子程序都在函式回傳前回收（reap）。
+  - 「是否已 abort」的檢查與 `Popen` 和設定 abort 用同一把 lock（只包住 `Popen`），所以 abort 之後不會再啟動任何子程序。
+- **原始失敗資訊**：
+  - 每個失敗保留 sequence、return code、stdout 與 stderr，parent 全部印出。
+  - 輸出寫到暫存檔而不是 pipe，所以子程序自己的後代程序持有輸出時，不會遮住子程序的結束。
+  - 讀取時用 `pread` 從頭讀到進入時的檔案大小為止：不移動與後代共用的 file offset，也不追著仍在寫入的檔案讀。內容以替代字元解碼。
+  - 讀取失敗時保留已讀到的部分並附上錯誤說明，子程序自己的狀態不變。
+- **`terminated` 的判定**：只有死於 launcher **實際送出**的 signal 才是 `terminated`。`Popen.send_signal` 先 poll 而回收了子程序、因此沒有送出的，不算。其他結束方式都保留子程序自己的狀態：signal 送達前就自己結束、自行處理 SIGTERM 後以自己的碼結束（0 為 `ok`，非零為 `failed`）、在 SIGTERM handler 裡對自己送 SIGKILL。
+- **exit code**：parent 先決定 exit code，再盡力印出結果，再跳過 metrics 結束。exit code 由**最早被觀察到的失敗**決定，依觀察時間而不是 sequence 順序，也不是誰先拿到 lock。失敗會在讀取它的輸出、清理子程序之前先記錄並觸發 abort。
+
+  | 原始失敗 | exit code |
+  |:--|:--|
+  | 子程序以正的 code 結束 | 原樣傳回 |
+  | 子程序死於 signal N | 128＋N |
+  | 子程序無法啟動（`Popen` 丟 `OSError`） | 127 |
+  | launcher 自己出錯 | 70（`EX_SOFTWARE`） |
+  | 沒有失敗但有子程序未完成（只在測試的人工輸入出現） | 1 |
+
+  stderr 最後一行寫出原始失敗的 sequence 與 exit code。兩個子程序幾乎同時失敗時，哪一個是原始失敗取決於誰先被觀察到。
+- **輸出是盡力而為**：stdout／stderr 的讀取端已關閉（`BrokenPipeError`），或 parent 啟動時就沒有 fd 1／2（`1>&-`，`sys.stdout` 為 `None`）時，訊息丟掉，任何例外都被吸收，無法 flush 的 stream 改指向 `/dev/null`。所以 exit code 不會被改掉，interpreter 結束時的 flush 也不會把它變成 120。
+- **中斷**：等待中的 thread 收到例外（含 `KeyboardInterrupt`）時，同樣先停止並回收子程序再往外丟；`mot17.py` 對 `KeyboardInterrupt` 以 130 結束。
+
+選 fail-fast 而不是「全部跑完再回報」：一個 sequence 失敗時這次 eval 的 metrics 已經不能用，繼續跑其他 sequence 只是占用 GPU；代價是 abort 之後被停止的 sequence 沒有輸出，需要整次重跑。
+
+**不改**：sequence 的切分方式、子程序的命令列與環境（仍帶 `parent_claim_environ`）、成功路徑的輸出、metrics 計算與 tracking 數值。shipping config exporter 依賴的 `mot17.py` 入口敘述（`if args.detector and not args.sequences:`、`if getattr(args, "processes", 0) > 0 and args.sequences:`）未變，`test_resolved_shipping_config.py` 通過。唯一的訊息差異是子程序啟動後印 `🚀 Spawned process for <seq> (pid N)`（原本是啟動前印 `Spawning process for <seq>...`）。
+
+**驗收與負控制**：
+
+| 測試 | 涵蓋 |
+|:--|:--|
+| [test_sequence_launcher_537.py](../../tests/unit/eval/test_sequence_launcher_537.py)（CPU，CI） | 44 個案例，以真實子程序做故障注入：<br>• 子程序是 `sys.executable` 執行的腳本；pid 檔以 rename 原子寫入；teardown 以 command line 比對後 SIGKILL 殘留的子程序<br>• 每個案例都確認沒有留下執行中或未回收的直接子程序<br>• 需要特定交錯的案例以 pid 檔或 `/proc` 狀態同步；仍有兩處靠時間餘裕：原始失敗順序的案例讓 B 在 A 結束後再等 1.5 s 才失敗（A 的監看每 0.2 s 檢查一次），grace 案例的上限是 8 s。排程延遲超過這些餘裕時，正確的程式也可能失敗<br>• 4 個 pytest 同時執行時穩定（中斷測試的 harness 明確安裝 Python 預設的 SIGINT handler，因為從背景啟動的程序會繼承「忽略 SIGINT」）<br>涵蓋情境：全部成功；失敗時終止執行中、跳過待啟動且不建構它的命令；SIGTERM 送出至少 `grace_s` 之後才送 SIGKILL（量的是實際送出時間，SIGTERM 的送出刻意延遲）；abort 後自行結束的子程序保留 `ok`／`failed`；在 SIGTERM handler 裡自殺、或 `Popen` 先回收而沒有送出 signal 的子程序是自己的失敗；不合法的 UTF-8 輸出保留；後代持有輸出、或持續寫入時不卡住；讀取錯誤保留子程序的失敗與已讀到的輸出；建構命令、建立輸出檔、`Popen` 的非 `OSError`、印出訊息、監看時的例外都是 launcher 失敗（70）並觸發 abort，清理變慢時仍先記錄；不在 abort 之後啟動；以觀察時間而不是 lock 順序決定原始失敗；死於 SIGKILL 為 137、無法啟動為 127；只對 parent 送 SIGINT 時子程序被回收、exit 130；stdout／stderr 讀取端關閉、或 parent 啟動時 fd 1／fd 2 已關閉時 exit code 仍是 5／130；明確傳入的 `env` 送到子程序；失敗時印出的內容含 sequence、code 與子程序自己的 stdout／stderr；`launch_exit_code` 對照表 |
+| [test_mot17_producer_wiring.py](../../tests/contract/test_mot17_producer_wiring.py)（CI） | 原本以 `subprocess.run(` 定位 spawn，改為 `run_sequence_children(`。新增 `test_multiprocess_launch_failure_exits_before_metrics`，以 AST 檢查 launcher 區塊的**直接敘述**：<br>• `try` 的本體正好是 `results = sequence_launcher.run_sequence_children(seq_list, <命令 lambda>, max_workers=args.processes, env=child_env)`<br>• `KeyboardInterrupt` handler 正好是 `report_interrupt()` 與 `sys.exit(EXIT_INTERRUPTED)`<br>• 接著 `exit_code = launch_exit_code(results)`、`report(results, exit_code)`<br>• `if exit_code != 0:` 的本體只有 `sys.exit(exit_code)`<br>• parent metrics 在最後<br>對 `main@4380c2fa` 的 `mot17.py` 執行時 5 個案例有 3 個失敗（2 個是錨點改名，1 個是新的契約） |
+
+40 個 launcher mutation 與 10 個 `mot17.py` mutation 都被攔住，只在獨立的來源副本上執行，執行前後 worktree 的 `sequence_launcher.py`、`mot17.py` SHA-256 相同（最後一次完整執行在 `a410fde7`；之後的 `fc935095`（只加測試）、r9 修正與 r10 的測試各以針對性 mutation 驗證）：
+
+| mutation（launcher） | failed |
+|:--|:--|
+| exit code 永遠 0 | 30 |
+| 失敗不觸發 abort（不 fail-fast） | 11 |
+| 被終止的子程序算失敗 | 13 |
+| 失敗時捨棄子程序的 stderr | 5 |
+| 輸出改用 pipe | 6 |
+| 不捕捉 worker 內的例外／例外不觸發 abort | 6／6 |
+| launcher 出錯時 exit 127 | 7 |
+| 死於 signal 算成功 | 3 |
+| 出錯時不 kill 子程序 | 3 |
+| 輸出以 `seek`＋`read` 讀取 | 2 |
+| 不持有 lock 就檢查 abort 與 `Popen` | 2 |
+| 不升級為 SIGKILL | 2 |
+| 只要送過 signal 就算 `terminated` | 2 |
+| 以列表順序決定原始失敗 | 2 |
+| 無法啟動時 exit 1；signal 死亡的 exit code 為 1 | 2／2 |
+| 輸出不是盡力而為 | 2 |
+| 其餘 15 個各 1：abort 後仍建構待啟動 sequence 的命令、lock 內不再檢查 abort、失敗時間改在拿到 lock 後才記、先讀輸出再 abort、追著仍在寫入的檔案讀、讀取錯誤丟掉已讀部分、不吸收讀取錯誤、輸出檔建立在 guard 外、立刻 SIGKILL、grace 從送出前起算、送 signal 失敗仍記為已送出、等待中的例外不觸發 abort、嚴格 UTF-8 解碼、清理後才記錄 launcher 失敗、`Popen` 的任何例外都算無法啟動 | 1 |
+| 不傳明確的 `env`；abort 後自行以 0 結束算 `terminated`（`fc935095`，針對性） | 1／1 |
+| 回報只吸收 `OSError`；不吸收 flush 的錯誤；broken stream 不改指 `/dev/null`（r9，針對性） | 4／6／2 |
+| 失敗訊息不含子程序的 stdout／stderr（r10，針對性） | 1 |
+
+`mot17.py` 的 10 個 mutation（wiring contract）都各有 1 個案例失敗：
+- 守門：`if exit_code != 0:` 改成 `if False:`、失敗時 `sys.exit(0)`、`exit_code = 0`、`sys.exit(exit_code)` 包在 `if False:` 裡。
+- 中斷：`KeyboardInterrupt` 時 `sys.exit(0)`、吞掉 `KeyboardInterrupt`。
+- launcher 呼叫：包在 `if False:` 裡、結果被丟棄（`[:0]`）、不傳任何 sequence（`seq_list[:0]`）。
+- 回報：在決定 exit code 之前回報。
+
+**GPU 重現**（本機）。before／after 用同一個 cwd、`.venv`、`build/` 與 `models/`，只換 `mot17.py` 的 checkout：
+- **失敗路徑**：D1 的 `child_failure_probe`，兩個 sequence 的 `seqinfo.ini` 沒有 `[Sequence]`，子程序丟 `configparser.NoSectionError` 後 exit 1。
+  - `main@4380c2fa`：兩個子程序都 `failed with code 1`，parent 印出 `Completed all sequences` 並 exit 0。
+  - 修正後（`fc935095`）：兩個子程序都 `failed with code 1` 並各自保留 `NoSectionError`，沒有子程序被誤標為 `terminated`，parent 不算 metrics、exit 1；連續 4 次結果相同。被列為原始失敗的 sequence 在 A／B 之間變動，因為兩者幾乎同時失敗。
+- **成功路徑**：`--processes 2` 跑真實的 `MOT17-09-SDP`、`MOT17-10-SDP`（`--max-frames 10`）。before 與 after 都 exit 0，兩個結果檔逐位元組相同，metrics 相同。
+
+**審查過程的修正**：
+- 第一版在 GPU probe 上把幾乎同時自行失敗的第二個子程序標成 `terminated (code 1)`，遮蔽了它自己的失敗。另有一次 after 執行誤用 worktree 當 cwd（沒有 engine 與 build），子程序的失敗原因不同，不採用、保留在證據中。
+- Codex r1～r7 判 NOT-READY，r8 判 READY-WITH-CHANGES（只剩兩個測試缺口），r9 再判 NOT-READY（parent 沒有 fd 1／2 時回報改掉 exit code），r10 判 READY-WITH-CHANGES（沒有測試檢查印出的內容；本節把測試同步講得太滿），每一項都以真實子程序確認，已修正並各自加上測試與 mutation：
+  - **abort 與啟動的競態**：檢查與 `Popen` 之間的空檔；建構命令時持有 lock，讓較晚的失敗搶到 lock、反轉原始失敗。
+  - **`terminated` 的判定**：只看 return code、只看「送過 signal」、把嘗試送出當成已送出。
+  - **例外逃出 worker 而不觸發 abort**：`text=True` 下不合法的 UTF-8、建構命令、`Popen` 的非 `OSError`、印出訊息、建立輸出檔。
+  - **輸出收集**：pipe 讓後代程序遮住子程序結束、`seek` 移動共用 offset、追著成長中的檔案讀、讀取錯誤覆蓋子程序的失敗或丟掉已讀部分、先讀輸出才記錄失敗、清理後才記錄 launcher 失敗。
+  - **grace**：從送出 SIGTERM 之前起算。
+  - **parent 的輸出**：`BrokenPipeError`，或沒有 fd 1／2 時的 `AttributeError`，改掉 exit code。
+  - **wiring contract**：只比對文字順序、遞迴搜尋、只看前綴、不看參數，各接受了一種錯誤的接法。
+  - **測試**：假設特定交錯、沒有量測 grace、沒有測 `env` 與以 0 自行結束。
+- r3 有一項刻意不改：子程序處理 launcher 的 SIGTERM、清理後重新送出 SIGTERM 而結束時，記為 `terminated`。這是常見的 graceful shutdown 寫法；而在 launcher 送出 SIGTERM 之後、因為別的原因死於同一個 signal，在 OS 層面無法區分。它只影響已 abort 的子程序的標示，不改 exit code，也不遮住原始失敗。
+
+證據（repo 外）：`~/.local/state/saccade/evidence/537-f01/20261025T145150/`（probe 腳本、before／after 輸出、mutation 腳本與結果、wiring 對照、Codex 紀錄）。
+
+**Runtime identity**：`mot17.py` 與新的 `sequence_launcher.py` 都是 `decision_relevant`，依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture 後以 stacked publication 原子落地；座標變化與證據記在 PR。
+
+**邊界**：
+- **parent 收到 SIGTERM 不處理**：Python 預設直接結束 parent，執行中的子程序不會被終止或回收（成為孤兒，跑完後由 init 回收）。本節不處理，留待需要時另案。
+- 只停止與回收直接子程序；子程序自己產生的程序不在範圍內（目前 eval 子程序本身不產生程序，NV12 重啟用 `execve`，pid 不變；torch 的 compile worker 等可能存在，但不會再遮住子程序的結束）。
+- 從終端機按 Ctrl-C 時，同一個 process group 的子程序也會直接收到 SIGINT；這時子程序可能以自己的碼結束，parent 仍以 130 結束。從背景啟動、繼承了「忽略 SIGINT」的 parent 不會有 `KeyboardInterrupt`。
+- `mot17_all_sdp.py` 與 `run_eval_concurrent` 的失敗傳播未檢查；F06（缺少 `seqinfo.ini`）、tracking 數值與 online qualification 都不在本節範圍。
+
 ## 26. F06：評估 sequence 不再被靜默略過
 
 來源是 #538 D1 的 [D1-F06](async_ownership_538.md)（owner 裁決同 D1-F01：#537 擁有修復契約）。**修復前**（`main@4380c2fa`，GPU 重現，見下表）：

@@ -177,10 +177,10 @@ if __name__ == "__main__":
     )
 
     if getattr(args, "processes", 0) > 0 and args.sequences:
-        import subprocess
         import time
         import configparser
-        from concurrent.futures import ThreadPoolExecutor
+
+        from saccade.perception.eval import sequence_launcher
 
         seq_list = [s.strip() for s in args.sequences.split(",") if s.strip()]
         if len(seq_list) > 1:
@@ -222,22 +222,26 @@ if __name__ == "__main__":
             child_env = os.environ.copy()
             child_env.update(parent_claim_environ(args.output))
 
-            def run_single_seq(seq_name):
-                cmd = cmd_base + ["--sequences", seq_name, "--processes", "0"]
-                print(f" 🚀 Spawning process for {seq_name}...")
-                res = subprocess.run(cmd, capture_output=True, text=True, env=child_env)
-                return seq_name, res.returncode, res.stdout, res.stderr
-
-            with ThreadPoolExecutor(max_workers=args.processes) as executor:
-                futures = [executor.submit(run_single_seq, seq) for seq in seq_list]
-                for fut in futures:
-                    seq_name, code, out, err = fut.result()
-                    if code == 0:
-                        print(f"✅ Process for {seq_name} finished successfully")
-                    else:
-                        print(
-                            f"❌ Process for {seq_name} failed with code {code}\nSTDOUT:\n{out}\nSTDERR:\n{err}"
-                        )
+            # #537 F01: a failed child fails the launch; the others are
+            # stopped and reaped, and no metrics are computed.
+            try:
+                results = sequence_launcher.run_sequence_children(
+                    seq_list,
+                    lambda seq_name: (
+                        cmd_base + ["--sequences", seq_name, "--processes", "0"]
+                    ),
+                    max_workers=args.processes,
+                    env=child_env,
+                )
+            except KeyboardInterrupt:
+                sequence_launcher.report_interrupt()
+                sys.exit(sequence_launcher.EXIT_INTERRUPTED)
+            # The exit code is decided before any reporting, which is best
+            # effort (a closed stdout must not replace it).
+            exit_code = sequence_launcher.launch_exit_code(results)
+            sequence_launcher.report(results, exit_code)
+            if exit_code != 0:
+                sys.exit(exit_code)
 
             elapsed = time.perf_counter() - start_t
             fps_str = ""
