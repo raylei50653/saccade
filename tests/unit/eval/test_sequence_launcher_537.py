@@ -58,6 +58,9 @@ for peer in spec.get("wait_for", []):
         time.sleep(0.01)
 time.sleep(spec.get("delay", 0.0))
 print("out-" + seq, flush=True)
+if kind == "env":
+    print("env=" + os.environ.get("SACCADE_F01_PROBE", "<unset>"), flush=True)
+    sys.exit(0)
 if kind == "ok":
     sys.exit(0)
 if kind == "fail":
@@ -253,29 +256,43 @@ def test_child_ignoring_sigterm_is_killed_after_grace(
     _assert_no_leftovers(rig)
 
 
+@pytest.mark.parametrize(("code", "status"), [(0, sl.OK), (4, sl.FAILED)])
 def test_child_exiting_by_itself_after_abort_keeps_its_own_status(
-    tmp_path: Path,
+    tmp_path: Path, code: int, status: str
 ) -> None:
-    """Seen on the GPU probe: a child failed by itself while the launcher was
-    already stopping it. Only a death by the launcher's own signal is
-    TERMINATED; here B handles SIGTERM and exits 4 on its own.
+    """Seen on the GPU probe: a child finished by itself while the launcher
+    was already stopping it. Only a death by the launcher's own signal is
+    TERMINATED; here B handles SIGTERM and exits with its own code, 0 or 4
+    (Codex r8: 0 must stay OK, not TERMINATED).
     """
     rig = Rig(
         tmp_path,
         {
             "A": {"kind": "fail", "code": 3, "wait_for": ["B"], "delay": 0.2},
-            "B": {"kind": "trap", "code": 4},
+            "B": {"kind": "trap", "code": code},
         },
     )
     results, elapsed = rig.run(["A", "B"])
     by = _by_seq(results)
-    assert by["B"].status == sl.FAILED
-    assert by["B"].returncode == 4
+    assert by["B"].status == status
+    assert by["B"].returncode == code
     assert "trapped-B" in by["B"].stderr
-    assert [r.sequence for r in sl.failures(results)] == ["A", "B"]
+    expected = ["A", "B"] if status == sl.FAILED else ["A"]
+    assert [r.sequence for r in sl.failures(results)] == expected
     assert sl.launch_exit_code(results) == 3
     assert elapsed < 10
     _assert_no_leftovers(rig)
+
+
+def test_explicit_environment_reaches_the_child(tmp_path: Path) -> None:
+    """Codex r8: mot17.py passes child_env (with parent_claim_environ); the
+    launcher must hand exactly that mapping to the child."""
+    rig = Rig(tmp_path, {"A": {"kind": "env"}})
+    env = {**os.environ, "SACCADE_F01_PROBE": "from-parent-claim"}
+    assert os.environ.get("SACCADE_F01_PROBE") is None
+    results, _ = rig.run(["A"], env=env)
+    assert results[0].status == sl.OK
+    assert "env=from-parent-claim" in results[0].stdout
 
 
 def test_child_raising_sigkill_on_sigterm_is_not_terminated(tmp_path: Path) -> None:
