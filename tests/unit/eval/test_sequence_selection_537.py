@@ -163,9 +163,20 @@ def test_filter_discovered_zero_valid_is_an_error(data: Path) -> None:
     assert len(log) == 2
 
 
-def test_filter_discovered_nothing_found_is_an_error(data: Path) -> None:
-    with pytest.raises(SequenceSelectionError, match="none found"):
-        filter_discovered(data, "train", [])
+def test_filter_discovered_nothing_found_keeps_the_fallback(data: Path) -> None:
+    """Codex F06 r2: DanceTrack scans data_root, so with the usual
+    ``--data-root datasets/DanceTrack --split val`` layout it finds nothing
+    and used to fall back to run_eval discovery; it still does."""
+    log = Log()
+    assert filter_discovered(data, "train", [], log=log) == []
+    assert filter_discovered(data, "train", ["", ""], log=log) == []
+    assert log == []
+    # ... and that fallback (empty --sequences) is run_eval's validated discovery.
+    assert select_sequences(data, "train", "", log=log).valid == (
+        "A-SDP",
+        "B-SDP",
+        "X-FRCNN",
+    )
 
 
 # ── EvalConfig.seqs keeps the pre-F06 rule ──────────────────────────────────

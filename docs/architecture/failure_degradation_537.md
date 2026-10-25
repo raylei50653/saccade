@@ -1160,27 +1160,29 @@ Codex r1（`2b120bf6`）判 NOT-READY：第一版的 `redacted_url` 會解析 po
 - 沒有任何有效 sequence（含 split 目錄不存在）：`SequenceSelectionError`。
 - 空名稱（`A,,B`、結尾逗號）不是 sequence，直接忽略。
 
-**驗證點**（都在任何副作用之前）：
+**驗證點**：
 - `mot17.py`：在既有的 `if args.detector and not args.sequences:` 敘述裡驗證——`--detector` 分支把 `args.sequences` 設成有效的名稱，`else` 分支驗證 `--sequences`。這個敘述在 run claim（寫 `run_manifest.json`）、teacher／Mamba detector 建構、`--processes` launcher 與 `run_eval` 之前，所以 `--processes` 不依賴 F01（§25）也不會 exit 0。敘述開頭（exporter 的錨點）未變。
-- DanceTrack、SportsMOT、`concurrent_mot17.py`：把自己列出的名稱交給 `filter_discovered()`，因為 `run_eval` 會把它們當成明確指定。
+- DanceTrack、SportsMOT、`concurrent_mot17.py`：把自己列出的名稱交給 `filter_discovered()`，因為 `run_eval` 會把它們當成明確指定。什麼都沒列到時回傳空清單，保留原本的 fallback（空的 `--sequences`，由 `run_eval` 自己發現並驗證）；DanceTrack 列的是 `data_root` 而不是 split 目錄，一般的 `--data-root datasets/DanceTrack --split val` 就走這條 fallback。
 - `run_eval` 與 `run_eval_cpp` 的第一個動作是驗證，在 config 解析、extension import 與任何 detector 載入之前；涵蓋不經過 `mot17.py` 的呼叫端。
 - `run_eval_cpp` 只為有效的 sequence 建構 C++ config；`_build_cpp_seq_config` 遇到缺少的 `seqinfo.ini` 會丟 `SequenceSelectionError`，不再退回預設值。
 
-錯誤以未捕捉的例外結束，exit 1。`mot17.py` 先驗證、`run_eval` 再驗證，所以 `--sequences SDP` 這類由 `run_eval` 自己發現的情況，略過原因會印兩次。
+`mot17.py` 的驗證在任何副作用之前；錯誤以未捕捉的例外結束，exit 1。`mot17.py` 先驗證、`run_eval` 再驗證，所以 `--sequences SDP` 這類由 `run_eval` 自己發現的情況，略過原因會印兩次。
 
 **不改與改變**：
 - 不改：`run_eval` 迴圈（自動發現且被略過的 sequence 仍由原本的 `continue` 跳過，此時已記錄過原因）、tracking 數值、shipping config exporter 依賴的入口敘述（`if args.detector and not args.sequences:`、`if getattr(args, "processes", 0) > 0 and args.sequences:`、`for seq in cfg.seqs:`；`test_resolved_shipping_config.py` 通過）。
-- 改變：`mot17.py --detector` 與 DanceTrack／SportsMOT／`concurrent_mot17.py` 的自動發現現在只把有效的名稱交下去，所以被略過的 sequence 不再出現在 `EvalConfig.seqs` 與交給 metrics 的清單裡。這些 sequence 從來沒有結果檔，metrics 只對有結果檔的 sequence 計分，所以數值不變；唯一的差別是輸出目錄裡若留有它們的舊結果檔，修復前會被計入，現在不會。
+- 改變：`mot17.py --detector` 與 DanceTrack／SportsMOT／`concurrent_mot17.py` 的自動發現現在只把有效的名稱交下去，所以被略過的 sequence 不再出現在 `EvalConfig.seqs` 與交給 metrics 的清單裡。metrics 只對有結果檔的 sequence 計分，所以有兩種情況數值會不同，都是刻意的：
+  - Python 路徑從來不為這些 sequence 產生結果檔；只有輸出目錄裡留有它們的**舊**結果檔時，修復前會被計入，現在不會。
+  - C++ 路徑修復前會以 1920×1080 的預設值為它們產生**新的**結果檔（有影格與 GT 時會被計分）；現在不產生、不計分。
 - `seqinfo.ini` 存在但缺少欄位（例如沒有 `[Sequence]`）不在本節範圍。
 
 **驗收與負控制**：
 
 | 測試 | 涵蓋 |
 |:--|:--|
-| [test_sequence_selection_537.py](../../tests/unit/eval/test_sequence_selection_537.py)（CPU，CI） | 38 個案例：<br>• 明確指定：全部存在（保留要求的順序）、部分缺少、全部缺少、split 不存在、空名稱<br>• 自動發現（空字串與 `None`）：全部存在、部分缺少（略過並記錄原因）、全部缺少（先記錄原因再報錯）、空目錄<br>• detector 後綴：部分缺少、沒有符合的目錄<br>• `filter_discovered()`：略過並記錄、零個有效、什麼都沒找到<br>• `requested_sequences()` 與修復前 `parse_eval_config` 的規則在 8 種輸入下逐字相同；`parse_eval_config` 的 `cfg.seqs` 不變<br>• `run_eval`：明確缺少與零個有效時在 config 解析之前報錯、不建立輸出目錄；有效選擇則到達解析<br>• `run_eval_cpp`：同上，在 `saccade_eval_ext` import 之前報錯<br>• `_build_cpp_seq_config` 遇到缺少的 `seqinfo.ini` 報錯，不給 1920×1080 |
+| [test_sequence_selection_537.py](../../tests/unit/eval/test_sequence_selection_537.py)（CPU，CI） | 38 個案例：<br>• 明確指定：全部存在（保留要求的順序）、部分缺少、全部缺少、split 不存在、空名稱<br>• 自動發現（空字串與 `None`）：全部存在、部分缺少（略過並記錄原因）、全部缺少（先記錄原因再報錯）、空目錄<br>• detector 後綴：部分缺少、沒有符合的目錄<br>• `filter_discovered()`：略過並記錄、找到但零個有效時報錯、什麼都沒找到時回傳空清單（保留 `run_eval` 的 fallback）<br>• `requested_sequences()` 與修復前 `parse_eval_config` 的規則在 8 種輸入下逐字相同；`parse_eval_config` 的 `cfg.seqs` 不變<br>• `run_eval`：明確缺少與零個有效時在 config 解析之前報錯、不建立輸出目錄；有效選擇則到達解析<br>• `run_eval_cpp`：同上，在 `saccade_eval_ext` import 之前報錯<br>• `_build_cpp_seq_config` 遇到缺少的 `seqinfo.ini` 報錯，不給 1920×1080 |
 | [test_mot17_producer_wiring.py](../../tests/contract/test_mot17_producer_wiring.py)（CI） | 新增 2 個 AST 案例：`--detector` 敘述的兩個分支都呼叫 `select_sequences`（`--detector` 分支以 `.valid` 設定 `args.sequences`、不再 `iterdir`），且這個敘述在 `claim_or_join_run`、launcher、teacher／Mamba detector 建構、`run_eval`、`run_eval_cpp` 的每一個呼叫之前；DanceTrack、SportsMOT、`concurrent_mot17.py` 每一個對 `args.sequences` 的賦值都經過 `filter_discovered` |
 
-13 個 source mutation 與 5 個 wiring mutation 都被攔住，只在獨立的來源副本上執行，執行前後 worktree 的檔案 SHA-256 相同：
+14 個 source mutation 與 5 個 wiring mutation 都被攔住，只在獨立的來源副本上執行，執行前後 worktree 的檔案 SHA-256 相同：
 
 | mutation | failed |
 |:--|:--|
@@ -1193,7 +1195,8 @@ Codex r1（`2b120bf6`）判 NOT-READY：第一版的 `redacted_url` 會解析 po
 | 保留空名稱 | 1 |
 | 不檢查 split 目錄 | 2 |
 | `filter_discovered` 保留缺少的名稱 | 1 |
-| `filter_discovered` 零個有效時允許 | 2 |
+| `filter_discovered` 找到但零個有效時允許 | 1 |
+| `filter_discovered` 什麼都沒找到時報錯 | 1 |
 | `run_eval` 不驗證 | 5 |
 | `run_eval_cpp` 不驗證 | 3 |
 | `_build_cpp_seq_config` 恢復預設值 | 1 |
@@ -1221,7 +1224,7 @@ Codex r1（`2b120bf6`）判 NOT-READY：第一版的 `redacted_url` 會解析 po
 
 normal 與 partial 兩棵樹中，before／after 都有輸出的 20 組 MOT 結果檔（每種模式的 `MOT17-09-SDP`、`MOT17-10-SDP`）逐位元組相同（`76d2808c` 與 `42661c35` 各比一次）。
 
-**審查過程的修正**：Codex r1（`456d100e`）判 NOT-READY，三項 MAJOR，都已修正：驗證發生在 run claim 與 teacher／Mamba detector 建構之後，失敗時仍留下 `run_manifest.json`；DanceTrack 與 SportsMOT 自己把空的 `--sequences` 展開成名稱，修正後會被當成明確指定而整批報錯；本節原本宣稱 `--detector` 自動發現時 `EvalConfig.seqs` 與 metrics 清單不變，實際上被略過的 sequence 已移除（見上「不改與改變」）。
+**審查過程的修正**：Codex r1（`456d100e`）判 NOT-READY，三項 MAJOR，都已修正：驗證發生在 run claim 與 teacher／Mamba detector 建構之後，失敗時仍留下 `run_manifest.json`；DanceTrack 與 SportsMOT 自己把空的 `--sequences` 展開成名稱，修正後會被當成明確指定而整批報錯；本節原本宣稱 `--detector` 自動發現時 `EvalConfig.seqs` 與 metrics 清單不變，實際上被略過的 sequence 已移除（見上「不改與改變」）。Codex r2（`e35811be`）判 NOT-READY，一項 MAJOR、兩項 MINOR，都已處理：DanceTrack 一般的目錄結構下什麼都列不到，第一版的 `filter_discovered` 對空清單報錯，等於讓原本可用的 fallback 失效（改為回傳空清單並加測試）；本節把「所有驗證都在副作用之前、exit 1」講得比 `concurrent_mot17.py` 的實際行為寬（已收窄並列入邊界）；C++ 路徑修復前會為缺少 `seqinfo.ini` 的 sequence 產生新的結果檔，metrics 的差異不只來自舊檔（已補上）。
 
 證據（repo 外）：`~/.local/state/saccade/evidence/537-f06/20261025T155523/`（probe 腳本、每次執行的輸出與摘要、mutation 腳本與結果、Codex 紀錄）。
 
@@ -1230,5 +1233,6 @@ normal 與 partial 兩棵樹中，before／after 都有輸出的 20 組 MOT 結�
 **邊界**：
 - 只檢查 `seqinfo.ini` 是否存在，不檢查內容；`img1/` 是否有影格、`gt/` 是否存在都不在範圍內。
 - `run_eval_concurrent`、`multi_stream.py` 與其他直接呼叫 `run_eval` 的腳本沿用 `run_eval` 的驗證，但沒有個別測試；它們若自己列目錄而沒有經過 `filter_discovered`，缺少 `seqinfo.ini` 會被當成明確指定而報錯（不會靜默略過）。
+- `concurrent_mot17.py` 只改了自動發現：它在發現之前就寫 manifest，明確指定的名稱要到 worker 裡的 `run_eval` 才驗證（已建構 detector 之後），而 worker 會捕捉例外，整個指令仍可能 exit 0。這是該腳本自己的失敗傳播問題（與 F01 同類），不在本節範圍。
 - 錯誤是未捕捉的例外（exit 1、印出 traceback），沒有定義專用的 exit code。
 - F01（子程序失敗傳播，§25）、tracking 數值與 online qualification 不在本節範圍。

@@ -96,8 +96,13 @@ def filter_discovered(
 
     ``names`` were found, not requested: each without
     ``<data_root>/<split>/<name>/seqinfo.ini`` is skipped with the reason
-    logged, and zero valid names is a :class:`SequenceSelectionError`.
+    logged, and names found but none valid is a
+    :class:`SequenceSelectionError`. Nothing found returns ``[]``, so the
+    caller keeps its previous fallback (an empty ``--sequences``, which
+    ``run_eval`` discovers and validates itself).
     """
+    if not any(names):
+        return []
     root = Path(data_root) / split
     valid, skipped = _check(root, names)
     _log_and_require(root, valid, skipped, f"{len(names)} discovered", log)
