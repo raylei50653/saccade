@@ -149,19 +149,20 @@ if __name__ == "__main__":
             os.environ["LD_PRELOAD"] = ":".join(_preloads)
             os.environ["_SACCADE_NV12_RESTARTED"] = "1"
             os.execve(sys.executable, [sys.executable] + sys.argv, os.environ)
+    # #537 F06: sequence selection is validated here, before the run claim
+    # and before any detector is built. Discovered sequences without
+    # seqinfo.ini are logged and skipped; explicit ones, or zero valid ones,
+    # are an error.
     if args.detector and not args.sequences:
-        from pathlib import Path as _Path
-
         from saccade.perception.eval.sequence_selection import select_sequences
 
-        data_root = _Path(args.data_root)
-        split_dir = data_root / args.split
-        if split_dir.exists():
-            # #537 F06: discovery; directories without seqinfo.ini are logged
-            # and skipped here, zero valid sequences is an error.
-            args.sequences = ",".join(
-                select_sequences(args.data_root, args.split, args.detector).valid
-            )
+        args.sequences = ",".join(
+            select_sequences(args.data_root, args.split, args.detector).valid
+        )
+    else:
+        from saccade.perception.eval.sequence_selection import select_sequences
+
+        select_sequences(args.data_root, args.split, args.sequences)
 
     # ADR 021 AP-2: first artifact side effect. Top-level invocations claim
     # args.output; --processes workers and mot17_all_sdp.py children join the
@@ -183,11 +184,6 @@ if __name__ == "__main__":
 
         seq_list = [s.strip() for s in args.sequences.split(",") if s.strip()]
         if len(seq_list) > 1:
-            # #537 F06: refuse explicit sequences without seqinfo.ini before
-            # spawning; children re-check their own sequence.
-            from saccade.perception.eval.sequence_selection import select_sequences
-
-            select_sequences(args.data_root, args.split, args.sequences)
             print(
                 f"\n🔥 [Multi-Process Launcher] Spawning {len(seq_list)} processes (max {args.processes} concurrent)"
             )

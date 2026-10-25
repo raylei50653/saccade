@@ -99,11 +99,19 @@ if __name__ == "__main__":
         split_dir = data_root / args.split
         if split_dir.exists():
             # SportsMOT sequences: v_basketball_01, v_football_01, etc.
+            # #537 F06: found, not requested -- skip (and log) directories
+            # without seqinfo.ini; zero valid is an error.
+            from saccade.perception.eval.sequence_selection import filter_discovered
+
             args.sequences = ",".join(
-                sorted(
-                    d.name
-                    for d in split_dir.iterdir()
-                    if d.is_dir() and d.name.startswith("v_")
+                filter_discovered(
+                    args.data_root,
+                    args.split,
+                    sorted(
+                        d.name
+                        for d in split_dir.iterdir()
+                        if d.is_dir() and d.name.startswith("v_")
+                    ),
                 )
             )
 

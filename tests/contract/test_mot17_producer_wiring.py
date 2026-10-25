@@ -77,35 +77,46 @@ def _calls_named(node: ast.AST, name: str) -> list[ast.Call]:
     ]
 
 
-def test_detector_discovery_goes_through_sequence_selection():
-    """#537 F06: ``--detector`` discovery skips (and logs) sequences without
-    seqinfo.ini and refuses zero valid ones, via select_sequences."""
+def test_sequence_selection_is_validated_before_any_side_effect():
+    """#537 F06: both branches of the ``--detector`` statement validate the
+    sequence selection, and the statement precedes the run claim (which
+    writes run_manifest.json), the multi-process launcher and every
+    detector builder. Discovery sets ``args.sequences`` to the valid names."""
+    tree = ast.parse(_source())
     block = _if_block("args.detector and (not args.sequences)")
-    (call,) = _calls_named(block, "select_sequences")
-    assert ast.unparse(call) == (
-        "select_sequences(args.data_root, args.split, args.detector)"
-    )
-    assigns = [
-        n
-        for n in ast.walk(block)
-        if isinstance(n, ast.Assign)
-        and [ast.unparse(t) for t in n.targets] == ["args.sequences"]
+    assert [ast.unparse(st) for st in block.body if isinstance(st, ast.Assign)] == [
+        "args.sequences = ','.join(select_sequences(args.data_root, args.split, "
+        "args.detector).valid)"
     ]
-    assert len(assigns) == 1
-    assert ast.unparse(assigns[0].value) == (
-        "','.join(select_sequences(args.data_root, args.split, args.detector).valid)"
-    )
-    assert "iterdir" not in ast.unparse(block)
-
-
-def test_multiprocess_parent_validates_before_spawning():
-    """#537 F06: explicit sequences without seqinfo.ini fail in the parent,
-    before any child is prepared (``parent_claim_environ`` is the spawn
-    preparation in every launcher version)."""
-    block = _if_block("getattr(args, 'processes', 0) > 0 and args.sequences")
-    (check,) = _calls_named(block, "select_sequences")
-    assert ast.unparse(check) == (
+    assert [ast.unparse(st) for st in block.orelse if isinstance(st, ast.Expr)] == [
         "select_sequences(args.data_root, args.split, args.sequences)"
-    )
-    (prepare,) = _calls_named(block, "parent_claim_environ")
-    assert check.lineno < prepare.lineno
+    ]
+    assert "iterdir" not in ast.unparse(block)
+    later = [
+        "claim_or_join_run",
+        "run_sequence_children",
+        "subprocess.run",
+        "build_teacher_head_detector",
+        "build_mamba_gated_detector",
+        "run_eval",
+        "run_eval_cpp",
+    ]
+    for name in later:
+        for call in _calls_named(tree, name):
+            assert block.lineno < call.lineno, name
+
+
+def test_other_discovering_eval_scripts_filter_found_sequences():
+    """#537 F06: scripts that list sequence directories themselves apply the
+    discovery rule (skip and log, zero valid is an error) before run_eval."""
+    for rel in ("dancetrack.py", "sportsmot.py", "concurrent_mot17.py"):
+        tree = ast.parse((MOT17.parent / rel).read_text(encoding="utf-8"))
+        assigns = [
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Assign)
+            and [ast.unparse(t) for t in n.targets] == ["args.sequences"]
+        ]
+        assert assigns, rel
+        for a in assigns:
+            assert _calls_named(a.value, "filter_discovered"), (rel, ast.unparse(a))

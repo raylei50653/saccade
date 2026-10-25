@@ -270,11 +270,19 @@ def main() -> None:
         data_dir = Path(args.data_root) / args.split
         if data_dir.exists():
             suffix = f"-{args.detector}" if args.detector else ""
+            # #537 F06: found, not requested -- skip (and log) directories
+            # without seqinfo.ini; zero valid is an error.
+            from saccade.perception.eval.sequence_selection import filter_discovered
+
             args.sequences = ",".join(
-                sorted(
-                    d.name
-                    for d in data_dir.iterdir()
-                    if d.is_dir() and (not suffix or d.name.endswith(suffix))
+                filter_discovered(
+                    args.data_root,
+                    args.split,
+                    sorted(
+                        d.name
+                        for d in data_dir.iterdir()
+                        if d.is_dir() and (not suffix or d.name.endswith(suffix))
+                    ),
                 )
             )
 

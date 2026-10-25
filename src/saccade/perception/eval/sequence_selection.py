@@ -13,6 +13,10 @@ before an eval runs:
 * a discovered one is skipped, with the reason logged;
 * zero valid sequences is an error either way.
 
+:func:`filter_discovered` applies the discovery rule to names a caller found
+itself (DanceTrack/SportsMOT/concurrent eval scripts list directories with
+their own filters).
+
 Contract: docs/architecture/failure_degradation_537.md §26.
 """
 
@@ -66,6 +70,41 @@ def select_sequences(
     if not root.is_dir():
         raise SequenceSelectionError(f"split directory not found: {root}")
     explicit, names = requested_sequences(data_root, split, sequences)
+    valid, skipped = _check(root, names)
+    if explicit and skipped:
+        missing = ", ".join(name for name, _ in skipped)
+        raise SequenceSelectionError(
+            f"explicitly requested sequence(s) without seqinfo.ini under {root}: {missing}"
+        )
+    _log_and_require(root, valid, skipped, f"sequences={sequences!r}", log)
+    return SequenceSelection(
+        explicit=explicit,
+        requested=tuple(n for n in names if n),
+        valid=tuple(valid),
+        skipped=tuple(skipped),
+    )
+
+
+def filter_discovered(
+    data_root: str | Path,
+    split: str,
+    names: list[str],
+    *,
+    log: Callable[[str], None] = print,
+) -> list[str]:
+    """Discovery rule for callers that list sequence directories themselves.
+
+    ``names`` were found, not requested: each without
+    ``<data_root>/<split>/<name>/seqinfo.ini`` is skipped with the reason
+    logged, and zero valid names is a :class:`SequenceSelectionError`.
+    """
+    root = Path(data_root) / split
+    valid, skipped = _check(root, names)
+    _log_and_require(root, valid, skipped, f"{len(names)} discovered", log)
+    return valid
+
+
+def _check(root: Path, names: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
     valid: list[str] = []
     skipped: list[tuple[str, str]] = []
     for name in names:
@@ -75,26 +114,25 @@ def select_sequences(
             valid.append(name)
         else:
             skipped.append((name, "no seqinfo.ini"))
-    if explicit and skipped:
-        missing = ", ".join(name for name, _ in skipped)
-        raise SequenceSelectionError(
-            f"explicitly requested sequence(s) without seqinfo.ini under {root}: {missing}"
-        )
+    return valid, skipped
+
+
+def _log_and_require(
+    root: Path,
+    valid: list[str],
+    skipped: list[tuple[str, str]],
+    what: str,
+    log: Callable[[str], None],
+) -> None:
     for name, reason in skipped:
         log(f"⚠️  Skipping discovered sequence {name}: {reason} ({root / name})")
     if not valid:
         raise SequenceSelectionError(
-            f"no valid sequence under {root} (sequences={sequences!r}; "
+            f"no valid sequence under {root} ({what}; "
             f"{len(skipped)} discovered, all without seqinfo.ini)"
             if skipped
-            else f"no valid sequence under {root} (sequences={sequences!r}; none found)"
+            else f"no valid sequence under {root} ({what}; none found)"
         )
-    return SequenceSelection(
-        explicit=explicit,
-        requested=tuple(n for n in names if n),
-        valid=tuple(valid),
-        skipped=tuple(skipped),
-    )
 
 
 def _sequence_dirs(data_root: str | Path, split: str) -> list[str]:

@@ -25,6 +25,7 @@ from saccade.perception.eval import cpp_runner, evaluator
 from saccade.perception.eval import config as eval_config
 from saccade.perception.eval.sequence_selection import (
     SequenceSelectionError,
+    filter_discovered,
     requested_sequences,
     select_sequences,
 )
@@ -141,6 +142,30 @@ def test_suffix_filter_all_missing_is_an_error(data: Path) -> None:
 def test_discovery_under_a_missing_split_is_an_error(tmp_path: Path) -> None:
     with pytest.raises(SequenceSelectionError, match="split directory not found"):
         select_sequences(tmp_path, "train", "")
+
+
+# ── names a caller discovered itself (DanceTrack / SportsMOT style) ─────────
+
+
+def test_filter_discovered_skips_and_logs(data: Path) -> None:
+    log = Log()
+    assert filter_discovered(data, "train", ["A-SDP", "C-SDP", "B-SDP"], log=log) == [
+        "A-SDP",
+        "B-SDP",
+    ]
+    assert len(log) == 1 and "C-SDP" in log[0]
+
+
+def test_filter_discovered_zero_valid_is_an_error(data: Path) -> None:
+    log = Log()
+    with pytest.raises(SequenceSelectionError, match="no valid sequence"):
+        filter_discovered(data, "train", ["C-SDP", "NOPE"], log=log)
+    assert len(log) == 2
+
+
+def test_filter_discovered_nothing_found_is_an_error(data: Path) -> None:
+    with pytest.raises(SequenceSelectionError, match="none found"):
+        filter_discovered(data, "train", [])
 
 
 # ── EvalConfig.seqs keeps the pre-F06 rule ──────────────────────────────────
