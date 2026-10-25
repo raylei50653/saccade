@@ -90,9 +90,10 @@ F07 修復後，第一個檔的 SHM 測試（C0-06～08）已改為目標語義�
 | C2 其他參數 | 重啟初值與決策頻率已裁決（R0、F0，見 §8）；非法 usage（NaN、負值、>100）已改為明確拒絕（O0，見 §22） | D-537-2 未涵蓋；O0 依 #550 §0A 方案紀錄 |
 | R-1（C0-11） | 呼叫契約已由 R-1 修復（§10）；worker task 異常終止後的錯誤傳遞、health、stop 與 shutdown 語義依 §10 的切片順序處理 | #537 C0-11；#538 D2-AD、D2-WB-0／1、D2-GPU |
 | C0-10 | 轉換表、失敗分類推導與合取判讀已寫定並釘住（§23），不改 shipping 行為 | REQ-535-01-01；證據交 #541 |
-| health CLI、orchestrator 錯誤後的 ACK | 報告 unknown 的方式；ACK 語義 | REQ-535-07-03；REQ-535-06-01（#538） |
+| health CLI | 報告 unknown 的方式已改為三態且標示來源（§24）；readiness／exit code 政策仍未選 | REQ-535-07-03 |
+| orchestrator 錯誤後的 ACK | ACK 語義 | REQ-535-06-01（#538） |
 
-F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 的「未接監控」回報見 §21，O0 的非法 usage 拒絕見 §22，C0-10 的 run journal 轉換語義見 §23，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
+F07、C2、R-1、D2 的 host lifecycle 切片（§7～§16）與 D2-GPU-0／1（§17～§18）已落地；#538 其餘項目仍 OPEN，不取得 online-service qualification、不部署。C0-05 的 4A 已核准（§19），實作與證據見 §20；C0-09 的「未接監控」回報見 §21，O0 的非法 usage 拒絕見 §22，C0-10 的 run journal 轉換語義見 §23，health CLI 的三態報告見 §24，C0-01／02 的 public facade 相容性與 eval consumer policy 依上表分工裁決。每個修復 PR 只處理一類行為。
 
 ## 7. B0-F07 修復（C0-06／07／08 收斂）
 
@@ -932,7 +933,7 @@ flowchart LR
 | C0-09 | WorkbenchPool 沒有 resource manager／writer，stats 的固定 NORMAL 不構成監控證據。另提「明列未接監控」的回報切片（已落地，見 §21）；不在此接上降級 controller | raylei50653；#537／REQ-535-07-02；`--workbench` 仍不支援（#538） |
 | O0 | 直接注入非法 usage 的決策語義仍待裁決；4A 僅驗證 NVML 原始 sample，不放寬 C2 契約（已收斂為明確拒絕，見 §22） | raylei50653；#537 |
 | freshness／ACK／ownership | T 預設、單一 writer 強制、storage 失敗仍 ACK 與 PEL 回收仍交 #538；4A 不替這些項目結案 | raylei50653；#538／REQ-535-06-01、07-01 |
-| health CLI／telemetry | 另有直接 NVML／nvidia-smi probe，不是此 ResourceManager consumer；4A 不能推廣成全 profile 的 healthy 保證 | raylei50653；#537／REQ-535-07-03 |
+| health CLI／telemetry | 另有直接 NVML／nvidia-smi probe，不是此 ResourceManager consumer；4A 不能推廣成全 profile 的 healthy 保證（health CLI 的 unknown 回報已收斂，見 §24；telemetry 未處理） | raylei50653；#537／REQ-535-07-03 |
 | C0-10 | shipping 的 run-state／completion 已有 CC-536-01-01 實作；C0 尚未重查轉換。另以既有契約檢查完成／部分完成／失敗的狀態與診斷，證據交 #541（已重查，見 §23） | raylei50653；#537／#536／#541；REQ-535-01-01 |
 
 #537 保持 OPEN；本節不提供 merge／部署授權。
@@ -1070,3 +1071,74 @@ journal 不加分類欄位；需要的分類都能從既有欄位推出。`state
 - reader 忽略 exit code：1 failed，在新的 reader 測試。
 
 **邊界**：真 binary 在 teardown 時 abort 的頻率與時點沒有量測，只釘住 protocol 層的順序；§23.1 兩個只讀過 source 的邊界沒有重現。斷電 durability、網路檔案系統或 WSL 掛載的 Windows 磁碟上的 flock／rename，以及 F3 的 127 落在哪個時點，仍未驗證。沒有 installed／package 驗證，V5、installed、equivalence 的狀態不變。requirement↔check 對應交 #541。C0-01／02、health CLI 與 #538 的其餘工作不變。
+
+## 24. health CLI：取不到的不算健康（REQ-535-07-03）
+
+方案依 #550 §0A 的開工條件記錄於 [#537 comment](https://github.com/raylei50653/saccade/issues/537#issuecomment-6367964691)（選 A）。對象是 [health.py](../../src/saccade/pipeline/health.py)：`saccade_ctl.sh health` 會執行它，orchestrator 啟動時也會在 process 內執行一次並印出報告（[總覽](system_overview_536.md) SN-ON8、SE-48）。它直接探測 `systemctl --user`、NVML 與 Redis，不是 §20 `ResourceManager` 的 consumer。REQ-535-07-03 仍是 candidate，本節不批准它。
+
+**修復前**（`main@5aa63ee5`，本機執行加上 mock 重現）：
+- NVML 失敗時 `check_vram()` 回 `None`，`overall_ok` 把 `None` 當成通過；mock `nvmlInit` 失敗、其餘檢查正常時，報告是 `Saccade Status — OK`。
+- Redis 連不上時 queue depth 回 0，報告印 `L3 Queue Depth: 0 items`。
+- 不存在的 user unit（`LoadState=not-found`）顯示成 `inactive/failed`。setup_services 安裝的是 system units，ctl 與 health 查的卻是 `--user`（[ledger](capability_requirements_535.md) 部署段）。systemctl 本身不存在或逾時時，則把例外字串當成 failed。
+- Loop Latency 量的是 health process 自己的 event loop；VRAM Fragmentation 讀的是 health process 自己的 torch allocator，本機印出 0.0%。報告沒有標示這兩項的 scope。
+- 報告為 DEGRADED 時 exit 仍是 0。
+
+**實作**：
+- 每項檢查有三種狀態：`ok`、`degraded`（觀察到但不健康）、`unknown`（無法觀察）。
+  - **systemd**：改用 `systemctl --user show -p LoadState,ActiveState`。`loaded`＋`active` 是 ok；其他已知狀態（`loaded/inactive`、`loaded/failed`、`loaded/activating`、`masked/…`）是 degraded。`not-found`（這個 user scope 沒有該 unit，服務可能以 system unit 執行）、systemctl 不存在、逾時、非零 exit 或輸出缺欄位，都是 unknown。
+  - **VRAM**：NVML GPU 0 的整張卡用量（所有 process）。取不到時是 unknown，並保留錯誤類型與訊息；達到 `VRAM_WARN_PCT`（含等號）時是 degraded。只有 `nvmlInit` 成功後才呼叫 `nvmlShutdown`，查詢失敗也會呼叫。
+  - **Redis**：連不上是 degraded，queue depth 是 `None`，報告印 unknown，不印 0。
+- **整體狀態**：任一項 degraded 為 `DEGRADED`；否則任一項 unknown 為 `UNKNOWN`；全部 ok 才是 `OK`。`overall_ok` 只在 `OK` 時為真。
+- **報告標示來源**：`systemctl --user`、`NVML GPU 0, all processes`、`REDIS_URL`。URL 的顯示採 allowlist：
+  - 只去掉 netloc 裡的 userinfo；netloc 直接從原始字串切出（到第一個 `/`、`?` 或 `#`），不用 `urlsplit` 的結果，因為它會刪掉 tab 與換行。其餘部分（host、port、path、query、fragment）照原文保留，所以 IPv6 的方括號與不合法的 port 都原樣顯示，不會讓報告失敗。
+  - 去掉 userinfo 後的整段 URL 必須全是純 ASCII 的 scheme／host／port／path 字元（英數與 `+-._~:/[]`）才顯示，否則印 `<unparseable URL>`；無法拆解的 URL 也一樣。檢查前不丟棄任何部分，所以帶 query 或 fragment 的 URL、拆不開的 userinfo（沒有 `scheme://`、`redis:///u:pw@h`、`redis://u:pw/x@h`，或密碼中未跳脫的 `?`／`#` 把 `@host` 推出 netloc）、`%` 編碼，以及全形 `＠` 之類的非 ASCII 字元，都不會顯示。代價是合法但帶 query 的 URL（例如 `unix:///tmp/redis.sock?db=0`）也只印 `<unparseable URL>`。
+  - `REDIS_URL` 本身不是純字元時，Redis 的錯誤訊息只印例外類型，因為 redis-py 的 URL 解析錯誤會引用整段 netloc。
+
+  stress metrics 標為「不計入狀態」：Loop Latency 與 Fragmentation 註明是本 process 的數值；沒有 CUDA 或本 process 沒有配置時，Fragmentation 印 n/a，不印 0。
+
+**不改**：exit code（維持 0；改 exit code 等於選定 readiness policy，REQ 未選，`saccade_ctl.sh` 也有 `set -e`）、systemd unit 清單（仍不含 ctl 有的 `yolo-api`）、user／system scope 的部署落差（只在報告標示）、`VRAM_WARN_PCT`、orchestrator（SE-48 仍只印報告、不擋啟動），也不新增 JSON 輸出。
+
+**驗收與負控制**（host-only）：
+
+| 測試 | 涵蓋 |
+|:--|:--|
+| [test_pipeline_health_contract_537.py](../../tests/unit/test_pipeline_health_contract_537.py) | 88 個案例（模組 fixture 固定 `REDIS_URL`，不受環境變數影響）：<br>• 整體狀態的優先序（8 組，含 NVML 缺失、其餘 ok 時為 UNKNOWN）<br>• systemd 的 9 種輸出（含屬性順序顛倒、缺欄位）、3 種例外與非零 exit<br>• NVML 的 init／查詢失敗與 shutdown、device 0、門檻含等號（測試內固定門檻，不受環境變數影響）<br>• Redis 失敗時 depth 為 `None`、Fragmentation 不回 0<br>• 端到端：NVML 失敗而其餘正常時報告為 UNKNOWN；報告的來源標示、URL 去掉帳密、不出現 `0 items`、三種標記<br>• `redacted_url` 的 31 種 URL（帳密、query、fragment、IPv6、unix socket、不合法 port、無法拆解、沒有 `scheme://`、拆不開的 userinfo、密碼含 `?`／`#`（含全形 `＠` 的組合）、`%` 編碼、非 ASCII、大寫 scheme、userinfo 或 host 中的 tab／換行），以及 URL 不合法時報告仍能產生<br>• 完整報告：16 種帶密碼的 `REDIS_URL`，Redis 錯誤訊息原樣引用 URL 時，整份報告都不出現密碼<br>• 真實 redis-py 解析器拒絕全形 `／` 與 `＠` 的 URL 時不印密碼（依賴目前的解析器在連線前就拒絕）；URL 不是純字元時只印例外類型，否則保留原訊息 |
+| [test_pipeline_health.py](../../tests/unit/test_pipeline_health.py) | 既有的「xlen 失敗時 depth == 0」改為 `None`；加 fixture 固定 `REDIS_URL` |
+
+修復前的實作只補上三個常數名稱讓測試能 import，結果是 89 failed／2 passed；其中多數失敗來自介面改變（`ServiceStatus` 改用 `status` 欄位、`check_vram()` 改回傳 tuple），行為上的重現以上面「修復前」的直接執行為準。
+
+18 個隔離 mutation 都被攔住，只在獨立的來源副本上執行，執行前後共享的 `health.py` SHA-256 相同：
+
+| mutation | failed |
+|:--|:--|
+| VRAM `None` 又算 ok | 3 |
+| Redis 失敗回 depth 0 | 4 |
+| `not-found` 當成 degraded | 1 |
+| `not-found` 當成 ok | 1 |
+| UNKNOWN 優先於 DEGRADED | 2 |
+| systemctl 例外當成 degraded | 3 |
+| 報告不去掉 URL 帳密（印原始 `REDIS_URL`） | 20 |
+| 沒有配置時 Fragmentation 回 0 | 1 |
+| 查詢失敗時不 shutdown | 2 |
+| 恢復第一版的 `redacted_url`（解析 port） | 31 |
+| 檢查前先丟掉 query／fragment | 11 |
+| Redis 錯誤訊息不隱藏 | 20 |
+| 顯示前不檢查是否為純字元 | 27 |
+| 恢復 r1 版的 `redacted_url` | 25 |
+| 恢復 r2 版的 denylist（只看 `@?#`） | 4 |
+| 不去掉 userinfo | 11 |
+| 恢復 r4 版的 `redacted_url`（`@` 計數＋先丟 query） | 7 |
+| 恢復 r5 版的 `redacted_url`（用 `urlsplit` 的 netloc 長度切） | 2 |
+
+Codex r1（`2b120bf6`）判 NOT-READY：第一版的 `redacted_url` 會解析 port，port 不合法時報告本身丟 `ValueError`，orchestrator 啟動時的那次呼叫也會跟著失敗（MAJOR）；IPv6 host 的方括號被拿掉（MINOR）；門檻測試依賴環境變數 `VRAM_WARN_PCT`（MINOR）。三項都已修正，並加上對應的測試與 mutation。Codex r2（`1368913b`）再判 NOT-READY，兩項 MAJOR：沒有 `scheme://` 的 `user:pw@host:6379/0` 被拆成 scheme `user`、path `pw@host…`，密碼照樣印出；redis-py 解析失敗的 `ValueError` 訊息含有帶帳密的 netloc，經 `redis.detail` 印出。Codex r3（`3486a7be`）第三次判 NOT-READY，兩項 MAJOR、一項 MINOR：`redis://u:pw/x@h` 與 `redis:///u:pw@h` 的帳密沒有被拆開而照印；全形 `＠` 繞過 `@?#` 檢查，解析錯誤又把密碼帶出；兩個測試讀到環境中的 `REDIS_URL`。逐一補 denylist 已經三輪仍有漏洞，因此改為上述 allowlist，並固定測試中的 `REDIS_URL`。Codex r4（`bc8e3780`）判 NOT-READY，一項 MAJOR：密碼中未跳脫的 `?` 或 `#` 會把 `@host` 推進 query 或 fragment，剩下的 `user:pw` 通過 allowlist 而被印出；第一次修正只檢查 netloc 以外的 `@`；Codex r5（`60c2ddb2`）再以全形 `＠` 加 `?`／`#` 的組合指出同一類漏洞（MAJOR）：丟掉 query／fragment 之後才檢查，被丟掉的部分正好藏著可疑字元。現在改為只去掉 userinfo、不丟棄任何部分就檢查整段，`@` 計數檢查因此多餘而移除。Codex r6（`d9e949d1`）判 READY-WITH-CHANGES，一項 MINOR：`urlsplit` 會刪掉 tab 與換行，用它的 netloc 長度去切原始字串會錯位，`redis://u:pw\t@cache.local:6379/0` 顯示成 port `63799`（沒有外洩）；現在 netloc 改從原始字串切出。
+
+本機真實執行（Redis 未啟動、沒有安裝 user units）的報告是 `DEGRADED`：三個 unit 為 `? unknown: no such user unit`，Redis 為 degraded，queue depth 為 unknown，Fragmentation 為 n/a，exit 0。
+
+**Runtime identity**：`health.py` 是 `decision_relevant`，依 [republication runbook](../reference/runbooks/runtime_identity_republication.md) fresh capture 後以 stacked publication 原子落地；座標變化與證據記在 PR。
+
+**邊界**：
+- 沒有在真實部署上驗證：system 或 user units 實際執行中、Redis 有資料時都沒有跑過。
+- 沒有 orchestrator 的端到端驗證；多 GPU 只看 device 0。
+- 報告是給人讀的文字，不是相容 API；exit code 不代表 readiness。
+- 不取得 online-service qualification、不部署。
+- C0-01／02、WorkbenchPool 是否支援資源降級，以及 #538 的其餘工作都不變。
