@@ -233,22 +233,13 @@ if __name__ == "__main__":
                     env=child_env,
                 )
             except KeyboardInterrupt:
-                print(
-                    "\n🛑 [Multi-Process Launcher] Interrupted; children stopped and reaped",
-                    file=sys.stderr,
-                )
+                sequence_launcher.report_interrupt()
                 sys.exit(sequence_launcher.EXIT_INTERRUPTED)
-            for res in results:
-                print(sequence_launcher.describe(res))
+            # The exit code is decided before any reporting, which is best
+            # effort (a closed stdout must not replace it).
             exit_code = sequence_launcher.launch_exit_code(results)
+            sequence_launcher.report(results, exit_code)
             if exit_code != 0:
-                failed = sequence_launcher.failures(results)
-                origin = failed[0].sequence if failed else "none"
-                print(
-                    f"\n❌ [Multi-Process Launcher] Launch failed (original failure: "
-                    f"{origin}); metrics not computed, exit {exit_code}",
-                    file=sys.stderr,
-                )
                 sys.exit(exit_code)
 
             elapsed = time.perf_counter() - start_t

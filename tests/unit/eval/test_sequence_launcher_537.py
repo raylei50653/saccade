@@ -328,6 +328,7 @@ def test_launcher_error_fails_the_sequence_and_aborts(
     class Popen(subprocess.Popen):  # type: ignore[type-arg]
         def wait(self, timeout: float | None = None) -> int:
             if timeout is not None and "B" in list(self.args):  # type: ignore[arg-type]
+                _wait_for_pid(rig, "A")  # A is running when B's supervision fails
                 raise RuntimeError("injected supervision failure")
             return super().wait(timeout)
 
@@ -340,6 +341,20 @@ def test_launcher_error_fails_the_sequence_and_aborts(
     assert sl.launch_exit_code(results) == sl.EXIT_LAUNCHER_ERROR == 70
     assert elapsed < 10
     _assert_no_leftovers(rig)
+
+
+def _wait_exited(pid: int) -> None:
+    """Until pid is a zombie or gone (it is not ours to reap)."""
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        try:
+            state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+        except OSError:
+            return
+        if state == "Z":
+            return
+        time.sleep(0.01)
+    raise AssertionError(f"pid {pid} did not exit")
 
 
 def _wait_for_pid(rig: Rig, seq: str) -> None:
@@ -499,6 +514,9 @@ def test_earliest_observed_failure_wins_over_lock_order(
     class SlowFailingPopen(subprocess.Popen):  # type: ignore[type-arg]
         def __init__(self, args: Any, **kw: Any) -> None:
             if "B" in list(args):
+                # Fail only after A has exited and its supervisor (poll 0.2 s)
+                # has had ample time to observe it (Codex r7 NIT).
+                _wait_exited(rig.pids()["A"])
                 time.sleep(0.5)
                 raise FileNotFoundError("no-such-interpreter")
             super().__init__(args, **kw)
@@ -798,7 +816,11 @@ def test_first_of_concurrent_failures_sets_the_exit_code(tmp_path: Path) -> None
 
 
 HARNESS = r"""
-import sys
+import signal, sys
+# A process started in the background by a non-interactive shell inherits
+# SIGINT as ignored, and Python then installs no KeyboardInterrupt handler;
+# model a foreground mot17.py run explicitly.
+signal.signal(signal.SIGINT, signal.default_int_handler)
 from saccade.perception.eval import sequence_launcher as sl
 child, spec, state = sys.argv[1:4]
 try:
@@ -854,6 +876,42 @@ def test_parent_interrupt_reaps_children_and_exits_130(tmp_path: Path) -> None:
     assert proc.returncode == sl.EXIT_INTERRUPTED == 130, err
     assert "C" not in rig.pids()
     _assert_no_leftovers(rig)
+
+
+REPORT_HARNESS = r"""
+import sys
+from saccade.perception.eval import sequence_launcher as sl
+if sys.argv[1] == "failure":
+    results = [sl.ChildResult("A", sl.FAILED, 5, "x" * 200_000, "boom", failed_at=1.0)]
+    code = sl.launch_exit_code(results)
+    sl.report(results, code)
+    sys.exit(code)
+sl.report_interrupt()
+sys.exit(sl.EXIT_INTERRUPTED)
+"""
+
+
+@pytest.mark.parametrize(("mode", "code"), [("failure", 5), ("interrupt", 130)])
+def test_report_to_a_closed_stdout_keeps_the_exit_code(
+    tmp_path: Path, mode: str, code: int
+) -> None:
+    """Codex r7: printing the (large) captured output to a stdout whose
+    reader went away raised BrokenPipeError before sys.exit(exit_code), and
+    the parent exited 1. Reporting is best effort; the code stays 5 / 130
+    (not 1, and not 120 from a failed flush at interpreter exit)."""
+    harness = tmp_path / "report.py"
+    harness.write_text(REPORT_HARNESS)
+    src_root = Path(sl.__file__).resolve().parents[3]
+    proc = subprocess.Popen(
+        [sys.executable, str(harness), mode],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={**os.environ, "PYTHONPATH": str(src_root)},
+    )
+    assert proc.stdout is not None and proc.stderr is not None
+    proc.stdout.close()
+    proc.stderr.close()
+    assert proc.wait(timeout=30) == code
 
 
 @pytest.mark.parametrize(

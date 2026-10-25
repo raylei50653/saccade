@@ -122,7 +122,10 @@ def test_multiprocess_launch_failure_exits_before_metrics():
         for h in launch.handlers
         if h.type is not None and ast.unparse(h.type) == "KeyboardInterrupt"
     ]
-    assert _is_exit(handler.body[-1], "sequence_launcher.EXIT_INTERRUPTED")
+    assert [ast.unparse(st) for st in handler.body] == [
+        "sequence_launcher.report_interrupt()",
+        "sys.exit(sequence_launcher.EXIT_INTERRUPTED)",
+    ]
     # The launch itself is the try body, not a call nested under a condition.
     assert len(launch.body) == 1
     assert isinstance(launch.body[0], ast.Assign)
@@ -130,7 +133,10 @@ def test_multiprocess_launch_failure_exits_before_metrics():
     call = launch.body[0].value
     assert isinstance(call, ast.Call)
     assert ast.unparse(call.func) == "sequence_launcher.run_sequence_children"
-    assert [ast.unparse(a) for a in call.args][0] == "seq_list"
+    assert [ast.unparse(a) for a in call.args] == [
+        "seq_list",
+        "lambda seq_name: cmd_base + ['--sequences', seq_name, '--processes', '0']",
+    ]
     keywords = {k.arg: ast.unparse(k.value) for k in call.keywords}
     assert keywords == {"max_workers": "args.processes", "env": "child_env"}
 
@@ -148,7 +154,13 @@ def test_multiprocess_launch_failure_exits_before_metrics():
     )
     guard = body[guard_i]
     assert isinstance(guard, ast.If) and not guard.orelse
-    assert _is_exit(guard.body[-1], "exit_code")
+    assert len(guard.body) == 1 and _is_exit(guard.body[0], "exit_code")
+    # Reporting is best effort and comes after the code is decided.
+    report_i = _stmt_index(
+        body,
+        lambda st: ast.unparse(st) == "sequence_launcher.report(results, exit_code)",
+    )
+    assert assign_i < report_i < guard_i
     metrics_i = _stmt_index(
         body,
         lambda st: (

@@ -29,6 +29,7 @@ import contextlib
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -248,6 +249,53 @@ def launch_exit_code(results: Sequence[ChildResult]) -> int:
     if code is None:
         return EXIT_START_FAILED
     return code if code > 0 else 128 - code
+
+
+def report(results: Sequence[ChildResult], exit_code: int) -> None:
+    """Print every result and, on failure, the summary line; best effort.
+
+    The exit code is decided before this runs; a closed stdout/stderr
+    (BrokenPipeError) must not replace it, so a stream that fails is pointed
+    at /dev/null, which also keeps the interpreter's flush at exit quiet.
+    """
+    _best_effort(lambda: [print(describe(r)) for r in results])
+    if exit_code != 0:
+        failed = failures(results)
+        origin = failed[0].sequence if failed else "none"
+        _best_effort(
+            lambda: print(
+                f"\n❌ [Multi-Process Launcher] Launch failed (original failure: "
+                f"{origin}); metrics not computed, exit {exit_code}",
+                file=sys.stderr,
+            )
+        )
+
+
+def report_interrupt() -> None:
+    _best_effort(
+        lambda: print(
+            "\n🛑 [Multi-Process Launcher] Interrupted; children stopped and reaped",
+            file=sys.stderr,
+        )
+    )
+
+
+def _best_effort(write: Callable[[], object]) -> None:
+    try:
+        write()
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except OSError:
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.flush()
+            except OSError:
+                try:
+                    devnull = os.open(os.devnull, os.O_WRONLY)
+                    os.dup2(devnull, stream.fileno())
+                    os.close(devnull)
+                except (OSError, ValueError):
+                    pass
 
 
 def describe(result: ChildResult) -> str:
