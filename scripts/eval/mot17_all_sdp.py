@@ -26,6 +26,7 @@ if build_path.exists():
     sys.path.insert(0, str(build_path))
 
 from saccade.perception.eval.metrics import run_motmetrics_evaluation  # noqa: E402
+from saccade.perception.eval.sequence_selection import filter_discovered  # noqa: E402
 from scripts.provenance.run_manifest import open_run, parent_claim_environ  # noqa: E402
 
 
@@ -116,8 +117,16 @@ def _discover_sequences(data_root: Path, split: str, selected: str) -> list[str]
     split_dir = data_root / split
     if not split_dir.exists():
         raise FileNotFoundError(f"split directory not found: {split_dir}")
-    return sorted(
-        d.name for d in split_dir.iterdir() if d.is_dir() and d.name.endswith("-SDP")
+    # #537 F06: found, not requested -- skip (and log) directories without
+    # seqinfo.ini instead of handing them to a child as explicit names.
+    return filter_discovered(
+        data_root,
+        split,
+        sorted(
+            d.name
+            for d in split_dir.iterdir()
+            if d.is_dir() and d.name.endswith("-SDP")
+        ),
     )
 
 

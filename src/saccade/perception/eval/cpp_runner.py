@@ -11,6 +11,7 @@ from typing import Any
 
 from saccade.perception.feature_extractor import TRTFeatureExtractor
 
+from .sequence_selection import SequenceSelectionError, select_sequences
 from .utils import append_dict_csv as _append_dict_csv
 
 
@@ -32,13 +33,15 @@ def _build_cpp_seq_config(
     # Read seqinfo.ini for frame dimensions
     seqinfo = Path(data_root) / split / seq / "seqinfo.ini"
     w, h = 1920, 1080
-    if seqinfo.exists():
-        import configparser
+    if not seqinfo.exists():
+        # #537 F06: never fall back to 1920x1080 for a missing seqinfo.ini.
+        raise SequenceSelectionError(f"{seq}: no seqinfo.ini at {seqinfo}")
+    import configparser
 
-        cp = configparser.ConfigParser()
-        cp.read(str(seqinfo))
-        w = int(cp.get("Sequence", "imWidth", fallback=str(w)))
-        h = int(cp.get("Sequence", "imHeight", fallback=str(h)))
+    cp = configparser.ConfigParser()
+    cp.read(str(seqinfo))
+    w = int(cp.get("Sequence", "imWidth", fallback=str(w)))
+    h = int(cp.get("Sequence", "imHeight", fallback=str(h)))
 
     c = CppSequenceConfig()
     c.name = seq
@@ -120,6 +123,9 @@ def run_eval_cpp(
     Post-processing (relink, post_merge, metrics) runs in Python after all
     sequences complete.
     """
+    # #537 F06: validate before the extension import and any GPU work; only
+    # valid sequences reach _build_cpp_seq_config.
+    selection = select_sequences(data_root, split, sequences)
     try:
         from saccade_eval_ext import CppEvaluatorPool
     except ImportError:
@@ -178,17 +184,18 @@ def run_eval_cpp(
         trt_input_size = getattr(detector, "img_size", 640)
         max_raw_dets = 8400  # YOLO default
 
+    run_seqs = [seq for seq in cfg.seqs if seq in selection.valid]
     seq_configs = [
         _build_cpp_seq_config(
             cfg, seq, data_root, cfg.core.split, trt_input_size, max_raw_dets
         )
-        for seq in cfg.seqs
+        for seq in run_seqs
     ]
 
     pool = CppEvaluatorPool(
         detect_detector_ptr=detect_detector_ptr,
         pipe_cfg=native_cfg,
-        n_threads=min(n_threads, len(cfg.seqs)),
+        n_threads=min(n_threads, len(run_seqs)),
         max_dets=2048,
         max_tracks=256,
         device_id=0,

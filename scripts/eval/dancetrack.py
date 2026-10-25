@@ -96,11 +96,19 @@ if __name__ == "__main__":
 
         data_root = _Path(args.data_root)
         if data_root.exists():
+            # #537 F06: found, not requested -- skip (and log) directories
+            # without seqinfo.ini; zero valid is an error.
+            from saccade.perception.eval.sequence_selection import filter_discovered
+
             args.sequences = ",".join(
-                sorted(
-                    d.name
-                    for d in data_root.iterdir()
-                    if d.is_dir() and d.name.startswith("dancetrack")
+                filter_discovered(
+                    args.data_root,
+                    args.split,
+                    sorted(
+                        d.name
+                        for d in data_root.iterdir()
+                        if d.is_dir() and d.name.startswith("dancetrack")
+                    ),
                 )
             )
 

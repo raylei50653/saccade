@@ -16,6 +16,7 @@ from typing import Any
 from saccade.paths import runtime_input as _runtime_input
 from saccade.paths import source_checkout_root as _source_checkout_root
 
+from .sequence_selection import select_sequences
 from .quality import (
     compute_detection_quality_batch as _compute_detection_quality_batch,
 )
@@ -1987,6 +1988,9 @@ def run_eval(
     pose_engine: str = None,
     **kwargs: Any,
 ) -> dict[str, Any] | None:
+    # #537 F06: an explicit sequence without seqinfo.ini, or no valid sequence
+    # at all, fails here, before any detector or output work.
+    select_sequences(data_root, split, sequences)
     from .config import parse_eval_config
 
     cfg = parse_eval_config(

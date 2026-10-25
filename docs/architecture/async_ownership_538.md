@@ -135,7 +135,7 @@
 | D1-F03 | relink 背景寫入（`pipeline_relink`）的 executor 沒有 `shutdown()`；main 先出錯時，未取的 future 不會被等待，背景 thread 可能仍在改 relinker／bank | source-inspected | cancel／drain | #539（選用分支是否保留）後再決定是否修 |
 | D1-F04 | `main.py` 的 producer 以 `asyncio.create_task(media.watchdog_loop())` 啟動 watchdog（8stream 沒有啟動 watchdog），沒有保留引用、不在 `supervise` 內、producer 結束時不取消；它的例外不會被收集。重連路徑的 `time.sleep(1)` 與 `connect()`（最多等 3 s 第一幀）在 event loop 上阻塞，同時卡住所有 stream 與 dispatcher worker | source-inspected | cancel／drain；error 不得被吞 | **已裁決**：留在 #538（event loop 阻塞與 task ownership） |
 | D1-F05 | MediaMTX 的 latest-wins 與 smart sampling 丟幀沒有計數，`AsyncDispatcher` 的 `dropped_queue_full` 看不到 ingest 層的丟幀 | source-inspected | overflow 與計數語義 | 未個別裁決；F02 的計數原則是否涵蓋 ingest 層，待 F02 切片確認 |
-| D1-F06 | `run_eval` 略過沒有 `seqinfo.ini` 的 sequence，不報錯；單一程序與 `--processes` 都 `exit(0)`，沒有輸出 | reproduced | error 不得偽裝成正常完成 | **已裁決**：同 D1-F01 |
+| D1-F06 | `run_eval` 略過沒有 `seqinfo.ini` 的 sequence，不報錯；單一程序與 `--processes` 都 `exit(0)`，沒有輸出 | reproduced | error 不得偽裝成正常完成 | **已裁決**：同 D1-F01；修復見 [failure_degradation_537.md](failure_degradation_537.md) §26 |
 | D1-F07 | Cognition 背景 batch task 數沒有上限；`run()` 結束時不取消也不等待；trim 不看 PEL；consumer 名稱固定 | source-inspected | backpressure、cancel／drain | #538（與既有的 PEL 不回收 REQ-535-06-01 一起），線上 producer 接通之前不急 |
 
 **收窄的既有 OPEN**：GE-07（DALI buffer 所有權）由「未知」收窄為 documentation-supported、GPU-unverified（§1；owner 裁決見 §9）。仍然沒有在本 repo 以影片實跑，不能當成 GPU 證據；online qualification 前需要一個 GPU 測試（持有多幀的 DLPack tensor，確認之後的 `next()` 不改它們的內容）。

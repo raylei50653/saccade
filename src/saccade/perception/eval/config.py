@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 from pathlib import Path
 from saccade.perception.eval.preprocess import parse_preprocess
+from saccade.perception.eval.sequence_selection import requested_sequences
 from saccade.perception.eval.assoc_basis import (
     PERSON_HEIGHT_M,
     REF_HEIGHT_RATIO,
@@ -1693,18 +1694,9 @@ def parse_eval_config(
         max(mid_thresh - 1e-4, track_thresh + 1e-4),
     )
 
-    _detector_suffixes = {"SDP", "DPM", "FRCNN"}
-    if sequences:
-        filters = [s.strip() for s in sequences.split(",")]
-        if all(f in _detector_suffixes for f in filters):
-            _all = sorted(
-                d.name for d in (Path(data_root) / split).iterdir() if d.is_dir()
-            )
-            seqs = [d for d in _all if any(d.endswith(f"-{f}") for f in filters)]
-        else:
-            seqs = filters
-    else:
-        seqs = sorted(d.name for d in (Path(data_root) / split).iterdir() if d.is_dir())
+    # The explicit-vs-discovered rule lives in sequence_selection (#537 F06);
+    # run_eval / run_eval_cpp validate it before anything runs.
+    _, seqs = requested_sequences(data_root, split, sequences)
 
     tiling = kwargs.get("tiling", "native_960")
     _nms_default = 0.35 if tiling == "960p_3x2" else 0.5
