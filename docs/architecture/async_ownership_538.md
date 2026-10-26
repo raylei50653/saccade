@@ -256,6 +256,8 @@ submitted = dequeued + dropped + discarded_on_stop + queued
 - CUDA 範圍：既有 D2-GPU 契約與新增 F02 案例。新案例固定第一幀正在 inference，再排入 5 幀：`drops=4`、`overflow_events=1`、callback timestamps `[0.0, 5.0]`，並核對真實 CUDA 前處理交給 batcher 的兩份 input 值。
 - 6 個隔離 mutation 都被行為斷言攔住：把 drops 算成事件、telemetry 算成事件、取消 stop lock timeout、遺失部分 stop 計數、重啟重設 identity、移除 admission 的第二次狀態檢查。
 - 第一次失敗分類：新增的 stop 回歸測試在原 WIP 上失敗（`returned`，應為 `timeout`）；修復後通過。沙箱內 NVML／CUDA 被作業系統阻擋；已在沙箱外核對裝置並執行上述 GPU 測試，沒有把 skip 當通過。
+- 完整 pre-push 首次執行於 combined head `756dde4ebe580f2f551ed3ea04162b54e818f1a4`：6,241 passed、195 skipped、105 deselected、5 xfailed、1 failed。唯一失敗是既有 `test_h2_import_witness.py::test_the_recorder_records_dependencies_rather_than_filtering_them`：驗證 checkout 的 `.venv` 是指向 repo 外的 symlink，`ImportRecorder.note_file()` 依既有契約先 `resolve()` 再判斷是否位於 repo 內，所以沒有記錄該依賴。該 recorder 與測試相對基線完全未改；同一測試在原工作區通過。改以同一 head 的 `.worktrees/550-f02-validation`、repo 內的實體 `.venv` 目錄（同磁碟 hard links，禁止 sync 與 bytecode 寫入）驗證後，整份 import-witness suite **34 passed**。此項分類為已定位的驗證環境問題，沒有改寫或跳過測試。
+- 修正環境後，**同一 combined head** 的完整 `scripts/pre_push.sh` exit 0：**6,242 passed、195 skipped、105 deselected、5 xfailed、0 failed**。格式、mypy（605 files）、文件與其餘適用檢查也通過；這是本機結果，沒有遠端 CI 結果。以下收尾只增加文件中的驗證紀錄，不改實作、測試或 identity 檔案內容。
 
 本機原始輸出與 mutation runner 在 `/tmp/saccade-550-f02-evidence/`；來源與摘要檔 SHA-256：
 
@@ -278,6 +280,9 @@ PYTHONPATH=build/runtime_identity:src .venv/bin/python -m pytest -q \
 | `mutations.json` | `2a0d106a6ff8db957a7ddad5b895aad240c0ae9aef1a03de96d13d786d68c25c` |
 | `final-contracts.log` | `3a69d4032550ea4bcc409ca9c2eb915b2a31a68ba407000de9e2de3823343b96` |
 | `final-contracts.xml` | `4c3b1f1daec87805add348a84c2c4fca3868b42d1c537d727838acc888e03e94` |
+| `pre-push.log`（首次失敗） | `f37f3683d01bcd4388c9d77ca14f8e0978501028b8ba54d4e8400536d4e05483` |
+| `pre-push-local-venv.log`（環境修正後通過） | `e28174382d9597fd174efa575ff7f5cc599987c3e580ab6f2b7bdbab17d1422e` |
+| `attested-strict.log` | `6f66d4d2da35c315d08ac546f9d406dc828bf9378a7619db41ebb586d58e750d` |
 
 **Runtime identity 候選**：在 clean `a06f56ab` 上獨立 build `saccade_tracking_ext`／`saccade_scan_plugin`，依 runbook 重跑 MOT17-09 identity probe：
 
@@ -290,6 +295,10 @@ PYTHONPATH=src .venv/bin/python scripts/tools/build_runtime_identity.py \
 
 候選 `publication_complete=true`；只有 implementation 改變（`11263f7c… → 0cb15155…`，唯一變動 member 是 `dispatcher.py`），其餘四軸相同。probe 是 fresh run，digest 仍為 `2dabed0b…`；`equivalence=unproven`。候選檔 SHA-256：`f36316235124b7edde843e262b46248299b99077f25aa47c50e1784d51bdb5b2`；capture log：`b52b5757db0b1d98785ad4ed2939e31fc2e4e27fd87c3d8bbd2d7cc396f8cd1e`。候選只寫入 scratch，publication 應以 canonical＋archive 的獨立 review surface 與實作原子落地。
 
-**尚未完成**：獨立 publication review、完整 pre-push、最終 head review、PR／required CI 與 atomic co-land。現有局部測試不能替代這些門檻。WorkbenchPool online qualification、D1-F05 ingest 丟幀、watchdog（F04）、多 worker NMS capture 與其餘 D1／D2 殘留仍 OPEN；沒有清除 #340 trace。
+本機 publication 分支已準備 canonical＋archive 的獨立兩檔 commit，archive 與 `main@aa69c3c1` 的原 canonical 逐位元組相同（SHA-256 `d740889a2fe15e58bd868a9af5b8e9ae23b033c76cca1caa068562e65407d85b`）。另以 `h2_behavioral_identity.py --identity-mode` 重跑驗證 probe、`h2_runtime_inputs.py --build-dir build/runtime_identity` 重算完整 manifest，再執行 `check_runtime_identity_staleness.py --mode attested --strict --probe-from <verification-probe.json> --runtime-inputs-from <runtime-inputs.json>`，exit 0；這不是只驗 portable axes 的結果。
+
+完整 pre-push 的環境保護參數為 `UV_NO_SYNC=1`、`PYTHONDONTWRITEBYTECODE=1`；`UV_CACHE_DIR` 指向 `/tmp/saccade-550-uv-cache`。`PYTHONPATH` 依序指定本次新 build、原工作區其他 native extensions，以及驗證 checkout 的 `src`。這些參數不跳過任何檢查。
+
+**尚未完成**：獨立 publication review、最終 head review、PR／required CI 與 atomic co-land。現有本機驗證不能替代這些門檻。WorkbenchPool online qualification、D1-F05 ingest 丟幀、watchdog（F04）、多 worker NMS capture 與其餘 D1／D2 殘留仍 OPEN；沒有清除 #340 trace。
 
 回退需要同時回退實作並依 [runtime identity runbook](../reference/runbooks/runtime_identity_republication.md) 重發座標；不能只把 canonical publication 換回舊檔。
