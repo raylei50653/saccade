@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import inspect
 import queue
 import re
@@ -59,6 +60,27 @@ class _StreamFrame:
     frame: torch.Tensor | Any  # RGB [H,W,3] uint8 or Nv12Frame
     timestamp: float
     enqueued_at: float
+    seq: int = 0  # per-stream frame identity, 1-based (#538 D3-F02)
+
+
+@dataclass
+class _StreamCounts:
+    """Per-stream frame accounting for ``WorkbenchPool`` (#538 D3-F02).
+
+    Counted for the lifetime of the pool (across restarts). Whenever the
+    pool is quiescent: ``submitted == dequeued + dropped + discarded_on_stop
+    + queued``. ``gaps``/``gap_frames`` are what the worker observes: frame
+    identities it never dequeued (dropped, or discarded by a stop).
+    """
+
+    submitted: int = 0
+    dropped: int = 0
+    overflow_events: int = 0
+    dequeued: int = 0
+    discarded_on_stop: int = 0
+    last_dequeued_seq: int = 0
+    gaps: int = 0
+    gap_frames: int = 0
 
 
 def _match_keypoints_to_tracks(
@@ -124,8 +146,10 @@ class _WorkbenchWorker(threading.Thread):
         use_nv12: bool = False,
         stop_event: Optional[threading.Event] = None,
         on_failure: Optional[Callable[[str, Exception], None]] = None,
+        on_dequeue: Optional[Callable[[_StreamFrame], None]] = None,
     ):
         super().__init__(daemon=True, name=f"wb-{stream_id}")
+        self.on_dequeue = on_dequeue
         self.stop_event = stop_event if stop_event is not None else threading.Event()
         self.on_failure = on_failure
         self.stream_id = stream_id
@@ -151,6 +175,8 @@ class _WorkbenchWorker(threading.Thread):
                     continue
                 if item is None:
                     break  # legacy stop signal
+                if self.on_dequeue is not None:
+                    self.on_dequeue(item)
                 self._process(item)
         except Exception as e:
             if self.on_failure is None:
@@ -351,8 +377,16 @@ class WorkbenchPool:
 
         self._stats_window: deque[float] = deque(maxlen=stats_window)
         self._queue_wait_window: deque[float] = deque(maxlen=stats_window)
+        # #538 D3-F02: drops = frames actually dropped by overflow; one
+        # overflow (a put that found the queue full) may drop up to 4.
         self._drop_count = 0
+        self._overflow_events = 0
         self._lock = threading.Lock()
+        # Held by put_frame across its state check and the whole
+        # drain-and-enqueue, and by stop() while it drains: every frame is
+        # counted exactly once (dropped, dequeued, discarded or queued).
+        self._stream_locks = [threading.Lock() for _ in range(n_streams)]
+        self._stream_counts = [_StreamCounts() for _ in range(n_streams)]
 
         # #538 D2-WB-1: lifecycle state, the first worker failure, and counters.
         self._state = PoolState.CREATED
@@ -522,6 +556,7 @@ class WorkbenchPool:
                 use_nv12=self.use_nv12,
                 stop_event=self._stop_event,
                 on_failure=self._on_worker_failure,
+                on_dequeue=functools.partial(self._on_dequeue, i),
             )
             worker.start()
             self._workers.append(worker)
@@ -540,32 +575,63 @@ class WorkbenchPool:
         ``WorkbenchPoolFailed``, any other state ``WorkbenchPoolNotRunning``.
         Any other stream id raises ``ValueError``.
         """
+        self._check_running()
+        idx = self._stream_index(stream_id)
+        with self._stream_locks[idx]:
+            # Re-checked under the stream lock: stop() drains under it too, so
+            # a frame is either refused here or counted by that drain.
+            self._check_running()
+            q = self._queues[idx]
+            counts = self._stream_counts[idx]
+            counts.submitted += 1
+            item = _StreamFrame(
+                frame=frame,
+                timestamp=timestamp,
+                enqueued_at=time.perf_counter(),
+                seq=counts.submitted,
+            )
+            try:
+                q.put_nowait(item)
+                return
+            except queue.Full:
+                pass
+            # Latest-wins: drain every queued frame, then enqueue the new one.
+            # Only a holder of this lock adds to q, so the put cannot fail.
+            dropped = 0
+            while True:
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    break
+                dropped += 1
+            q.put_nowait(item)
+            counts.dropped += dropped
+            counts.overflow_events += 1
+            with self._lock:
+                self._drop_count += dropped
+                self._overflow_events += 1
+        if self.telemetry is not None:
+            self.telemetry.increment("workbench_drops", dropped)
+            self.telemetry.increment("workbench_overflow_events")
+
+    def _check_running(self) -> None:
         if self._state is PoolState.FAILED:
             raise self._failed()
         if self._state is not PoolState.RUNNING:
             raise WorkbenchPoolNotRunning(
                 f"WorkbenchPool is {self._state.value}; put_frame() needs running"
             )
-        q = self._queues[self._stream_index(stream_id)]
-        item = _StreamFrame(
-            frame=frame,
-            timestamp=timestamp,
-            enqueued_at=time.perf_counter(),
-        )
-        try:
-            q.put_nowait(item)
-        except queue.Full:
-            # Latest-wins: drain oldest and enqueue new one
-            with self._lock:
-                self._drop_count += 1
-            if self.telemetry is not None:
-                self.telemetry.increment("workbench_drops")
-            try:
-                while not q.empty():
-                    q.get_nowait()
-            except queue.Empty:
-                pass
-            q.put_nowait(item)
+
+    def _on_dequeue(self, idx: int, item: _StreamFrame) -> None:
+        """Runs on the worker: the frame left the queue for processing."""
+        with self._stream_locks[idx]:
+            counts = self._stream_counts[idx]
+            counts.dequeued += 1
+            missing = item.seq - counts.last_dequeued_seq - 1
+            if missing > 0:
+                counts.gaps += 1
+                counts.gap_frames += missing
+            counts.last_dequeued_seq = item.seq
 
     def _stream_index(self, stream_id: str) -> int:
         m = re.fullmatch(r"stream_(0|[1-9][0-9]*)", stream_id)
@@ -601,9 +667,10 @@ class WorkbenchPool:
             self.on_result(sid, ts, ids, boxes, classes, kps)
 
     def stop(self, timeout: float = 5.0) -> None:
-        """Stop all workers within ``timeout`` seconds, then shut down the batcher.
+        """Stop workers and wait for admission within ``timeout``, then shut down.
 
-        The worker joins share one deadline. If a worker is still alive at the
+        Worker joins and stream-lock acquisition share one deadline. If a
+        worker is still alive or admission holds a stream lock at the
         deadline, the batcher is kept, the state is STOPPING, and
         ``WorkbenchPoolStopTimeout`` is raised; call ``stop()`` again to retry.
         ``batcher.shutdown()`` runs after the deadline with its own bound
@@ -631,16 +698,30 @@ class WorkbenchPool:
                 "the batcher was not shut down"
             )
 
-        discarded = 0
-        for q in self._queues:
-            while True:
-                try:
-                    q.get_nowait()
-                except queue.Empty:
-                    break
-                discarded += 1
-        with self._lock:
-            self._discarded_on_stop += discarded
+        for idx, q in enumerate(self._queues):
+            stream_lock = self._stream_locks[idx]
+            if not stream_lock.acquire(timeout=max(deadline - time.monotonic(), 0.0)):
+                with self._lock:
+                    self._stop_timeouts += 1
+                raise WorkbenchPoolStopTimeout(
+                    f"WorkbenchPool stream_{idx} admission still active after "
+                    f"{timeout}s; the batcher was not shut down"
+                )
+            try:
+                n = 0
+                while True:
+                    try:
+                        q.get_nowait()
+                    except queue.Empty:
+                        break
+                    n += 1
+                self._stream_counts[idx].discarded_on_stop += n
+                # A later stream can time out. Publish each completed drain
+                # now, so retrying stop neither loses nor counts it twice.
+                with self._lock:
+                    self._discarded_on_stop += n
+            finally:
+                stream_lock.release()
         if self._batcher is not None:
             # A raise propagates with the batcher kept and the state STOPPING.
             if self._batcher.shutdown() is False:
@@ -659,6 +740,12 @@ class WorkbenchPool:
         """Return current stats. Does not reset counters."""
         with self._lock:
             drops = self._drop_count
+            overflow_events = self._overflow_events
+        streams = {}
+        for idx, counts in enumerate(self._stream_counts):
+            with self._stream_locks[idx]:
+                queued = self._queues[idx].qsize() if idx < len(self._queues) else 0
+                streams[f"stream_{idx}"] = {**vars(counts), "queued": queued}
 
         stats = list(self._stats_window)
         wait = list(self._queue_wait_window)
@@ -678,7 +765,11 @@ class WorkbenchPool:
             "resource_monitor_error": "",
             "active_streams": self.n_streams,
             "queue_depth": sum(q.qsize() for q in self._queues),
+            # #538 D3-F02: frames actually dropped by overflow, and how many
+            # puts found a full queue (one overflow drops up to 4 frames).
             "drops": drops,
+            "overflow_events": overflow_events,
+            "streams": streams,
             "e2e_ms_mean": round(float(np.mean(stats)), 2) if stats else 0.0,
             "e2e_ms_p95": round(_percentile(stats, 95), 2) if stats else 0.0,
             "e2e_ms_p99": round(_percentile(stats, 99), 2) if stats else 0.0,
@@ -689,9 +780,10 @@ class WorkbenchPool:
         }
 
     def reset_stats(self) -> None:
-        """Reset the drop counter."""
+        """Reset ``drops`` and ``overflow_events``; per-stream counts are kept."""
         with self._lock:
             self._drop_count = 0
+            self._overflow_events = 0
 
 
 class DispatcherState(Enum):
