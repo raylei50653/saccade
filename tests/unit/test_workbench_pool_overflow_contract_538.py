@@ -5,7 +5,7 @@ latest-wins / drain-all, but ``drops`` is the number of frames actually
 dropped, ``overflow_events`` the number of overflows, ``discarded_on_stop``
 stays separate, and every stream keeps frame identity with an observable
 gap. Concurrent producers must not drop a frame without recording it.
-Contract: failure_degradation_537.md §27.
+Contract: async_ownership_538.md §10.
 
 Same harness as the D2-WB tests: each scenario runs in a fresh interpreter
 under an outside timeout, with CPU fakes.
@@ -18,6 +18,8 @@ under an outside timeout, with CPU fakes.
 from __future__ import annotations
 
 import json
+
+import pytest
 
 from tests.unit.test_workbench_pool_lifecycle_observed_538 import _run
 
@@ -261,3 +263,259 @@ asyncio.run(main())
 """
     )
     assert out == {"refused": "yes", "counts": "0,0,0,0"}
+
+
+def test_stop_bounds_a_producer_holding_the_stream_lock_and_can_retry() -> None:
+    """Admission can be paused even after every worker has ended.
+
+    stop must report a timeout and retain its batcher, rather than wait for
+    that producer indefinitely. A later admission is refused, and retrying
+    stop accounts for the frame admitted before stopping exactly once.
+    """
+    out = _run(
+        _TELEMETRY
+        + """
+import json
+async def main():
+    pool = make_counted_pool(1)
+    await pool.start()
+    inside = threading.Event()
+    resume = threading.Event()
+    q = pool._queues[0]
+    original_put = q.put_nowait
+    def paused_put(item):
+        inside.set()
+        assert resume.wait(5.0)
+        original_put(item)
+    q.put_nowait = paused_put
+    errors = []
+    def produce(ts):
+        try:
+            pool.put_frame("stream_0", frame(), ts)
+        except Exception as e:
+            errors.append(type(e).__name__)
+    admitted = threading.Thread(target=produce, args=(0.0,))
+    admitted.start()
+    assert inside.wait(5.0)
+    # This producer waits for the same stream lock, but must not be admitted
+    # once the pool enters STOPPING.
+    checked = threading.Event()
+    original_check = pool._check_running
+    def observe_check():
+        original_check()
+        if threading.current_thread().name == "late-producer":
+            checked.set()
+    pool._check_running = observe_check
+    refused = threading.Thread(target=produce, args=(1.0,), name="late-producer")
+    refused.start()
+    assert checked.wait(5.0)
+    release = threading.Timer(1.5, resume.set)
+    release.start()  # bound the diagnostic even if stop's timeout is broken
+    t0 = time.monotonic()
+    outcome = "returned"
+    try:
+        pool.stop(timeout=0.15)
+    except d.WorkbenchPoolStopTimeout:
+        outcome = "timeout"
+    print(f"@outcome={outcome}")
+    print(f"@bounded={time.monotonic() - t0 < 0.8}")
+    print(f"@state={pool.state.value}")
+    print(f"@batcher_kept={pool._batcher is FakeBatcher.last and not FakeBatcher.last.down}")
+    resume.set()
+    release.cancel()
+    release.join(5.0)
+    admitted.join(5.0)
+    refused.join(5.0)
+    assert not admitted.is_alive() and not refused.is_alive()
+    pool.stop()
+    first = pool.get_stats()
+    pool.stop()
+    print(f"@idempotent={first == pool.get_stats()}")
+    print(f"@errors={errors}")
+    print(f"@discarded={first['discarded_on_stop']}")
+    print(f"@timeouts={first['stop_timeouts']}")
+    print(f"@telemetry={counters()}")
+    print("@streams=" + json.dumps(first["streams"]))
+asyncio.run(main())
+"""
+    )
+    assert out is not None
+    assert out["outcome"] == "timeout"
+    assert out["bounded"] == "True"
+    assert out["state"] == "stopping"
+    assert out["batcher_kept"] == "True"
+    assert out["idempotent"] == "True"
+    assert out["errors"] == "['WorkbenchPoolNotRunning']"
+    assert out["discarded"] == "1" and out["timeouts"] == "1"
+    assert out["telemetry"] == "(0, 0)"
+    c = _streams(out)["stream_0"]
+    assert c["submitted"] == c["discarded_on_stop"] == 1
+    assert c["dequeued"] == c["dropped"] == c["queued"] == 0
+
+
+def test_restart_keeps_frame_identity_and_exposes_stop_discard_gap() -> None:
+    out = _run(
+        _TELEMETRY
+        + """
+import json
+async def main():
+    MODE["process"] = "block"
+    pool = make_counted_pool(1)
+    await pool.start()
+    pool.put_frame("stream_0", frame(), 0.0)
+    assert wait_until(lambda: pool.get_stats()["streams"]["stream_0"]["dequeued"] == 1)
+    for ts in (1.0, 2.0, 3.0):
+        pool.put_frame("stream_0", frame(), ts)
+    try:
+        pool.stop(timeout=0.05)
+    except d.WorkbenchPoolStopTimeout:
+        pass
+    GATE.set()
+    assert wait_until(lambda: not any(w.is_alive() for w in pool._workers))
+    pool.stop()
+    await pool.start()
+    pool.put_frame("stream_0", frame(), 4.0)
+    assert wait_until(lambda: pool.get_stats()["streams"]["stream_0"]["dequeued"] == 2)
+    pool.stop()
+    st = pool.get_stats()
+    print("@streams=" + json.dumps(st["streams"]))
+    print(f"@discarded={st['discarded_on_stop']}")
+    print(f"@telemetry={counters()}")
+asyncio.run(main())
+"""
+    )
+    assert out is not None
+    c = _streams(out)["stream_0"]
+    assert c == {
+        "submitted": 5,
+        "dropped": 0,
+        "overflow_events": 0,
+        "dequeued": 2,
+        "discarded_on_stop": 3,
+        "last_dequeued_seq": 5,
+        "gaps": 1,
+        "gap_frames": 3,
+        "queued": 0,
+    }
+    assert out["discarded"] == "3"
+    assert out["telemetry"] == "(0, 0)"
+
+
+def test_partial_stop_drain_is_counted_before_another_stream_times_out() -> None:
+    out = _run(
+        _TELEMETRY
+        + """
+import json
+async def main():
+    MODE["process"] = "block"
+    pool = make_counted_pool(2)
+    await pool.start()
+    pool.put_frame("stream_0", frame(), 0.0)
+    assert wait_until(lambda: pool.get_stats()["streams"]["stream_0"]["dequeued"] == 1)
+    pool.put_frame("stream_0", frame(), 1.0)
+    pool.put_frame("stream_0", frame(), 2.0)
+    inside = threading.Event()
+    resume = threading.Event()
+    q = pool._queues[1]
+    original_put = q.put_nowait
+    def paused_put(item):
+        inside.set()
+        assert resume.wait(5.0)
+        original_put(item)
+    q.put_nowait = paused_put
+    producer = threading.Thread(target=pool.put_frame, args=("stream_1", frame(), 3.0))
+    producer.start()
+    assert inside.wait(5.0)
+    def release_worker():
+        assert wait_until(lambda: pool.state is d.PoolState.STOPPING)
+        GATE.set()
+    worker_release = threading.Thread(target=release_worker)
+    worker_release.start()
+    release = threading.Timer(1.5, resume.set)
+    release.start()
+    outcome = "returned"
+    try:
+        pool.stop(timeout=0.2)
+    except d.WorkbenchPoolStopTimeout:
+        outcome = "timeout"
+    print(f"@outcome={outcome}")
+    print(f"@partial_discarded={pool._discarded_on_stop}")
+    resume.set()
+    release.cancel()
+    release.join(5.0)
+    producer.join(5.0)
+    worker_release.join(5.0)
+    assert not producer.is_alive() and not worker_release.is_alive()
+    pool.stop()
+    st = pool.get_stats()
+    print(f"@discarded={st['discarded_on_stop']}")
+    print("@streams=" + json.dumps(st["streams"]))
+asyncio.run(main())
+"""
+    )
+    assert out is not None
+    assert out["outcome"] == "timeout"
+    assert out["partial_discarded"] == "2"
+    assert out["discarded"] == "3"
+    streams = _streams(out)
+    assert streams["stream_0"]["discarded_on_stop"] == 2
+    assert streams["stream_1"]["discarded_on_stop"] == 1
+    for c in streams.values():
+        assert c["submitted"] == c["dequeued"] + c["discarded_on_stop"]
+        assert c["queued"] == c["dropped"] == 0
+
+
+@pytest.mark.gpu
+def test_cuda_overflow_counts_frames_and_delivers_the_latest_frame() -> None:
+    """Real CUDA Workbench and batcher; only TRT inference is replaced.
+
+    Hold the first inference while overflowing its stream, then let both
+    frames finish. This exercises F02 on the actual CUDA processing path;
+    it does not qualify a model, throughput or online deployment.
+    """
+    from tests.unit.test_workbench_pool_gpu_contract_538 import (
+        _need_native,
+        _run as run_gpu,
+    )
+
+    _need_native()
+    out = run_gpu(
+        """
+import json
+from saccade.perception.online_telemetry import OnlineTelemetry
+async def main():
+    telemetry = OnlineTelemetry()
+    pool = make_pool(1, telemetry=telemetry)
+    PLAN["gate"] = threading.Event()
+    await pool.start()
+    pool.put_frame("stream_0", frame(0), 0.0)
+    await until(IN_INFER.is_set)
+    for i in range(1, 6):
+        pool.put_frame("stream_0", frame(i * 10), float(i))
+    st = pool.get_stats()
+    print(f"@pending={st['drops']},{st['overflow_events']},{st['queue_depth']}")
+    PLAN["gate"].set()
+    await until(lambda: len(RESULTS) == 2)
+    pool.stop()
+    st = pool.get_stats()
+    print("@streams=" + json.dumps(st["streams"]))
+    print(f"@timestamps={[r['ts'] for r in RESULTS]}")
+    print(f"@inputs_ok={len(SEEN) == 2 and abs(SEEN[0]) < 1e-5 and abs(SEEN[1] - 50.0/255.0) < 1e-3}")
+    print(f"@telemetry={st['workbench_drops']},{st['workbench_overflow_events']}")
+    print(f"@state={st['state']}")
+    print(f"@thread_errors={THREAD_ERRORS}")
+asyncio.run(main())
+done()
+"""
+    )
+    assert out["pending"] == "4,1,1"
+    assert out["timestamps"] == "[0.0, 5.0]"
+    assert out["inputs_ok"] == "True"
+    assert out["telemetry"] == "4,1"
+    assert out["state"] == "stopped"
+    assert out["thread_errors"] == "[]"
+    c = _streams(out)["stream_0"]
+    assert c["submitted"] == 6 and c["dequeued"] == 2
+    assert c["dropped"] == c["gap_frames"] == 4
+    assert c["last_dequeued_seq"] == 6 and c["gaps"] == 1
+    assert c["queued"] == c["discarded_on_stop"] == 0

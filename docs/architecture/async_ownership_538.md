@@ -1,13 +1,13 @@
 <!-- doc-status: proposed -->
 <!-- doc-promotion: none -->
-<!-- doc-date: 2026-10-25 -->
+<!-- doc-date: 2026-10-26 -->
 <!-- doc-module: cross -->
 
 # 非同步 edge 與 buffer ownership 盤點（#538 D1）
 
-本稿是 [#538](https://github.com/raylei50653/saccade/issues/538) 的 **D1**：依 #535 的 profiles，盤點主要的非同步 edge，逐條記下誰持有資料、何時算完成、何時可以重用或釋放、容量與溢出、失敗怎麼傳、取消與重啟時怎麼收尾，以及支撐這些說法的證據等級。**本稿不修改行為，也不選定政策**；新發現的缺口只列出並路由（§5）。Owner 對發布、路由與 #340 trace 的裁決見 §9（決策來源是 #538 的 comment）。閱讀入口是 [architecture README](README.md)。
+本稿的 §1～§9 是 [#538](https://github.com/raylei50653/saccade/issues/538) 的 **D1**：依 #535 的 profiles，盤點主要的非同步 edge，逐條記下誰持有資料、何時算完成、何時可以重用或釋放、容量與溢出、失敗怎麼傳、取消與重啟時怎麼收尾，以及支撐這些說法的證據等級。D1 只盤點與路由，不修改行為；Owner 對發布、路由與 #340 trace 的裁決見 §9（決策來源是 #538 的 comment）。[§10](#d3-f02) 另記 D3-F02 的候選修復與驗證。閱讀入口是 [architecture README](README.md)。
 
-**Source baseline**：`main@3375e7d4`（#629 merge，2026-10-25）。除 §5 標 `reproduced` 的兩項與 §1 註明的 DALI 建構觀察外，本稿新增的判讀都是 `source-inspected`；引用的既有證據保留原文件的等級與座標，本稿沒有重跑。
+**D1 source baseline（§1～§9）**：`main@3375e7d4`（#629 merge，2026-10-25）。除 §5 標 `reproduced` 的兩項與 §1 註明的 DALI 建構觀察外，D1 新增的判讀都是 `source-inspected`；引用的既有證據保留原文件的等級與座標，D1 沒有重跑。§10 的修復與驗證另列自己的基線。
 
 **本稿不擁有的內容**（只引用）：CAP／REQ 與支持裁決歸 [#535 ledger](capability_requirements_535.md)；節點／邊 ID 歸 [跨 profile 總覽](system_overview_536.md)（本稿的 `AE-*` 掛在它的 `SN-*`／`SE-*` 上，見 [§6](system_overview_536.md#6-給-537538539-的共同邊界)）；失敗狀態與 run 轉換語義歸 [#537](failure_degradation_537.md)；shipping 的排程、graph 與 parity 歸 #465（[resolved config §14](../reference/native_runtime_resolved_config.md#14-native-double-buffercuda-graphpr-10u5)），本稿只引用、不重驗、不推廣成全 repo 的保證；VRAM 快照契約歸 [degradation §6](../modules/resource/architecture_degradation.md#6-vram-level-跨程序快照契約537-b0-f07)；功能保留或退役歸 #539。
 
@@ -131,7 +131,7 @@
 | ID | 發現 | 等級 | 影響的 D3 驗收項 | 路由（§9 已裁決者註明） |
 |:--|:--|:--|:--|:--|
 | D1-F01 | `mot17.py --processes`：子程序以非零碼結束時 parent 只印 `❌`，接著用剩下的輸出算 metrics 並 `exit(0)` | reproduced | error 不得偽裝成正常完成 | **已裁決**：#537 擁有修復契約，#538 只保留追溯連結；修復見 [failure_degradation_537.md](failure_degradation_537.md) §25 |
-| D1-F02 | `WorkbenchPool.put_frame` 溢出時清空整個 queue（最多丟 4 幀），`drops` 只加 1；`AsyncDispatcher` 則是丟 1 個新幀、加 1。兩邊的計數單位不同，`drops` 不是遺失的幀數 | source-inspected | overflow、丟幀與計數語義一致 | **已裁決**：#538 獨立 D3 切片；保留 drain-all，計數改為實際丟棄的幀數（§9） |
+| D1-F02 | `WorkbenchPool.put_frame` 溢出時清空整個 queue（最多丟 4 幀），`drops` 只加 1；`AsyncDispatcher` 則是丟 1 個新幀、加 1。兩邊的計數單位不同，`drops` 不是遺失的幀數 | source-inspected（D1）；修復前重現與候選驗證見 §10 | overflow、丟幀與計數語義一致 | **已裁決**：#538 獨立 D3 切片；保留 drain-all，計數改為實際丟棄的幀數（§9）；候選修復見 [§10](#d3-f02) |
 | D1-F03 | relink 背景寫入（`pipeline_relink`）的 executor 沒有 `shutdown()`；main 先出錯時，未取的 future 不會被等待，背景 thread 可能仍在改 relinker／bank | source-inspected | cancel／drain | #539（選用分支是否保留）後再決定是否修 |
 | D1-F04 | `main.py` 的 producer 以 `asyncio.create_task(media.watchdog_loop())` 啟動 watchdog（8stream 沒有啟動 watchdog），沒有保留引用、不在 `supervise` 內、producer 結束時不取消；它的例外不會被收集。重連路徑的 `time.sleep(1)` 與 `connect()`（最多等 3 s 第一幀）在 event loop 上阻塞，同時卡住所有 stream 與 dispatcher worker | source-inspected | cancel／drain；error 不得被吞 | **已裁決**：留在 #538（event loop 阻塞與 task ownership） |
 | D1-F05 | MediaMTX 的 latest-wins 與 smart sampling 丟幀沒有計數，`AsyncDispatcher` 的 `dropped_queue_full` 看不到 ingest 層的丟幀 | source-inspected | overflow 與計數語義 | 未個別裁決；F02 的計數原則是否涵蓋 ingest 層，待 F02 切片確認 |
@@ -182,7 +182,7 @@
 - [x] 主要 async edge 有 ownership／completion／release 規則，或具名的未知與後續 owner：§2～§3 已逐條列出；未知集中在 AE-E8（C++ eval pool）與 AE-O2／AE-E1b（DALI，documentation-supported），路由見 §5。Owner 已裁決 D1 inventory completed（§9）。
 - [x] WorkbenchPool 的有限狀態契約先於修復固定（D2-WB-0 → WB-1，已合併）。
 - [x] 至少一個故障注入重現了具體違約（D2）；本稿另外重現 D1-F01、D1-F06，其餘標 source-inspected。
-- [~] overflow、丟幀與計數語義一致：**不一致**（D1-F02、D1-F05）。F02 的方向已裁決，修復尚未實作。
+- [~] overflow、丟幀與計數語義一致：F02 的候選修復與待完成門檻見 [§10](#d3-f02)；D1-F05 的 ingest 丟幀仍未處理。
 - [~] error／cancel／timeout 不偽裝成正常完成：D1-F01、D1-F06 違反；D1-F03、D1-F04、D1-F07 待處理。
 - [x] host-only、GPU-validated、documentation-supported 與未驗證的證據分開記錄（§1、§3）。
 - [x] #465 的 native schedule、capture freeze 與 trace／measurement 邊界沒有改動；本稿只引用。G 的 contract／test／limit 映射尚未交付。
@@ -210,3 +210,72 @@
   全量的壓縮率與耗時以首次封存的實測為準。
 - **GE-07**：source／文件支持、GPU-unverified，不能取代 GPU 端到端測試（stream completion、PyTorch consumer、實際 pipeline 組態）。online qualification 維持未通過。
 - **執行順序**：D1 審核並合併 → #537 F01／F06、#538 F02 與 watchdog 分別處理 → 獨立執行 #340 封存。
+
+<a id="d3-f02"></a>
+
+## 10. D3-F02：WorkbenchPool 溢出計數與停止競態
+
+**範圍與狀態**：依 §9 的 F02 裁決接續 `22c01fcd5a3ab5ff01c7f248f768c4be3eae9769` WIP；基線是 `main@aa69c3c1caf502ecc5aeeda92f90d8db6871a6c3`。這是候選實作，尚未合併。只修 `WorkbenchPool` 的 host queue admission、計數與對應停止競態；不修改 CUDA 排程、模型、tracker 參數、AsyncDispatcher 的丟幀策略或線上支持範圍。D1 表格保留原盤點座標。
+
+### 10.1 計數與 identity
+
+| 欄位 | 定義與範圍 |
+|:--|:--|
+| `drops` | 實際從滿 queue 清掉的幀數，從最近一次 `reset_stats()` 起累積 |
+| `overflow_events` | `put_frame()` 第一次 enqueue 遇到滿 queue 的次數；即使 consumer 搶先取走全部幀而清掉 0 幀，仍是一個事件 |
+| `workbench_drops`／`workbench_overflow_events` | 相同事件的 telemetry；由 telemetry 物件累積，pool 的 `reset_stats()` 不重設它 |
+| `streams[stream_id]` | pool 物件生命期的 `submitted`、`dequeued`、`dropped`、`overflow_events`、`discarded_on_stop`、`last_dequeued_seq`、`gaps`、`gap_frames` 及當下 `queued`；stop/start 與 `reset_stats()` 不清掉它們 |
+| `discarded_on_stop` | stop 清掉的 queued 幀，與 overflow drop 分開，重試 stop 不重複計數 |
+
+每條 stream 在接受 frame 時配置從 1 開始、單調遞增的 `seq`。worker 取出 frame 時記 `last_dequeued_seq`；跳過的 identity 數量計入 `gap_frames`，每段缺口計入 `gaps`。這裡的 `dequeued` 表示交給處理，不表示成功處理或 callback 已交付；處理失敗與 late callback 仍走既有契約。現有 callback 的 stream ID／timestamp 介面不變。
+
+所有 producer／worker 安靜後，每條 stream 滿足：
+
+```text
+submitted = dequeued + dropped + discarded_on_stop + queued
+```
+
+仍在執行中的 `get_stats()` 是逐 stream 的觀測，不是整個 pool 與 telemetry 的原子快照。比較總數時須保持相同統計區間：全域 `drops` 可 reset，per-stream 與 telemetry 則累積。尾端被丟棄的幀在下一個 frame 被 worker 取出之前，尚不形成已觀察的 gap。
+
+### 10.2 並行 admission 與有界停止
+
+- 保留 latest-wins／drain-all、每 stream queue 容量 4。per-stream lock 涵蓋第二次 RUNNING 檢查、identity 配置及完整 drain-and-enqueue；worker 仍可以取走舊幀。計數以實際 `get_nowait()` 取出的數量為準。
+- producer 在 lock 外已看過 RUNNING，取得 lock 後仍須再查一次；停止開始後才取得 lock 的 producer 會被拒絕，不增加 `submitted`。已通過第二次檢查的 admission 必須完成，再由 worker 或 stop 收帳。
+- `stop(timeout)` 的 worker joins 與等待 stream lock 共用 deadline。lock 逾時時維持 STOPPING、保留 batcher、增加 `stop_timeouts` 並拋 `WorkbenchPoolStopTimeout`；之後可以重試。每條 stream 一清完就更新全域與該 stream 的 `discarded_on_stop`，後面的 stream 逾時不會遺失前面的計數。batcher shutdown 仍另有既有上限（[#537 §13](failure_degradation_537.md#13-538-d2-wb-1workbenchpool-有界停止worker-failure-與資源釋放)）。
+- lock 會改變競爭下的交錯順序，因此可能改變實際交付哪些幀；保留的是上述有界 queue／latest-wins 契約，沒有宣稱修復前後的丟幀樣本、輸出、吞吐或精度等價。不同 stream 各有自己的 lock。
+
+**審查發現與處置**：對原 WIP `22c01fcd` 重現一項停止回歸：producer 持有 stream lock 時，`stop(timeout=0.1)` 等到 1 秒後才返回，且回報正常停止。原因是 worker joins 之後的 lock acquisition 沒有上限。候選改為上述 deadline 內取得 lock，並補停止後拒絕、保留 batcher、重試及部分 drain 的測試。
+
+### 10.3 證據與尚未完成項
+
+契約測試：[test_workbench_pool_overflow_contract_538.py](../../tests/unit/test_workbench_pool_overflow_contract_538.py)。CPU 情境沿用 D2 的獨立子程序 harness 與外部 timeout；GPU 情境沿用 D2-GPU 的真實 CUDA Workbench／batcher，只替換 TRT inference。
+
+- 修復前重現：送 6 幀，worker 收到 `[0.0, 5.0]`，實際丟 4 幀卻報 `drops=1`。重播使用的 dispatcher git blob 與基線 `aa69c3c1` 相同。
+- CPU：F02 與既有 WorkbenchPool lifecycle 共 30 項通過。涵蓋兩 stream／16 producer threads 的 6,400 次提交、overflow 與 telemetry 對帳、stop discard 分離、重啟 identity gap、admission／stop 競態及部分清理後的重試。
+- CUDA：F02＋既有 D2-GPU 共 21 項通過（8 個 CPU、13 個 GPU），RTX 5070 Ti Laptop。新 F02 案例固定第一幀正在 inference，再排入 5 幀：`drops=4`、`overflow_events=1`、callback timestamps `[0.0, 5.0]`，並核對真實 CUDA 前處理交給 batcher 的兩份 input 值。
+- 6 個隔離 mutation 都被行為斷言攔住：把 drops 算成事件、telemetry 算成事件、取消 stop lock timeout、遺失部分 stop 計數、重啟重設 identity、移除 admission 的第二次狀態檢查。
+- 第一次失敗分類：新增的 stop 回歸測試在原 WIP 上失敗（`returned`，應為 `timeout`）；修復後通過。沙箱內 NVML／CUDA 被作業系統阻擋；已在沙箱外核對裝置並執行上述 GPU 測試，沒有把 skip 當通過。
+
+本機原始輸出與 mutation runner 在 `/tmp/saccade-550-f02-evidence/`；來源與摘要檔 SHA-256：
+
+重播指令（在候選 worktree；GPU 測試需要可存取裝置的 host）：
+
+```bash
+PYTHONPATH=build/runtime_identity:src .venv/bin/python -m pytest -q \
+  tests/unit/test_workbench_pool_overflow_contract_538.py \
+  tests/unit/test_workbench_pool_lifecycle_contract_538.py \
+  tests/unit/test_workbench_pool_lifecycle_observed_538.py \
+  tests/unit/test_workbench_pool_gpu_contract_538.py
+.venv/bin/python /tmp/saccade-550-f02-evidence/run_mutations.py
+```
+
+| 檔案 | SHA-256 |
+|:--|:--|
+| `src/saccade/perception/dispatcher.py` | `c0b9a68eac09ef67b7a8e9df3380fc98cebdb909b6779459c6ae138a1af53afe` |
+| `tests/unit/test_workbench_pool_overflow_contract_538.py` | `e29c073237f4bbcd7937011132f30e7e1e386e57fdadc774e421a78a020849a4` |
+| `run_mutations.py` | `21a7ec01f720484a72070bdfa99bb5997169392108beb8c064d3fa9986dfb5d4` |
+| `mutations.json` | `2a0d106a6ff8db957a7ddad5b895aad240c0ae9aef1a03de96d13d786d68c25c` |
+
+**尚未完成**：runtime identity fresh capture／獨立 publication review、完整 pre-push、最終 head review、PR／required CI 與 atomic co-land。現有局部測試不能替代這些門檻。WorkbenchPool online qualification、D1-F05 ingest 丟幀、watchdog（F04）、多 worker NMS capture 與其餘 D1／D2 殘留仍 OPEN；沒有清除 #340 trace。
+
+回退需要同時回退實作並依 [runtime identity runbook](../reference/runbooks/runtime_identity_republication.md) 重發座標；不能只把 canonical publication 換回舊檔。

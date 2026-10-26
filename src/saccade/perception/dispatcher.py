@@ -667,9 +667,10 @@ class WorkbenchPool:
             self.on_result(sid, ts, ids, boxes, classes, kps)
 
     def stop(self, timeout: float = 5.0) -> None:
-        """Stop all workers within ``timeout`` seconds, then shut down the batcher.
+        """Stop workers and wait for admission within ``timeout``, then shut down.
 
-        The worker joins share one deadline. If a worker is still alive at the
+        Worker joins and stream-lock acquisition share one deadline. If a
+        worker is still alive or admission holds a stream lock at the
         deadline, the batcher is kept, the state is STOPPING, and
         ``WorkbenchPoolStopTimeout`` is raised; call ``stop()`` again to retry.
         ``batcher.shutdown()`` runs after the deadline with its own bound
@@ -697,9 +698,16 @@ class WorkbenchPool:
                 "the batcher was not shut down"
             )
 
-        discarded = 0
         for idx, q in enumerate(self._queues):
-            with self._stream_locks[idx]:
+            stream_lock = self._stream_locks[idx]
+            if not stream_lock.acquire(timeout=max(deadline - time.monotonic(), 0.0)):
+                with self._lock:
+                    self._stop_timeouts += 1
+                raise WorkbenchPoolStopTimeout(
+                    f"WorkbenchPool stream_{idx} admission still active after "
+                    f"{timeout}s; the batcher was not shut down"
+                )
+            try:
                 n = 0
                 while True:
                     try:
@@ -708,9 +716,12 @@ class WorkbenchPool:
                         break
                     n += 1
                 self._stream_counts[idx].discarded_on_stop += n
-            discarded += n
-        with self._lock:
-            self._discarded_on_stop += discarded
+                # A later stream can time out. Publish each completed drain
+                # now, so retrying stop neither loses nor counts it twice.
+                with self._lock:
+                    self._discarded_on_stop += n
+            finally:
+                stream_lock.release()
         if self._batcher is not None:
             # A raise propagates with the batcher kept and the state STOPPING.
             if self._batcher.shutdown() is False:
