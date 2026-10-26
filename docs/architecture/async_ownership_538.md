@@ -251,8 +251,9 @@ submitted = dequeued + dropped + discarded_on_stop + queued
 契約測試：[test_workbench_pool_overflow_contract_538.py](../../tests/unit/test_workbench_pool_overflow_contract_538.py)。CPU 情境沿用 D2 的獨立子程序 harness 與外部 timeout；GPU 情境沿用 D2-GPU 的真實 CUDA Workbench／batcher，只替換 TRT inference。
 
 - 修復前重現：送 6 幀，worker 收到 `[0.0, 5.0]`，實際丟 4 幀卻報 `drops=1`。重播使用的 dispatcher git blob 與基線 `aa69c3c1` 相同。
-- CPU：F02 與既有 WorkbenchPool lifecycle 共 30 項通過。涵蓋兩 stream／16 producer threads 的 6,400 次提交、overflow 與 telemetry 對帳、stop discard 分離、重啟 identity gap、admission／stop 競態及部分清理後的重試。
-- CUDA：F02＋既有 D2-GPU 共 21 項通過（8 個 CPU、13 個 GPU），RTX 5070 Ti Laptop。新 F02 案例固定第一幀正在 inference，再排入 5 幀：`drops=4`、`overflow_events=1`、callback timestamps `[0.0, 5.0]`，並核對真實 CUDA 前處理交給 batcher 的兩份 input 值。
+- 已提交 head `a06f56abaefb6e5ea4ef86abad2ea282afffa6af`、本次新 build：四份相關契約測試 **43 passed／0 skipped**（30 個 CPU、13 個 GPU），RTX 5070 Ti Laptop。這是上述局部測試後，以新 native extension 做的完整相關回歸。
+- CPU 範圍：兩 stream／16 producer threads 的 6,400 次提交、overflow 與 telemetry 對帳、stop discard 分離、重啟 identity gap、admission／stop 競態及部分清理後的重試。
+- CUDA 範圍：既有 D2-GPU 契約與新增 F02 案例。新案例固定第一幀正在 inference，再排入 5 幀：`drops=4`、`overflow_events=1`、callback timestamps `[0.0, 5.0]`，並核對真實 CUDA 前處理交給 batcher 的兩份 input 值。
 - 6 個隔離 mutation 都被行為斷言攔住：把 drops 算成事件、telemetry 算成事件、取消 stop lock timeout、遺失部分 stop 計數、重啟重設 identity、移除 admission 的第二次狀態檢查。
 - 第一次失敗分類：新增的 stop 回歸測試在原 WIP 上失敗（`returned`，應為 `timeout`）；修復後通過。沙箱內 NVML／CUDA 被作業系統阻擋；已在沙箱外核對裝置並執行上述 GPU 測試，沒有把 skip 當通過。
 
@@ -275,7 +276,20 @@ PYTHONPATH=build/runtime_identity:src .venv/bin/python -m pytest -q \
 | `tests/unit/test_workbench_pool_overflow_contract_538.py` | `e29c073237f4bbcd7937011132f30e7e1e386e57fdadc774e421a78a020849a4` |
 | `run_mutations.py` | `21a7ec01f720484a72070bdfa99bb5997169392108beb8c064d3fa9986dfb5d4` |
 | `mutations.json` | `2a0d106a6ff8db957a7ddad5b895aad240c0ae9aef1a03de96d13d786d68c25c` |
+| `final-contracts.log` | `3a69d4032550ea4bcc409ca9c2eb915b2a31a68ba407000de9e2de3823343b96` |
+| `final-contracts.xml` | `4c3b1f1daec87805add348a84c2c4fca3868b42d1c537d727838acc888e03e94` |
 
-**尚未完成**：runtime identity fresh capture／獨立 publication review、完整 pre-push、最終 head review、PR／required CI 與 atomic co-land。現有局部測試不能替代這些門檻。WorkbenchPool online qualification、D1-F05 ingest 丟幀、watchdog（F04）、多 worker NMS capture 與其餘 D1／D2 殘留仍 OPEN；沒有清除 #340 trace。
+**Runtime identity 候選**：在 clean `a06f56ab` 上獨立 build `saccade_tracking_ext`／`saccade_scan_plugin`，依 runbook 重跑 MOT17-09 identity probe：
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/tools/build_runtime_identity.py \
+  --run-probe --build-dir build/runtime_identity \
+  --emit /tmp/saccade-550-f02-evidence/runtime_identity.candidate.json \
+  --require-complete
+```
+
+候選 `publication_complete=true`；只有 implementation 改變（`11263f7c… → 0cb15155…`，唯一變動 member 是 `dispatcher.py`），其餘四軸相同。probe 是 fresh run，digest 仍為 `2dabed0b…`；`equivalence=unproven`。候選檔 SHA-256：`f36316235124b7edde843e262b46248299b99077f25aa47c50e1784d51bdb5b2`；capture log：`b52b5757db0b1d98785ad4ed2939e31fc2e4e27fd87c3d8bbd2d7cc396f8cd1e`。候選只寫入 scratch，publication 應以 canonical＋archive 的獨立 review surface 與實作原子落地。
+
+**尚未完成**：獨立 publication review、完整 pre-push、最終 head review、PR／required CI 與 atomic co-land。現有局部測試不能替代這些門檻。WorkbenchPool online qualification、D1-F05 ingest 丟幀、watchdog（F04）、多 worker NMS capture 與其餘 D1／D2 殘留仍 OPEN；沒有清除 #340 trace。
 
 回退需要同時回退實作並依 [runtime identity runbook](../reference/runbooks/runtime_identity_republication.md) 重發座標；不能只把 canonical publication 換回舊檔。
