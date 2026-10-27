@@ -319,7 +319,9 @@ class FakeMedia:
             if self.fail_watchdog and self.index == 0:
                 await asyncio.sleep(0.04)
                 raise ValueError("watchdog failed")
-            await asyncio.Future()
+            # Like the real watchdog's polling delay, the timer retains the
+            # task. A bare unreferenced Future could hide an orphan via GC.
+            await asyncio.sleep(3600)
         finally:
             self.watch_stopped = True
     async def release_async(self):

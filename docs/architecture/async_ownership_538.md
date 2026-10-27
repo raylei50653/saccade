@@ -314,7 +314,7 @@ PYTHONPATH=src .venv/bin/python scripts/tools/build_runtime_identity.py \
 - main 持有 pump 與 watchdog task，以既有 `supervise` 收集失敗。watchdog 拋例外或意外正常返回都讓 producer 失敗，進一步由上層取消其他 producer；不再留下無人收集的背景失敗。
 - `connect_async`、watchdog restart、`release_async` 用 thread 執行阻塞的 GStreamer 控制。每個呼叫持有並 shield 自己的控制 task；取消及重複取消都先等待該工作真正結束，再傳出取消。不能用「coroutine 已取消」推斷 native thread 已停止。
 - producer 的正常結束、錯誤、取消、初始 connect 失敗與部分 task 建立失敗，都先取消並等待 pump／watchdog，再 release。清理例外不取代原始錯誤；取消期間控制工作另失敗時，錯誤被收集並附在取消的 note。
-- watchdog 的生命週期由 owner 取消並 await 結束。同步 `release()` 仍供同步 caller 與 restart 內部使用，**不再是 watchdog task 的停止訊號**。不得在仍有 watchdog／control 的時候並行呼叫 release。第一次 reconnect 失敗雖將 `_running` 清為 false，watchdog 仍繼續原有 backoff（1、2、4…至 30 s）；健康檢查間隔仍為 5 s。
+- watchdog 的生命週期由 owner 取消並 await 結束。同步 `release()` 仍供同步 caller 與 restart 內部使用，**不再是 watchdog task 的停止訊號**。不得在仍有 watchdog／control 的時候並行呼叫 release。第一次 reconnect 失敗雖將 `_running` 清為 false，watchdog 仍繼續原有 backoff（設定值 1、2、4…至 30 s）；健康檢查間隔仍為 5 s。connect 會重設 freshness 時間，因此實際嘗試間隔還包含 freshness／poll 等待，並非恰好等於 backoff 設定值。
 - main 只為 MediaMTX 建立 watchdog；DALI connect／release 留在原 thread，沒有替 DALI 增加監控或 GPU 保證。真正存在的本機檔走 DALI；明確 RTSP URL 傳入 `rtsp_url`；不存在的預設影片維持預設 RTSP fallback，但不再把它當作 `dummy_video` 而停用監控。
 - native connect／release 若永久卡死，取消也必須繼續等它；本切片沒有硬停止時限。需要終止這種工作時應使用 process supervision，不能同時釋放仍被控制工作使用的管線。實際 GPU 前處理仍可能造成 loop 延遲，本節不宣稱 latency SLA。
 
@@ -323,6 +323,8 @@ PYTHONPATH=src .venv/bin/python scripts/tools/build_runtime_identity.py \
 契約：[test_watchdog_contract_538.py](../../tests/unit/media/test_watchdog_contract_538.py)，**17 passed／0 skipped**。每個情境使用獨立 interpreter 與外部 timeout，涵蓋 initial／reconnect 的 heartbeat、失敗後繼續重試、取消與重複取消時的 control drain、task／錯誤收集、來源建構、DALI 清理及原始錯誤保留。既有 caller lifecycle 與 MediaMTX 測試另有 **33 passed**。這些 controlled fixture 只證明 host 契約。
 
 基線 `6ca331d6` 的三個負控制都攔住既有缺陷：同步 reconnect 阻塞 heartbeat、第一次 reconnect 失敗後 watchdog 退出、DALI connect 拋例外後沒有 release。新增測試的首次失敗是 harness 用 `gather(return_exceptions=True)` 取得被重建的 `CancelledError`，看不到原 note；改為直接 await／catch 原 task 後通過，沒有為此改 runtime 或放寬斷言。
+
+另有兩個隔離 mutation：移除 shield／drain，測試發現 connect thread 還被 gate 擋住時取消已返回；改成 unowned watchdog，測試發現 release 早於 watchdog 結束及 1 個 leftover task，**2/2 DETECTED**。後者第一次逃過 fixture：fake watchdog 等待沒有外部引用的 bare Future，孤立 task 可被 GC 並執行 finally。已把 tracked fixture 改為真實 watchdog 同樣會使用的 timer-held sleep，再以相同測試攔住 mutation；runtime 沒有因這項修正而變動。
 
 真實驗證在 RTX 5070 Ti Laptop、Python 3.12.13、Torch 2.11.0+cu130、GStreamer 1.28.8、MediaMTX 1.19.1 上執行。使用自有 localhost 18554 server、ffmpeg H.264 publisher 與真正的 main producer，檢查 CUDA tensor；dispatcher 只記錄與丟棄輸入，不執行 detector／tracker。沒有干預既有 8554 服務。
 
@@ -349,15 +351,19 @@ timeout 130s .venv/bin/python -u /tmp/saccade-538-f04-evidence/live_media_probe.
 |:--|:--|
 | `main.py` | `f1af650605394defe2d665dda3532f0589ef8ee8f5f1b251169bf300259139ac` |
 | `src/saccade/media/mediamtx_client.py` | `3a305c34e287ad4010b312fdbe32569cc8c4698b64b7d2415468ec4dbc69f623` |
-| `tests/unit/media/test_watchdog_contract_538.py` | `77f07d871dfbbfbdd2ce779db4ee9c3a4582054dfd928aea78228a870500c8ee` |
-| `/tmp/saccade-538-f04-contract-evidence/contracts.log` | `7b6c56bead1a478bebe6127cff34fcd70b30213f7e46902ce64e0ec81b3ed7ac` |
+| `tests/unit/media/test_watchdog_contract_538.py` | `9afad06419139ac54f0664cee6e9bc989fc053d2ef49f424a3bd10d1eca44bcc` |
+| `/tmp/saccade-538-f04-contract-evidence/contracts.log` | `751b79c339cf15423abe4fceb88e10efe4d01ff2bef769b4a75c4618dd10b48e` |
 | `baseline_negative.py` | `e98d1ab7371d910c8759529adbd994e00b67656898a1e988474672827c526eae` |
-| `baseline-negative.log` | `432d95eb876ccbe9f2bc5027f2bd1ece9b1d7337c3b4af7129a86d402425cc02` |
+| `baseline_negative.log` | `432d95eb876ccbe9f2bc5027f2bd1ece9b1d7337c3b4af7129a86d402425cc02` |
+| `mutations.py` | `0f91abbb6dcfd9a26c50e086338a7b12c2dae0b450e0a9b41d02c19b7c443e4a` |
+| `mutations.json` | `6e5b4d9eac8f593e474a65079c4df6b1e7bf4ca18a5972b7aeab7541990d5ab2` |
 | `/tmp/saccade-538-f04-evidence/live_media_probe.py` | `12cbf0138d1e27f043c0ee7b6967069464d77e66f3475a90eae0dcdafe8de50b` |
 | `live-media-results.json` | `4edde223b4af9f654bbcc6506579f09a937b1910634648aaa1252baf22733e7b` |
 | `live-media.log` | `96c506a0cc27ac77f0e3cb95a987370ccf342014199c33781d722e3359cdc330` |
 
 ### 11.3 交付與剩餘邊界
+
+在 clean implementation `596838f8` 上重新 build native extension／scan plugin，執行 fresh MOT17-09 identity probe 並建立完整 runtime-input manifest。候選 `publication_complete=true`，只有 implementation 軸 `0cb15155… → 6237a7ff…` 改變（`main.py`、`mediamtx_client.py`），其餘四軸相同；probe digest 仍為 `2dabed0b…`，`equivalence=unproven`。候選 SHA-256 `30d793a83dfc6678df230c345142e40cedd11919c1ce74c34664ed5a09ea8635`；capture log `a44dfd1e84c5bd5033c80f445725fe92b037ecfd516b6742381fc5df4db97243`。其後的 fixture／文件 delta 不改任何 identity 軸。
 
 implementation 與 runtime identity 依 runbook §3.2 經獨立 review surface 原子落地；完整本機回歸、publication、最終 head review 與 PR／main CI 的可追溯結果記在本切片 PR 及 #538 checkpoint。runtime identity 的相同 probe 不證明 semantic equivalence。
 
