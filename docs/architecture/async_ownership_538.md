@@ -313,7 +313,7 @@ PYTHONPATH=src .venv/bin/python scripts/tools/build_runtime_identity.py \
 
 - main 持有 pump 與 watchdog task，以既有 `supervise` 收集失敗。watchdog 拋例外或意外正常返回都讓 producer 失敗，進一步由上層取消其他 producer；不再留下無人收集的背景失敗。
 - `connect_async`、watchdog restart、`release_async` 用 thread 執行阻塞的 GStreamer 控制。每個呼叫持有並 shield 自己的控制 task；取消及重複取消都先等待該工作真正結束，再傳出取消。不能用「coroutine 已取消」推斷 native thread 已停止。
-- producer 的正常結束、錯誤、取消、初始 connect 失敗與部分 task 建立失敗，都先取消並等待 pump／watchdog，再 release。清理例外不取代原始錯誤；取消期間控制工作另失敗時，錯誤被收集並附在取消的 note。
+- producer 的正常結束、錯誤、取消、初始 connect 失敗與部分 task 建立失敗，都先取消並等待 pump／watchdog，再 release。清理例外不取代原始錯誤。控制 helper 在取消期間另遇到控制工作失敗時，會收集該錯誤並附在其取消的 note；上層既有 `supervise` 以 gather 收集被取消的 child 時，不保證將這些 child cancellation notes 一路傳到頂層。
 - watchdog 的生命週期由 owner 取消並 await 結束。同步 `release()` 仍供同步 caller 與 restart 內部使用，**不再是 watchdog task 的停止訊號**。不得在仍有 watchdog／control 的時候並行呼叫 release。第一次 reconnect 失敗雖將 `_running` 清為 false，watchdog 仍繼續原有 backoff（設定值 1、2、4…至 30 s）；健康檢查間隔仍為 5 s。connect 會重設 freshness 時間，因此實際嘗試間隔還包含 freshness／poll 等待，並非恰好等於 backoff 設定值。
 - main 只為 MediaMTX 建立 watchdog；DALI connect／release 留在原 thread，沒有替 DALI 增加監控或 GPU 保證。真正存在的本機檔走 DALI；明確 RTSP URL 傳入 `rtsp_url`；不存在的預設影片維持預設 RTSP fallback，但不再把它當作 `dummy_video` 而停用監控。
 - native connect／release 若永久卡死，取消也必須繼續等它；本切片沒有硬停止時限。需要終止這種工作時應使用 process supervision，不能同時釋放仍被控制工作使用的管線。實際 GPU 前處理仍可能造成 loop 延遲，本節不宣稱 latency SLA。
