@@ -3,7 +3,7 @@ import shlex
 import threading
 import time
 import asyncio
-from typing import Optional, Tuple, Any
+from typing import Optional, Tuple, Any, Callable, TypeVar
 import numpy as np
 import torch
 import gi  # noqa: E402
@@ -22,6 +22,34 @@ except ImportError:
 
 # 初始化 GStreamer
 Gst.init([])
+
+_ControlResult = TypeVar("_ControlResult")
+
+
+async def _run_control(operation: Callable[[], _ControlResult]) -> _ControlResult:
+    """Run blocking media control off-loop, retaining ownership on cancellation.
+
+    Cancelling ``to_thread`` cannot stop its thread. Drain it before returning
+    cancellation so the caller can safely release the pipeline afterwards.
+    Native control calls have no hard deadline; a hung call needs process-level
+    supervision rather than concurrent release of resources it still owns.
+    """
+    pending = asyncio.create_task(asyncio.to_thread(operation))
+    try:
+        return await asyncio.shield(pending)
+    except asyncio.CancelledError as cancelled:
+        while not pending.done():
+            try:
+                await asyncio.shield(pending)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        try:
+            pending.result()
+        except Exception as error:
+            cancelled.add_note(f"media control also failed: {error!r}")
+        raise cancelled
 
 
 def _gst_property_value(value: str) -> str:
@@ -347,13 +375,25 @@ class MediaMTXClient:
         time.sleep(1)  # 等待釋放
         return self.connect()
 
+    async def connect_async(self) -> bool:
+        """Connect without blocking the event loop; cancellation drains control."""
+        return await _run_control(self.connect)
+
+    async def release_async(self) -> None:
+        """Release after the owner has cancelled and awaited its watchdog."""
+        await _run_control(self.release)
+
     async def watchdog_loop(self) -> None:
-        """非同步監控循環，負責自動重連"""
+        """Reconnect until the owner cancels and awaits this task before release.
+
+        ``release`` inside a reconnect clears ``_running``. It is not a stop
+        signal for this task: failed connects must still reach the next retry.
+        """
         retry_delay = 1
-        while self._running:
+        while True:
             if not self._is_alive() and not self.dummy_video:
                 print("⚠️ [MediaClient] Stream timeout detected.")
-                if self._restart_pipeline():
+                if await _run_control(self._restart_pipeline):
                     print("✅ [MediaClient] Reconnected successfully.")
                     retry_delay = 1
                 else:

@@ -101,8 +101,8 @@
 | AE-E7 | 最多 N 個子程序 | `ThreadPoolExecutor(N)` 排隊 | **子程序失敗只印出，parent 仍算 metrics 並 `exit(0)`**（D1-F01） | parent 被中斷時子程序的處置未查 | 每個 sequence 一個新程序 | reproduced（§7） |
 | AE-E8 | `n_threads` | unknown | unknown | unknown | unknown | unknown |
 | AE-E9 | `--max-workers` | 同 AE-O5 | 同 AE-O5 | 同 AE-O5 | — | GPU：`--max-workers 1` 修復前後位元相同；4 workers segfault（§18） |
-| AE-O1 | 1 格（最新一幀） | latest-wins；中間幀與「smart sampling」（像素差 < 2.0）**靜默丟棄，沒有計數** | callback 例外只印出 | `release()`：pipeline 設 NULL、`mainloop.quit()`、`join(1 s)` | `watchdog_loop` 5 s 無幀時重連；重連用阻塞的 `time.sleep(1)` 與 `connect()`，跑在 event loop 上（D1-F04） | source-inspected；GE-08 |
-| AE-O2 | DALI 預取深度（預設） | 阻塞拉取 | `grab_tensor` 吃掉例外並回 `(False, None)` | `release()` 刪除 iterator 與 pipeline | `auto_reset=True`；**`DALIMediaClient` 沒有 `watchdog_loop`**，`main.py` 的 DALI 分支在 `create_task` 時就失敗（ledger C4） | documentation-supported；GE-07 |
+| AE-O1 | 1 格（最新一幀） | latest-wins；中間幀與「smart sampling」（像素差 < 2.0）**靜默丟棄，沒有計數** | callback 例外只印出；watchdog 例外由 main producer 向上傳遞（§11） | main 先取消並等待 watchdog／in-flight control，再以 thread 執行 `release()`；native call 沒有硬時限（§11） | `watchdog_loop` 5 s 無幀時重連；阻塞的 connect／restart／release 移出 event loop，失敗後繼續 backoff 重試（§11） | host contract＋真實 Python GStreamer／CUDA ingest（§11）；GE-08 不因此關閉 |
+| AE-O2 | DALI 預取深度（預設） | 阻塞拉取 | `grab_tensor` 吃掉例外並回 `(False, None)` | `release()` 刪除 iterator 與 pipeline；main 的 connect 失敗／取消也進入 cleanup（§11） | `auto_reset=True`；`DALIMediaClient` 沒有 `watchdog_loop`，main 不對它建立 watchdog（§11） | documentation-supported；GE-07；§11 的 caller fixture 不提供 DALI GPU 證據 |
 | AE-O3 | `asyncio.Queue(maxsize=100)` | 丟**新**幀，每幀計數 `dropped_queue_full` | worker 例外 → FAILED，保留原始錯誤（[§11](failure_degradation_537.md#11-538-d2-adasyncdispatcher-worker-失敗與停止)） | `stop()` 清 queue 並計數 `discarded_on_stop` | trackers 依 `stream_id` 存放，超過 `max_streams=8` 時 LRU 淘汰，該 stream 的 track 狀態**靜默重設**（只印 log） | host-only（§11）；GE-06 GPU-validated（fake detector） |
 | AE-O4 | 每 stream `queue.Queue(maxsize=4)` | 滿時**清空整個 queue** 再放入新幀；`drops` 每次溢出 +1，不是每丟一幀 +1（D1-F02） | worker 例外 → FAILED（§13） | 有界 `stop(timeout)`，worker 存活時保留 batcher（§13） | 重啟換新 queue 與 worker | host-only（§12、§13）；GPU（§18） |
 | AE-O5 | server 的 batch 上限 | `submit()` 阻塞等結果 | server 例外 → batcher FAILED，等待者全部收到失敗，新的 `submit()` 立即失敗（§18） | 同 AE-O4 | — | GPU-validated（§18；fake TRT） |
@@ -183,7 +183,7 @@
 - [x] WorkbenchPool 的有限狀態契約先於修復固定（D2-WB-0 → WB-1，已合併）。
 - [x] 至少一個故障注入重現了具體違約（D2）；本稿另外重現 D1-F01、D1-F06，其餘標 source-inspected。
 - [~] overflow、丟幀與計數語義一致：F02 的候選修復與待完成門檻見 [§10](#d3-f02)；D1-F05 的 ingest 丟幀仍未處理。
-- [~] error／cancel／timeout 不偽裝成正常完成：D1-F01、D1-F06 違反；D1-F03、D1-F04、D1-F07 待處理。
+- [~] error／cancel／timeout 不偽裝成正常完成：D1-F01／F06 已由 #537 修復，F04 的 owner／drain 契約見 §11；D1-F03、D1-F07 仍待處理。
 - [x] host-only、GPU-validated、documentation-supported 與未驗證的證據分開記錄（§1、§3）。
 - [x] #465 的 native schedule、capture freeze 與 trace／measurement 邊界沒有改動；本稿只引用。G 的 contract／test／limit 映射尚未交付。
 
@@ -215,7 +215,7 @@
 
 ## 10. D3-F02：WorkbenchPool 溢出計數與停止競態
 
-**範圍與狀態**：依 §9 的 F02 裁決接續 `22c01fcd5a3ab5ff01c7f248f768c4be3eae9769` WIP；基線是 `main@aa69c3c1caf502ecc5aeeda92f90d8db6871a6c3`。這是候選實作，尚未合併。只修 `WorkbenchPool` 的 host queue admission、計數與對應停止競態；不修改 CUDA 排程、模型、tracker 參數、AsyncDispatcher 的丟幀策略或線上支持範圍。D1 表格保留原盤點座標。
+**範圍與狀態**：依 §9 的 F02 裁決接續 `22c01fcd5a3ab5ff01c7f248f768c4be3eae9769` WIP；基線是 `main@aa69c3c1caf502ecc5aeeda92f90d8db6871a6c3`。已由 #637 原子合併為 `6ca331d6`，獨立 publication #636 同時落地；[完成證據](https://github.com/raylei50653/saccade/issues/538#issuecomment-6409963417) 包含 PR／main CI、最終 review 與 strict attested。只修 `WorkbenchPool` 的 host queue admission、計數與對應停止競態；不修改 CUDA 排程、模型、tracker 參數、AsyncDispatcher 的丟幀策略或線上支持範圍。D1 的 F02 表格保留原盤點座標，現況以本節為準。
 
 ### 10.1 計數與 identity
 
@@ -299,6 +299,78 @@ PYTHONPATH=src .venv/bin/python scripts/tools/build_runtime_identity.py \
 
 完整 pre-push 的環境保護參數為 `UV_NO_SYNC=1`、`PYTHONDONTWRITEBYTECODE=1`；`UV_CACHE_DIR` 指向 `/tmp/saccade-550-uv-cache`。`PYTHONPATH` 依序指定本次新 build、原工作區其他 native extensions，以及驗證 checkout 的 `src`。這些參數不跳過任何檢查。
 
-**尚未完成**：獨立 publication review、最終 head review、PR／required CI 與 atomic co-land。現有本機驗證不能替代這些門檻。WorkbenchPool online qualification、D1-F05 ingest 丟幀、watchdog（F04）、多 worker NMS capture 與其餘 D1／D2 殘留仍 OPEN；沒有清除 #340 trace。
+**當時的交付門檻**：獨立 publication review、最終 head review、PR／required CI 與 atomic co-land 後續已完成，見本節開頭的完成證據。WorkbenchPool online qualification、D1-F05 ingest 丟幀、多 worker NMS capture 與其餘 D1／D2 殘留仍 OPEN；watchdog（F04）另見 §11；沒有清除 #340 trace。
 
 回退需要同時回退實作並依 [runtime identity runbook](../reference/runbooks/runtime_identity_republication.md) 重發座標；不能只把 canonical publication 換回舊檔。
+
+<a id="d3-f04"></a>
+
+## 11. D3-F04：watchdog 與 media control 的 ownership
+
+**範圍**：基線 `main@6ca331d60e8fbb002fdfbd72487c60de6aee161b`，依 §9 owner 裁決與 [§0A 方案紀錄](https://github.com/raylei50653/saccade/issues/538#issuecomment-6436053501) 修復 main 的 MediaMTX watchdog。只修 host control／task lifecycle；8stream 仍沒有 watchdog，沒有變更 CUDA 算子、drop policy、tracker 或 online qualification。D1 的 F04 列記錄修復前的盤點；現況以本節為準。
+
+### 11.1 控制與清理契約
+
+- main 持有 pump 與 watchdog task，以既有 `supervise` 收集失敗。watchdog 拋例外或意外正常返回都讓 producer 失敗，進一步由上層取消其他 producer；不再留下無人收集的背景失敗。
+- `connect_async`、watchdog restart、`release_async` 用 thread 執行阻塞的 GStreamer 控制。每個呼叫持有並 shield 自己的控制 task；取消及重複取消都先等待該工作真正結束，再傳出取消。不能用「coroutine 已取消」推斷 native thread 已停止。
+- producer 的正常結束、錯誤、取消、初始 connect 失敗與部分 task 建立失敗，都先取消並等待 pump／watchdog，再 release。清理例外不取代原始錯誤。控制 helper 在取消期間另遇到控制工作失敗時，會收集該錯誤並附在其取消的 note；上層既有 `supervise` 以 gather 收集被取消的 child 時，不保證將這些 child cancellation notes 一路傳到頂層。
+- watchdog 的生命週期由 owner 取消並 await 結束。同步 `release()` 仍供同步 caller 與 restart 內部使用，**不再是 watchdog task 的停止訊號**。不得在仍有 watchdog／control 的時候並行呼叫 release。第一次 reconnect 失敗雖將 `_running` 清為 false，watchdog 仍繼續原有 backoff（設定值 1、2、4…至 30 s）；健康檢查間隔仍為 5 s。connect 會重設 freshness 時間，因此實際嘗試間隔還包含 freshness／poll 等待，並非恰好等於 backoff 設定值。
+- main 只為 MediaMTX 建立 watchdog；DALI connect／release 留在原 thread，沒有替 DALI 增加監控或 GPU 保證。真正存在的本機檔走 DALI；明確 RTSP URL 傳入 `rtsp_url`；不存在的預設影片維持預設 RTSP fallback，但不再把它當作 `dummy_video` 而停用監控。
+- native connect／release 若永久卡死，取消也必須繼續等它；本切片沒有硬停止時限。需要終止這種工作時應使用 process supervision，不能同時釋放仍被控制工作使用的管線。實際 GPU 前處理仍可能造成 loop 延遲，本節不宣稱 latency SLA。
+
+### 11.2 測試與真實環境證據
+
+契約：[test_watchdog_contract_538.py](../../tests/unit/media/test_watchdog_contract_538.py)，**17 passed／0 skipped**。每個情境使用獨立 interpreter 與外部 timeout，涵蓋 initial／reconnect 的 heartbeat、失敗後繼續重試、取消與重複取消時的 control drain、task／錯誤收集、來源建構、DALI 清理及原始錯誤保留。既有 caller lifecycle 與 MediaMTX 測試另有 **33 passed**。這些 controlled fixture 只證明 host 契約。
+
+基線 `6ca331d6` 的三個負控制都攔住既有缺陷：同步 reconnect 阻塞 heartbeat、第一次 reconnect 失敗後 watchdog 退出、DALI connect 拋例外後沒有 release。新增測試的首次失敗是 harness 用 `gather(return_exceptions=True)` 取得被重建的 `CancelledError`，看不到原 note；改為直接 await／catch 原 task 後通過，沒有為此改 runtime 或放寬斷言。
+
+另有兩個隔離 mutation：移除 shield／drain，測試發現 connect thread 還被 gate 擋住時取消已返回；改成 unowned watchdog，測試發現 release 早於 watchdog 結束及 1 個 leftover task，**2/2 DETECTED**。後者第一次逃過 fixture：fake watchdog 等待沒有外部引用的 bare Future，孤立 task 可被 GC 並執行 finally。已把 tracked fixture 改為真實 watchdog 同樣會使用的 timer-held sleep，再以相同測試攔住 mutation；runtime 沒有因這項修正而變動。
+
+真實驗證在 RTX 5070 Ti Laptop、Python 3.12.13、Torch 2.11.0+cu130、GStreamer 1.28.8、MediaMTX 1.19.1 上執行。使用自有 localhost 18554 server、ffmpeg H.264 publisher 與真正的 main producer，檢查 CUDA tensor；dispatcher 只記錄與丟棄輸入，不執行 detector／tracker。沒有干預既有 8554 服務。
+
+| 故障注入 | 觀察與適用範圍 |
+|:--|:--|
+| 停掉 publisher，再恢復 | 真實 reconnect 為 false、false、true，之後恢復交付；initial connect 有 198 次 heartbeat，三次 reconnect 各有 104／105／203 次（10 ms 排程） |
+| initial connect 的真實 first-frame 等待中重複取消 | 等控制完成約 3.001 s 才最後 release；期間 297 次 heartbeat，沒有之後重新開啟管線 |
+| reconnect 的真實 first-frame 等待中取消 | 等控制完成約 3.008 s 才最後 release，沒有重新開啟；取消前已交付 76 個 CUDA frame |
+| 真實交付影格後讓 watchdog 拋 OSError | 經 producer 傳出，sibling 被取消、media 釋放；沒有遺留 asyncio task |
+
+自有 server／publisher 全部已停止。上述不提供 C++ media opt-in、DALI buffer 所有權、detector／tracker、完整服務或永久卡死 native call 的驗證。
+
+本機重播指令（probe／負控制原始檔在 repo 外）：
+
+```bash
+PYTHONPATH=build/runtime_identity:build:src .venv/bin/python -m pytest -q \
+  tests/unit/media/test_watchdog_contract_538.py \
+  tests/unit/media/test_mediamtx_client.py tests/unit/test_caller_lifecycle_538.py
+timeout 130s .venv/bin/python -u /tmp/saccade-538-f04-evidence/live_media_probe.py
+.venv/bin/python /tmp/saccade-538-f04-contract-evidence/baseline_negative.py
+```
+
+| 檔案 | SHA-256 |
+|:--|:--|
+| `main.py` | `f1af650605394defe2d665dda3532f0589ef8ee8f5f1b251169bf300259139ac` |
+| `src/saccade/media/mediamtx_client.py` | `3a305c34e287ad4010b312fdbe32569cc8c4698b64b7d2415468ec4dbc69f623` |
+| `tests/unit/media/test_watchdog_contract_538.py` | `9afad06419139ac54f0664cee6e9bc989fc053d2ef49f424a3bd10d1eca44bcc` |
+| `/tmp/saccade-538-f04-contract-evidence/contracts.log` | `751b79c339cf15423abe4fceb88e10efe4d01ff2bef769b4a75c4618dd10b48e` |
+| `baseline_negative.py` | `e98d1ab7371d910c8759529adbd994e00b67656898a1e988474672827c526eae` |
+| `baseline_negative.log` | `432d95eb876ccbe9f2bc5027f2bd1ece9b1d7337c3b4af7129a86d402425cc02` |
+| `mutations.py` | `0f91abbb6dcfd9a26c50e086338a7b12c2dae0b450e0a9b41d02c19b7c443e4a` |
+| `mutations.json` | `6e5b4d9eac8f593e474a65079c4df6b1e7bf4ca18a5972b7aeab7541990d5ab2` |
+| `/tmp/saccade-538-f04-evidence/live_media_probe.py` | `12cbf0138d1e27f043c0ee7b6967069464d77e66f3475a90eae0dcdafe8de50b` |
+| `live-media-results.json` | `4edde223b4af9f654bbcc6506579f09a937b1910634648aaa1252baf22733e7b` |
+| `live-media.log` | `96c506a0cc27ac77f0e3cb95a987370ccf342014199c33781d722e3359cdc330` |
+| `failure-diagnosis.log` | `f504de5f63129d45847809c41a38901fe40ebdf70717cdd323009c0c09f79aa9` |
+| `failure-diagnosis.json` | `954fdaae93ad35c9f4d35611733e9bf06430db1e4c396ebab5c1e9d0b7c2d936` |
+
+### 11.3 交付與剩餘邊界
+
+在 clean implementation `596838f8` 上重新 build native extension／scan plugin，執行 fresh MOT17-09 identity probe 並建立完整 runtime-input manifest。候選 `publication_complete=true`，只有 implementation 軸 `0cb15155… → 6237a7ff…` 改變（`main.py`、`mediamtx_client.py`），其餘四軸相同；probe digest 仍為 `2dabed0b…`，`equivalence=unproven`。候選 SHA-256 `30d793a83dfc6678df230c345142e40cedd11919c1ce74c34664ed5a09ea8635`；capture log `a44dfd1e84c5bd5033c80f445725fe92b037ecfd516b6742381fc5df4db97243`。其後的 fixture／文件 delta 不改任何 identity 軸。
+
+首次完整 pre-push 遇到既有 `test_native_track_parity.py::test_reader_on_the_writer_s_files` 失敗：預設 `build/shipping/saccade_shipping_run_completion_test` 是 10-12 的舊 binary，缺少後續 C0-10 新增的 `gate_a_refused`／`aborted_after_commit` 案例。相關八個 test／tool／native／header／CMake blobs 與基線完全相同。保留舊 binary（SHA-256 `27caf5de…`），同一測試只以 scratch plugin 改指本次 fresh build（`81b86842…`）即通過，定位為 ignored build fixture 落後，不是 F04 source regression；接著以 `cmake --build build --target saccade_shipping_run_completion_test` 更新預設 fixture，再跑原測試與完整 pre-push。沒有修改、跳過或放寬既有測試，原始失敗與定位收據以上表 SHA-256 保留。
+
+首次 strict attested 未提供 `--probe-from`／`--runtime-inputs-from`，正確拒絕 unresolved 檢查；保留該 log，補上獨立 fresh verification probe 與完整 manifest 後 exit 0。完整 strict log SHA-256 `6f66d4d2da35c315d08ac546f9d406dc828bf9378a7619db41ebb586d58e750d`；verification probe `885e305dd63fa7d894bbe00974f0482e92af87f75ca52c1cccf3215498830086`，manifest `697a2e4043c3650d324467eff614af5a3982abc8f82e2041d05b9b050ba2f9f4`。這是補齊要求的證據，沒有改動 checker 或 publication。
+
+implementation 與 runtime identity 依 runbook §3.2 經獨立 review surface 原子落地；完整本機回歸、publication、最終 head review 與 PR／main CI 的可追溯結果記在本切片 PR 及 #538 checkpoint。runtime identity 的相同 probe 不證明 semantic equivalence。
+
+F05 ingest 丟幀、F03／F07、GE-07、多 worker NMS capture、`update_into`／NV12 與 online qualification 仍 OPEN；distribution 維持 local-only、equivalence 維持 unproven。沒有清除 #340 trace；後續依 §9 另做一次性封存。回退必須包含實作與依 runbook 重發的座標，不能只還原 canonical。

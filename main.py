@@ -104,17 +104,15 @@ async def run_stream_producer(
         media: Any = DALIMediaClient(video_path=cast(str, source_url), batch_size=1)
     else:
         print(f"📡 [Stream {stream_id}] Using MediaMTXClient for source: {source_url}")
-        media = MediaMTXClient(dummy_video=source_url)
+        # Only the file branch owns local files. Passing a missing default file
+        # as dummy_video would silently disable the RTSP watchdog.
+        media = (
+            MediaMTXClient(rtsp_url=source_url)
+            if source_url and source_url.startswith(("rtsp://", "rtsps://"))
+            else MediaMTXClient()
+        )
 
-    while not media.connect():
-        await asyncio.sleep(2)
-
-    print(f"✅ Stream [{stream_id}] connected.")
-
-    # 啟動自動重連監控
-    asyncio.create_task(media.watchdog_loop())
-
-    try:
+    async def pump() -> None:
         while True:
             ret, tensor = media.grab_tensor()
             if ret and tensor is not None:
@@ -131,8 +129,40 @@ async def run_stream_producer(
                 await dispatcher.put_frame(stream_id, yolo_input, time.time())
 
             await asyncio.sleep(0.01)  # 控頻 (約 100 FPS)
+
+    async def watch_media() -> None:
+        await media.watchdog_loop()
+        raise RuntimeError(f"Stream [{stream_id}] watchdog stopped unexpectedly")
+
+    async def release_media() -> None:
+        if is_file:
+            media.release()
+        else:
+            await media.release_async()
+
+    tasks: list["asyncio.Task[Any]"] = []
+    watchers: list["asyncio.Task[Any]"] = []
+    primary: Optional[BaseException] = None
+    try:
+        # DALI control stays on its owning thread. MediaMTX control may wait
+        # for GStreamer/first frame, so it runs off-loop and drains on cancel.
+        while not (media.connect() if is_file else await media.connect_async()):
+            await asyncio.sleep(2)
+        print(f"✅ Stream [{stream_id}] connected.")
+        spawn(tasks, pump)
+        if not is_file:  # DALIMediaClient has no watchdog.
+            spawn(watchers, watch_media)
+        await supervise(tasks, watchers)
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        media.release()
+        # No release may race an in-flight reconnect, even during cancellation
+        # or partial task creation. The watchdog drains its control operation.
+        try:
+            await cancel_and_wait([*tasks, *watchers])
+        finally:
+            await stop_after(primary, release_media, "media.release()")
 
 
 def same_failure(a: BaseException, b: BaseException) -> bool:
