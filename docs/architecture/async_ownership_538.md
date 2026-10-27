@@ -360,10 +360,16 @@ timeout 130s .venv/bin/python -u /tmp/saccade-538-f04-evidence/live_media_probe.
 | `/tmp/saccade-538-f04-evidence/live_media_probe.py` | `12cbf0138d1e27f043c0ee7b6967069464d77e66f3475a90eae0dcdafe8de50b` |
 | `live-media-results.json` | `4edde223b4af9f654bbcc6506579f09a937b1910634648aaa1252baf22733e7b` |
 | `live-media.log` | `96c506a0cc27ac77f0e3cb95a987370ccf342014199c33781d722e3359cdc330` |
+| `failure-diagnosis.log` | `f504de5f63129d45847809c41a38901fe40ebdf70717cdd323009c0c09f79aa9` |
+| `failure-diagnosis.json` | `954fdaae93ad35c9f4d35611733e9bf06430db1e4c396ebab5c1e9d0b7c2d936` |
 
 ### 11.3 交付與剩餘邊界
 
 在 clean implementation `596838f8` 上重新 build native extension／scan plugin，執行 fresh MOT17-09 identity probe 並建立完整 runtime-input manifest。候選 `publication_complete=true`，只有 implementation 軸 `0cb15155… → 6237a7ff…` 改變（`main.py`、`mediamtx_client.py`），其餘四軸相同；probe digest 仍為 `2dabed0b…`，`equivalence=unproven`。候選 SHA-256 `30d793a83dfc6678df230c345142e40cedd11919c1ce74c34664ed5a09ea8635`；capture log `a44dfd1e84c5bd5033c80f445725fe92b037ecfd516b6742381fc5df4db97243`。其後的 fixture／文件 delta 不改任何 identity 軸。
+
+首次完整 pre-push 遇到既有 `test_native_track_parity.py::test_reader_on_the_writer_s_files` 失敗：預設 `build/shipping/saccade_shipping_run_completion_test` 是 10-12 的舊 binary，缺少後續 C0-10 新增的 `gate_a_refused`／`aborted_after_commit` 案例。相關八個 test／tool／native／header／CMake blobs 與基線完全相同。保留舊 binary（SHA-256 `27caf5de…`），同一測試只以 scratch plugin 改指本次 fresh build（`81b86842…`）即通過，定位為 ignored build fixture 落後，不是 F04 source regression；接著以 `cmake --build build --target saccade_shipping_run_completion_test` 更新預設 fixture，再跑原測試與完整 pre-push。沒有修改、跳過或放寬既有測試，原始失敗與定位收據以上表 SHA-256 保留。
+
+首次 strict attested 未提供 `--probe-from`／`--runtime-inputs-from`，正確拒絕 unresolved 檢查；保留該 log，補上獨立 fresh verification probe 與完整 manifest 後 exit 0。完整 strict log SHA-256 `6f66d4d2da35c315d08ac546f9d406dc828bf9378a7619db41ebb586d58e750d`；verification probe `885e305dd63fa7d894bbe00974f0482e92af87f75ca52c1cccf3215498830086`，manifest `697a2e4043c3650d324467eff614af5a3982abc8f82e2041d05b9b050ba2f9f4`。這是補齊要求的證據，沒有改動 checker 或 publication。
 
 implementation 與 runtime identity 依 runbook §3.2 經獨立 review surface 原子落地；完整本機回歸、publication、最終 head review 與 PR／main CI 的可追溯結果記在本切片 PR 及 #538 checkpoint。runtime identity 的相同 probe 不證明 semantic equivalence。
 
